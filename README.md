@@ -84,7 +84,7 @@ Roles are written in Salt's eauth format (`server/roles.ts`). The UI and the ser
 ```bash
 docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
   -e SALT_API_URL=https://salt-master:8000 \
-  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… -e SALT_API_EAUTH=pam \
+  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… -e SALT_API_EAUTH=sharedsecret \
   -e PUBLIC_URL=https://salt.example.com \
   ghcr.io/pipozzz/salt-shaker:latest
 ```
@@ -144,16 +144,17 @@ rest_cherrypy:
 # Salt 3006+ disables all netapi clients by default
 netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
 
+sharedsecret: <a long random string>   # openssl rand -base64 32
 external_auth:
-  pam:
-    salt-shaker:             # a dedicated local account, used only by the server
+  sharedsecret:
+    salt-shaker:             # SALT_API_USERNAME; SALT_API_PASSWORD is the shared secret
       - '.*'
       - '@wheel'
       - '@runner'
       - '@jobs'
 ```
 
-Salt Shaker needs **Salt 3006 or newer**. The service account is as powerful as the most powerful role you hand out, so keep its password in a secret store.
+No Linux account is needed. Any other eauth backend (`pam`, `file`, `ldap`) works too; see the [docs](https://pipozzz.github.io/salt-shaker/deploy/master/). Salt Shaker needs **Salt 3006 or newer**. The service account is as powerful as the most powerful role you hand out, so keep its password in a secret store.
 
 ### Without the server (direct mode)
 

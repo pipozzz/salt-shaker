@@ -1,0 +1,123 @@
+---
+title: Prepare the master
+description: Enable salt-api and create the service account Salt Shaker uses.
+sidebar: { order: 1 }
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components'
+
+Salt Shaker needs salt-api (`rest_cherrypy`) on the master and one account for the server to sign in with. That account doesn't have to be a Linux user: any Salt eauth backend works.
+
+Salt Shaker needs **Salt 3006 or newer**.
+
+## 1. Install salt-api
+
+```bash
+sudo apt install salt-api      # or: sudo dnf install salt-api
+```
+
+## 2. Configure salt-api and the service account
+
+Create `/etc/salt/master.d/salt-shaker.conf`. The recommended setup uses the `sharedsecret` eauth backend, so no system account is needed.
+
+<Tabs>
+  <TabItem label="sharedsecret (recommended)">
+
+Generate a secret:
+
+```bash
+openssl rand -base64 32
+```
+
+```yaml
+# /etc/salt/master.d/salt-shaker.conf
+rest_cherrypy:
+  port: 8000
+  ssl_crt: /etc/pki/tls/certs/salt-api.crt
+  ssl_key: /etc/pki/tls/private/salt-api.key
+
+# Salt 3006+ disables all netapi clients by default
+netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
+
+sharedsecret: <the generated secret>
+
+external_auth:
+  sharedsecret:
+    salt-shaker:
+      - '.*'
+      - '@wheel'
+      - '@runner'
+      - '@jobs'
+```
+
+Salt Shaker then signs in with:
+
+```bash
+SALT_API_EAUTH=sharedsecret
+SALT_API_USERNAME=salt-shaker
+SALT_API_PASSWORD=<the generated secret>
+```
+
+The username only picks the permissions entry under `external_auth.sharedsecret`. Anyone who knows the secret can sign in as any user listed there, so list only `salt-shaker`.
+
+  </TabItem>
+  <TabItem label="PAM">
+
+A dedicated local account, used only by the server:
+
+```bash
+sudo useradd -r -M -s /usr/sbin/nologin salt-shaker
+sudo passwd salt-shaker
+```
+
+```yaml
+# /etc/salt/master.d/salt-shaker.conf
+rest_cherrypy:
+  port: 8000
+  ssl_crt: /etc/pki/tls/certs/salt-api.crt
+  ssl_key: /etc/pki/tls/private/salt-api.key
+
+netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
+
+external_auth:
+  pam:
+    salt-shaker:
+      - '.*'
+      - '@wheel'
+      - '@runner'
+      - '@jobs'
+```
+
+Use `SALT_API_EAUTH=pam` with that account's name and password.
+
+  </TabItem>
+</Tabs>
+
+Other backends, such as `file` or `ldap`, work the same way: put the account under that backend in `external_auth` and set `SALT_API_EAUTH` to its name.
+
+:::caution
+The service account is as powerful as the most powerful role you hand out. Keep its password or secret in a secret store, and don't use it for anything else. Who did what is still recorded: in Salt Shaker's audit log, and in each job's metadata as `salt_shaker_user`.
+:::
+
+### Without TLS on the same host
+
+If Salt Shaker runs on the master itself, salt-api can listen on localhost only, without a certificate:
+
+```yaml
+rest_cherrypy:
+  host: 127.0.0.1
+  port: 8000
+  disable_ssl: True
+```
+
+Point `SALT_API_URL` at `http://127.0.0.1:8000`, and run the container with `--network host` so it can reach it.
+
+## 3. Restart and check
+
+```bash
+sudo systemctl restart salt-master salt-api
+curl -sk https://localhost:8000/login -H 'Accept: application/json' \
+  -d username=salt-shaker -d password='<secret or password>' -d eauth=sharedsecret
+```
+
+A reply with a `token` and a `perms` list means salt-api accepts the account. Then [run the container](/salt-shaker/deploy/docker/).

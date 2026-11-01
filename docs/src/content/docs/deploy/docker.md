@@ -9,14 +9,50 @@ Images for `linux/amd64` and `linux/arm64` are published to GHCR from `main` (`:
 ```bash
 docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
   -e SALT_API_URL=https://salt-master:8000 \
-  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… -e SALT_API_EAUTH=pam \
+  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… -e SALT_API_EAUTH=sharedsecret \
   -e PUBLIC_URL=https://salt.example.com \
   ghcr.io/pipozzz/salt-shaker:latest
 ```
 
+`SALT_API_PASSWORD` is the shared secret, or the account's password with another eauth backend. See [Prepare the master](/salt-shaker/deploy/master/).
+
 Then open the URL and create the admin account. Self-registration is off; after this, only admins create accounts.
 
 All settings are environment variables, listed in [Configuration](/salt-shaker/reference/configuration/).
+
+## With Docker Compose
+
+Keep the secret in a `.env` file next to `compose.yaml`, readable only by root (`chmod 600 .env`):
+
+```bash
+SALT_API_PASSWORD=<the shared secret>
+```
+
+```yaml
+# compose.yaml
+services:
+  salt-shaker:
+    image: ghcr.io/pipozzz/salt-shaker:latest
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: [salt-shaker-data:/data]
+    environment:
+      SALT_API_URL: https://salt-master:8000
+      SALT_API_USERNAME: salt-shaker
+      SALT_API_PASSWORD: ${SALT_API_PASSWORD}
+      SALT_API_EAUTH: sharedsecret
+      PUBLIC_URL: https://salt.example.com
+      TRUST_PROXY: "1"
+
+volumes:
+  salt-shaker-data:
+```
+
+```bash
+docker compose up -d
+```
+
+The port is bound to localhost, for a [reverse proxy](/salt-shaker/deploy/reverse-proxy/) on the same host.
 
 ## Database
 

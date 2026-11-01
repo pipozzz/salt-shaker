@@ -30,10 +30,14 @@ jobs:
         run: docker build -t salt-shaker:ci .
       - name: Smoke-test the image
         run: |
-          docker run -d --name ui -p 8080:8080 salt-shaker:ci
-          for i in $(seq 1 20); do curl -fs localhost:8080/healthz && break; sleep 1; done
+          # salt-api isn't needed to boot; the service account logs in on first use
+          docker run -d --name ui -p 8080:8080 -e SALT_API_URL=http://salt-api.invalid:8000 -e SALT_API_USERNAME=x -e SALT_API_PASSWORD=x salt-shaker:ci
+          for i in $(seq 1 30); do curl -fs localhost:8080/healthz && break; sleep 1; done
           curl -fs localhost:8080/ | grep -q '<title>Salt Shaker</title>'
           curl -fs localhost:8080/minions/web-01 | grep -q '<div id="root">'
+          curl -fs localhost:8080/api/config | grep -q '"setupRequired":true'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/api/salt -H 'Content-Type: application/json' -d '{}')" = 401
+          docker logs ui
 
   # pushes to main publish :latest and :sha-<short>; tags like v1.2.3 publish :1.2.3 and :1.2
   publish:

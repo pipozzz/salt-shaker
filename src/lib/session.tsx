@@ -2,11 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { HttpTransport } from '../api/http'
 import { MockTransport } from '../api/mock'
 import { SaltApi } from '../api/salt'
+import { currentUser, detectServer, ServerTransport, sessionFromMe, type ServerInfo } from '../api/server'
 import type { SaltEvent, Session, Transport } from '../api/types'
 import { makeCan, type Can } from './perms'
 import { storage } from './storage'
 
-export type Mode = 'live' | 'demo'
+/** live: browser talks to salt-api directly; server: through the Salt Shaker server; demo: mock. */
+export type Mode = 'live' | 'demo' | 'server'
 
 interface StoredSession extends Session {
   mode: Mode
@@ -14,6 +16,9 @@ interface StoredSession extends Session {
 }
 
 interface SessionCtx {
+  /** undefined while probing; null when the UI runs without a server (direct salt-api). */
+  server: ServerInfo | null | undefined
+  refreshServer(): Promise<void>
   session: StoredSession | null
   salt: SaltApi | null
   login(opts: { mode: Mode; apiUrl: string; username: string; password: string; eauth: string }): Promise<void>
@@ -34,15 +39,31 @@ const MAX_EVENTS = 500
 export const DEFAULT_API_URL = (import.meta.env.VITE_SALT_API_URL as string | undefined) ?? '/salt-api'
 
 const mock = new MockTransport()
-const transportFor = (mode: Mode, apiUrl: string): Transport => (mode === 'demo' ? mock : new HttpTransport(apiUrl))
+const serverTransport = new ServerTransport()
+const transportFor = (mode: Mode, apiUrl: string): Transport => (mode === 'demo' ? mock : mode === 'server' ? serverTransport : new HttpTransport(apiUrl))
 
+// server sessions live in an httpOnly cookie and are never written to storage
 function loadSession(): StoredSession | null {
   const s = storage.get<StoredSession>(KEY)
-  return s && s.expire * 1000 > Date.now() ? s : null
+  return s && s.mode !== 'server' && s.expire * 1000 > Date.now() ? s : null
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StoredSession | null>(loadSession)
+  const [server, setServer] = useState<ServerInfo | null | undefined>(undefined)
+
+  const refreshServer = useCallback(async () => {
+    const info = await detectServer()
+    setServer(info)
+    // restore a server session from its cookie, unless the user is in the demo
+    if (info && !info.setupRequired) {
+      const me = await currentUser().catch(() => null)
+      if (me) setSession((s) => (s?.mode === 'demo' ? s : { ...sessionFromMe(me), mode: 'server', apiUrl: '' }))
+    }
+  }, [])
+  useEffect(() => {
+    void refreshServer()
+  }, [refreshServer])
   const [events, setEvents] = useState<SaltEvent[]>([])
   const [eventsConnected, setConnected] = useState(false)
   const listeners = useRef(new Set<(e: SaltEvent) => void>())
@@ -81,12 +102,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const login: SessionCtx['login'] = async ({ mode, apiUrl, username, password, eauth }) => {
     const s = await transportFor(mode, apiUrl).login(username, password, eauth)
     const stored = { ...s, mode, apiUrl }
-    storage.set(KEY, stored)
+    if (mode === 'server') storage.remove(KEY)
+    else storage.set(KEY, stored)
     setSession(stored)
   }
 
   return (
-    <Ctx.Provider value={{ session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe, can }}>
+    <Ctx.Provider value={{ server, refreshServer, session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe, can }}>
       {children}
     </Ctx.Provider>
   )

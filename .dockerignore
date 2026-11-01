@@ -1,6 +1,9 @@
 node_modules
 dist
+dist-server
+data
 lab
 .git
 .claude
+.env
 *.log

@@ -1,3 +1,4 @@
+import { streamEvents } from './sse'
 import { SaltError, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /** Talks to salt-api's rest_cherrypy netapi module. */
@@ -47,55 +48,7 @@ export class HttpTransport implements Transport {
   }
 
   events(token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void) {
-    // Recent salt-api rejects ?token= on /events, and EventSource cannot set headers,
-    // so read the SSE stream with fetch and parse the frames ourselves.
-    const ctrl = new AbortController()
-    let stopped = false
-
-    const connect = async () => {
-      while (!stopped) {
-        try {
-          const res = await fetch(`${this.baseUrl}/events`, {
-            headers: { Accept: 'text/event-stream', 'X-Auth-Token': token },
-            signal: ctrl.signal,
-          })
-          if (!res.ok || !res.body) throw new Error(`events: ${res.status}`)
-          onStatus(true)
-          const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-          let buf = ''
-          for (;;) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buf += value
-            let idx
-            while ((idx = buf.indexOf('\n\n')) >= 0) {
-              const frame = buf.slice(0, idx)
-              buf = buf.slice(idx + 2)
-              const data = frame
-                .split('\n')
-                .filter((l) => l.startsWith('data:'))
-                .map((l) => l.slice(5).trimStart())
-                .join('\n')
-              if (!data) continue
-              try {
-                onEvent(JSON.parse(data) as SaltEvent)
-              } catch {
-                // ignore malformed frames
-              }
-            }
-          }
-        } catch {
-          if (stopped) return
-        }
-        onStatus(false)
-        await new Promise((r) => setTimeout(r, 3000))
-      }
-    }
-    void connect()
-
-    return () => {
-      stopped = true
-      ctrl.abort()
-    }
+    // recent salt-api rejects ?token= on /events, so send the header via fetch
+    return streamEvents(`${this.baseUrl}/events`, { headers: { 'X-Auth-Token': token } }, onEvent, onStatus)
   }
 }

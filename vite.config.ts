@@ -9,6 +9,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     server: {
       proxy: {
+        // the Salt Shaker server (npm run dev:server); without it the UI runs in direct mode
+        '/api': { target: env.BACKEND_URL || 'http://localhost:3100', changeOrigin: false },
         '/salt-api': {
           target: env.SALT_API_URL || 'http://localhost:8000',
           changeOrigin: true,

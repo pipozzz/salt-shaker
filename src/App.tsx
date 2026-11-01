@@ -16,9 +16,11 @@ import { MinionsPage } from './pages/Minions'
 import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
+import { AuditPage } from './pages/Audit'
+import { UsersPage } from './pages/Users'
 
 function Gate() {
-  const { session, login } = useSession()
+  const { session, login, server } = useSession()
   useTheme()
   // ?demo opens the simulated master straight away (handy for shareable demo links)
   const wantsDemo = !session && new URLSearchParams(window.location.search).has('demo')
@@ -29,6 +31,8 @@ function Gate() {
     void login({ mode: 'demo', apiUrl: '', username: 'demo', password: '', eauth: 'pam' })
   }, [wantsDemo, login])
   if (wantsDemo) return null
+  // wait for the server probe so the right login form shows
+  if (!session && server === undefined) return null
   if (!session) return <LoginPage />
   return (
     <Routes>
@@ -44,6 +48,8 @@ function Gate() {
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />
         <Route path="events" element={<EventsPage />} />
+        {session.mode === 'server' && session.eauth === 'admin' && <Route path="users" element={<UsersPage />} />}
+        {session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator') && <Route path="audit" element={<AuditPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

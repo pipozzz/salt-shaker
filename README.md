@@ -3,7 +3,7 @@
 [![CI](https://github.com/pipozzz/salt-shaker/actions/workflows/ci.yml/badge.svg)](https://github.com/pipozzz/salt-shaker/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-A web UI for [SaltStack](https://saltproject.io). It talks to your master through **salt-api** (`rest_cherrypy`), so there is nothing extra to run on the server side. It's a single static app, and you can try it in your browser without a Salt master.
+A web UI for [SaltStack](https://saltproject.io) that works with your master through **salt-api** (`rest_cherrypy`). It ships as one container with its own users, roles and audit log. It can also run as a plain static app that signs in to salt-api directly. Try it in your browser without a Salt master.
 
 ![Minions overview](docs/screenshots/minions.png)
 
@@ -18,8 +18,9 @@ A web UI for [SaltStack](https://saltproject.io). It talks to your master throug
 - **Jobs:** the job cache with full results and *run again*.
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
 - **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
+- **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
+- **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
 - **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
-- **Permission-aware:** reads your eauth permissions at login and disables what your account can't do. Read-only users get a read-only UI.
 - **Demo mode:** a simulated master in the browser, for trying it out.
 
 <table>
@@ -44,24 +45,62 @@ npm run dev
 
 Open http://localhost:5173/?demo.
 
-**Full local lab:** a Salt master with salt-api, three minions and the production UI.
+**Full local lab:** a Salt master with salt-api, three minions and the Salt Shaker container.
 
 ```bash
 cd lab && docker compose up -d --build
 ```
 
-Open http://localhost:8080 and sign in:
+Open http://localhost:8080. The first visit asks you to create the admin account. The minion keys start out pending, so accept them on **Enrollment**.
 
-| User | Password | eauth | Access |
-| --- | --- | --- | --- |
-| `shaker` | `shaker` | `sharedsecret` | everything |
-| `viewer` | `viewer` | `file` | read-only, to see the permission-aware UI |
+## How it works
 
-The minion keys start out pending, so accept them on **Enrollment**. These credentials exist only for the lab.
+```
+browser ──cookie session──▶ Salt Shaker server ──service account──▶ salt-api ──▶ master
+                              users · roles · audit
+                              SQLite or Postgres
+```
 
-## Connecting to your master
+The server signs in to salt-api with **one service account**. Every request from a user is checked against their role first, then passed on. The user's own credentials and token never reach salt-api. Local jobs get the user's name in their job metadata (`salt_shaker_user`), so `jobs.list_job` shows who ran them.
 
-Salt Shaker needs **Salt 3006 or newer** with salt-api enabled:
+| Role | Can do |
+| --- | --- |
+| **admin** | Everything, including accepting keys and managing users. |
+| **operator** | Runs anything on minions (states, commands, packages, orchestration). Can't manage keys, users or files on the master. |
+| **viewer** | Read-only. Sees minions, jobs and states, but not pillar data, which often holds secrets. |
+
+Roles are written in Salt's eauth format (`server/roles.ts`). The UI and the server read the same rules.
+
+## Deploying
+
+```bash
+docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
+  -e SALT_API_URL=https://salt-master:8000 \
+  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… -e SALT_API_EAUTH=pam \
+  -e PUBLIC_URL=https://salt.example.com \
+  ghcr.io/pipozzz/salt-shaker:latest
+```
+
+Then open the URL and create the admin.
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SALT_API_URL` | *(required)* | salt-api (`rest_cherrypy`) base URL |
+| `SALT_API_USERNAME` / `SALT_API_PASSWORD` | *(required)* | the service account |
+| `SALT_API_EAUTH` | `pam` | eauth backend of the service account |
+| `PUBLIC_URL` | `http://localhost:8080` | the URL users open; cookies and origin checks are based on it |
+| `DATABASE_URL` | SQLite in `DATA_DIR` | set `postgres://user:pass@host/db` to use Postgres |
+| `DATA_DIR` | `/data` | SQLite database and the generated auth secret |
+| `BETTER_AUTH_SECRET` | generated into `DATA_DIR` | set it explicitly when running on Postgres without a data volume |
+| `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
+
+The database schema is migrated on start, for both SQLite and Postgres.
+
+Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`.
+
+Images are published to GHCR from `main` (`:latest`, `:sha-…`) and from version tags (`:1.2.0`, `:1.2`).
+
+### The service account on the master
 
 ```yaml
 # /etc/salt/master.d/api.conf
@@ -75,51 +114,24 @@ netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
 
 external_auth:
   pam:
-    saltadmins%:                 # members of the Linux group "saltadmins"
+    salt-shaker:             # a dedicated local account, used only by the server
       - '.*'
       - '@wheel'
       - '@runner'
       - '@jobs'
-    auditors%:                   # a read-only role
-      - test.ping
-      - grains.*
-      - pkg.list_upgrades
-      - pkg.version
-      - saltutil.find_job
-      - '@runner': [manage.status, cache.grains, jobs.*, pillar.show_pillar]
-      - '@wheel': [key.list_all, key.finger, file_roots.*, pillar_roots.*]
 ```
 
-What the UI calls:
+Salt Shaker needs **Salt 3006 or newer**. The service account is as powerful as the most powerful role you hand out, so keep its password in a secret store.
 
-| Client | Functions |
-| --- | --- |
-| `wheel` | `key.*` (enrollment), `file_roots.*` / `pillar_roots.*` (browsing) |
-| `runner` | `manage.status`, `cache.grains` (target preview), `jobs.*`, `pillar.show_pillar`, `salt.cmd test.version` (master version), `state.orchestrate` |
-| `local` / `local_async` | everything you run on minions |
+### Without the server (direct mode)
 
-## Deploying
-
-The Docker image serves the UI with nginx and proxies `/salt-api/` to salt-api on the same origin, so you don't need CORS:
-
-```bash
-docker run -d -p 8080:8080 -e SALT_API_URL=https://salt-master:8000 ghcr.io/pipozzz/salt-shaker:latest
-```
-
-| Setting | Where | Default | |
-| --- | --- | --- | --- |
-| `SALT_API_URL` | container env | `http://salt-master:8000` | salt-api the proxy talks to |
-| `VITE_SALT_API_URL` | build time | `/salt-api` | for serving the UI from a different origin than salt-api (then enable CORS on salt-api) |
-| `VITE_SOURCE_URL` | build time | this repository | source link shown in the UI; point it at your fork if you modify the code (see [License](#license)) |
-
-Images are published to GHCR from `main` (`:latest`, `:sha-…`) and from version tags (`:1.2.0`, `:1.2`). The proxy streams the event bus (SSE) without buffering. It resolves the salt-api host per request, so the UI starts even while the master is down. It also sets strict security headers (CSP included) and serves `/healthz`.
-
-To serve `dist/` some other way (`npm run build`), proxy `/salt-api/` to salt-api with response buffering turned off.
+The UI also runs as static files that sign in to salt-api directly, with each user's own eauth credentials and permissions. To do that, serve `dist/` (`npm run build`) and proxy `/salt-api/` to salt-api with response buffering off. If the UI and salt-api are on different origins, build with `VITE_SALT_API_URL=https://master:8000` and enable CORS on salt-api. The UI finds out at startup whether a server is present. Users, roles and the audit log are only available with the server.
 
 ## Security notes
 
-- Put TLS in front of the UI. The salt-api token is kept in the browser's `localStorage` until it expires or you log out.
-- The master enforces permissions. The UI only hides actions your eauth perms wouldn't allow.
+- Sessions are httpOnly cookies, valid for 12 hours and extended while in use. Cross-origin state-changing requests are refused.
+- Passwords must be at least 10 characters. Better Auth rate-limits sign-in attempts. Self-registration is off; only admins create accounts.
+- The UI hides what a role can't do, and the server enforces it. Denied attempts are recorded in the audit log.
 - Pre-seeded enrollment shows a minion's private key once. Copy it over a trusted channel.
 
 To report a vulnerability, use GitHub's private [security advisories](https://github.com/pipozzz/salt-shaker/security/advisories/new) rather than a public issue.
@@ -127,19 +139,25 @@ To report a vulnerability, use GitHub's private [security advisories](https://gi
 ## Development
 
 ```bash
-npm run dev         # dev server; proxies /salt-api to $SALT_API_URL (default http://localhost:8000)
-npm test            # unit tests (vitest)
-npm run lint        # oxlint
-npm run typecheck
-npm run build
+cp .env.example .env    # points at the lab's salt-api
+cd lab && docker compose up -d master web-01 web-02 db-01 && cd ..
+npm run dev:server      # API on :3100
+npm run dev             # UI on :5173, proxies /api to the server
 ```
 
-The project is React 19, Vite, TypeScript and Tailwind CSS 4, with no state or data-fetching libraries.
+| Command | |
+| --- | --- |
+| `npm test` | unit tests (vitest) |
+| `npm run lint` / `npm run typecheck` | oxlint / TypeScript |
+| `npm run build` / `npm run build:server` | UI → `dist/`, server bundle → `dist-server/` |
+| `npm run db:generate` | after changing `server/db/schema.*.ts` (keep the SQLite and Postgres schemas in sync), generates migrations for both |
 
-- `src/api/`: the salt-api client (`salt.ts`), the HTTP and SSE transport, and the in-browser mock master used by demo mode.
-- `src/pages/`: one file per page.
-- `src/components/`: shared UI.
+The stack is React 19, Vite, TypeScript and Tailwind CSS 4 on the front end, and Hono, Better Auth and Drizzle on the server.
+
+- `src/api/`: salt-api client, the transports (server, direct, demo mock) and SSE.
+- `src/pages/`, `src/components/`: the UI.
 - `src/lib/`: session, permissions, job tracking and risk rules.
+- `server/`: config, auth, request policy (`policy.ts`), roles, the salt-api service client and the database.
 
 A few salt-api behaviours (seen on Salt 3007) that the client handles, in case they save you time too:
 

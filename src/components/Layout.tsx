@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, Search, Server, ShieldCheck, Sun, Terminal, Workflow, X } from 'lucide-react'
+import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { LICENSE_NAME, SOURCE_URL } from '../lib/about'
+import { AccountModal } from './AccountModal'
 import { CommandPalette } from './CommandPalette'
 import { Logo } from './Logo'
 import { EventNotifications } from './Toasts'
@@ -45,6 +46,7 @@ export function Layout() {
   const [theme, setTheme] = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -56,6 +58,13 @@ export function Layout() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+  // in server mode, eauth holds the user's Salt Shaker role
+  const role = session?.mode === 'server' ? session.eauth : null
+  const items = [
+    ...nav,
+    ...(role === 'admin' || role === 'operator' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
+    ...(role === 'admin' ? [{ to: '/users', label: 'Users', icon: Users }] : []),
+  ]
   const pending = usePendingKeys()
   const location = useLocation()
   useEffect(() => setMobileOpen(false), [location.pathname])
@@ -83,7 +92,7 @@ export function Layout() {
         </button>
       </div>
       <nav className="flex-1 space-y-0.5 px-2 py-2">
-        {nav.map(({ to, label, icon: Icon, end }) => (
+        {items.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -119,13 +128,20 @@ export function Layout() {
           Free software · {LICENSE_NAME} · Source code
         </a>
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white uppercase">{session?.user.slice(0, 2)}</div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{session?.user}</p>
-            <p className="truncate text-xs text-zinc-500">
-              {session?.eauth} · {session?.mode === 'demo' ? 'mock master' : session?.apiUrl}
-            </p>
-          </div>
+          <button
+            onClick={() => session?.mode === 'server' && setAccountOpen(true)}
+            disabled={session?.mode !== 'server'}
+            title={session?.mode === 'server' ? 'Account' : undefined}
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left enabled:hover:bg-zinc-200/50 dark:enabled:hover:bg-zinc-800/50"
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white uppercase">{session?.user.slice(0, 2)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{session?.user}</span>
+              <span className="block truncate text-xs text-zinc-500">
+                {session?.mode === 'server' ? session.eauth : `${session?.eauth} · ${session?.mode === 'demo' ? 'mock master' : session?.apiUrl}`}
+              </span>
+            </span>
+          </button>
           <button onClick={() => setTheme(nextTheme)} title={`Theme: ${theme}`} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800">
             <ThemeIcon className="size-4" />
           </button>
@@ -140,7 +156,8 @@ export function Layout() {
   return (
     <div className="min-h-screen">
       <EventNotifications />
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={nav} />
+      <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={items} />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-zinc-200 bg-zinc-100/60 lg:block dark:border-zinc-800 dark:bg-zinc-900/40">{sidebar}</aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-zinc-50/90 px-4 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/90">

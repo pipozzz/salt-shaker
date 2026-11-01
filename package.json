@@ -15,23 +15,37 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --external:better-sqlite3 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist-server/index.js && rm -rf dist-server/migrations && cp -r server/db/migrations dist-server/migrations",
+    "start": "node dist-server/index.js",
+    "db:generate": "drizzle-kit generate --config drizzle.sqlite.config.ts && drizzle-kit generate --config drizzle.pg.config.ts"
   },
   "dependencies": {
-    "clsx": "^2.1.1",
-    "lucide-react": "^1.66.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "react-router-dom": "^7.18.5"
+    "@hono/node-server": "^2.1.5",
+    "better-auth": "^1.7.15",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.16",
+    "postgres": "^4.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "clsx": "^2.1.1",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.66.0",
     "oxlint": "^1.89.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "~7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"

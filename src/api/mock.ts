@@ -61,6 +61,8 @@ const files: Record<'file' | 'pillar', Record<string, string>> = {
     'users/init.sls': `{% for user in pillar.get('admins', []) %}\n{{ user }}:\n  user.present:\n    - shell: /bin/bash\n    - groups: [sudo]\n{% endfor %}\n`,
     'webserver/init.sls': `nginx:\n  pkg.installed: []\n  service.running:\n    - enable: True\n    - watch:\n      - file: /etc/nginx/sites-enabled/default\n\n/etc/nginx/sites-enabled/default:\n  file.managed:\n    - source: salt://webserver/files/default.conf.j2\n    - template: jinja\n`,
     'webserver/files/default.conf.j2': `server {\n    listen 80 default_server;\n    server_name {{ pillar['site_name'] }};\n    root /var/www/html;\n}\n`,
+    'orch/deploy.sls': `# Roll out the baseline, then the web tier, then check everyone answers.\napply_common:\n  salt.state:\n    - tgt: '*'\n    - sls: common\n\nweb_tier:\n  salt.state:\n    - tgt: 'roles:web'\n    - tgt_type: grain\n    - sls: webserver\n    - require:\n      - salt: apply_common\n\nping_all:\n  salt.function:\n    - name: test.ping\n    - tgt: '*'\n    - require:\n      - salt: web_tier\n`,
+    'orch/rolling_restart.sls': `{% for host in ['web-01', 'web-02'] %}\nrestart_{{ host }}:\n  salt.function:\n    - name: service.restart\n    - tgt: {{ host }}\n    - arg: [nginx]\n{% endfor %}\n`,
     'postgres/init.sls': `postgresql:\n  pkg.installed: []\n  service.running:\n    - enable: True\n`,
   },
   pillar: {
@@ -266,6 +268,49 @@ const FUNCTIONS = [
   'state.show_sls', 'state.show_top', 'state.sls', 'status.uptime', 'sys.doc', 'sys.list_functions', 'test.ping', 'test.version', 'user.list_users',
 ]
 
+// ---------- orchestration ----------
+
+const runnerJobs = new Map<string, { at: number; ret: unknown }>()
+
+function orchestrate(sls: string, test: boolean) {
+  const up = keys.minions.filter((id) => minions[id]?.up)
+  const web = up.filter((id) => (minions[id].grains.roles as string[]).includes('web'))
+  type Step = [id: string, kind: 'state' | 'function', name: string, ret: Record<string, unknown>]
+  const steps: Step[] =
+    sls === 'orch.rolling_restart'
+      ? web.map((id): Step => [`restart_${id}`, 'function', 'service.restart', { [id]: true }])
+      : [
+          ['apply_common', 'state', 'apply_common', Object.fromEntries(up.map((id) => [id, stateResults(id, ['common'], test)]))],
+          ['web_tier', 'state', 'web_tier', Object.fromEntries(web.map((id) => [id, stateResults(id, ['webserver'], test)]))],
+          ['ping_all', 'function', 'test.ping', Object.fromEntries(up.map((id) => [id, true]))],
+        ]
+  let failedBefore = false
+  const data: Record<string, unknown> = {}
+  steps.forEach(([sid, kind, name, ret], i) => {
+    const failedMinions = kind === 'state' ? Object.entries(ret).filter(([, r]) => Object.values(r as object).some((st) => (st as { result: unknown }).result === false)).map(([m]) => m) : []
+    const result = failedBefore ? false : failedMinions.length ? false : test ? null : true
+    data[`salt_|-${sid}_|-${name}_|-${kind}`] = {
+      __id__: sid,
+      __run_num__: i,
+      __sls__: sls,
+      name,
+      result,
+      comment: failedBefore
+        ? `One or more requisite failed: ${sls}.${steps[i - 1][0]}`
+        : kind === 'function' && test
+          ? `Function ${name} would be executed on target`
+          : failedMinions.length
+            ? `Run failed on minions: ${failedMinions.join(', ')}`
+            : `States ran successfully. ${test ? 'No changes made.' : `Updating ${Object.keys(ret).join(', ')}.`}`,
+      changes: failedBefore || (kind === 'function' && test) ? {} : { out: kind === 'state' ? 'highstate' : 'nested', ret },
+      duration: rand(300, 4000),
+      start_time: new Date().toTimeString().slice(0, 15),
+    }
+    if (result === false) failedBefore = true
+  })
+  return { data: { master_master: data }, outputter: 'highstate', retcode: failedBefore ? 1 : 0 }
+}
+
 // ---------- events ----------
 
 const listeners = new Set<(e: SaltEvent) => void>()
@@ -397,6 +442,20 @@ export class MockTransport implements Transport {
       return Object.fromEntries(Object.entries(job.results).map(([id, r]) => [id, r.ret]))
     }
 
+    if (client === 'runner_async' || (client === 'runner' && fun === 'state.orchestrate')) {
+      if (fun !== 'state.orchestrate') throw new SaltError(`Runner '${fun}' is not available in demo mode`, 500)
+      const sls = String(low.arg?.[0] ?? kw.mods ?? '')
+      if (!files.file[`${sls.replace(/\./g, '/')}.sls`]) throw new SaltError(`No such SLS: ${sls}`, 500)
+      const ret = orchestrate(sls, low.kwarg?.test === true)
+      if (client === 'runner') return ret
+      const jid = newJid()
+      const delay = rand(2500, 4500)
+      runnerJobs.set(jid, { at: Date.now() + delay, ret })
+      emit(`salt/run/${jid}/new`, { fun: 'runner.state.orchestrate', jid, user: this.user, fun_args: [sls] })
+      setTimeout(() => emit(`salt/run/${jid}/ret`, { fun: 'runner.state.orchestrate', jid, user: this.user, return: ret, success: ret.retcode === 0 }), delay)
+      return { tag: `salt/run/${jid}`, jid }
+    }
+
     if (client === 'runner') {
       switch (fun) {
         case 'manage.status':
@@ -407,8 +466,11 @@ export class MockTransport implements Transport {
           return pillarFor(String(kw.minion))
         case 'jobs.list_jobs':
           return Object.fromEntries(jobs.map(({ jid, Function, Arguments, Target, User, StartTime, ...rest }) => [jid, { Function, Arguments, Target, 'Target-type': rest['Target-type'], User, StartTime }]))
-        case 'jobs.lookup_jid':
+        case 'jobs.lookup_jid': {
+          const rj = runnerJobs.get(String(kw.jid))
+          if (rj) return rj.at <= Date.now() ? { master_master: { fun: 'runner.state.orchestrate', return: rj.ret, success: true } } : {}
           return lookup(String(kw.jid))
+        }
         case 'jobs.list_job': {
           const job = jobs.find((j) => j.jid === kw.jid)
           if (!job) return {}

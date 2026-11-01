@@ -4,12 +4,13 @@ import { formatArgs } from '../api/salt'
 import { ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { useSalt } from '../lib/session'
+import { useCan, useSalt } from '../lib/session'
 import { funTone } from './Jobs'
 
 export function JobDetailPage() {
   const { jid = '' } = useParams()
   const salt = useSalt()
+  const can = useCan()
   const navigate = useNavigate()
   const { data, error, loading, reload } = useAsync(() => salt.job(jid), [salt, jid])
 
@@ -42,7 +43,7 @@ export function JobDetailPage() {
               </div>
               <p className="mt-2 font-mono text-xs text-zinc-500">jid {jid}</p>
             </div>
-            {!/^(wheel|runner)\./.test(data.Function) && (
+            {!/^(wheel|runner)\./.test(data.Function) && can('local', data.Function) && (
               <Button icon={<RotateCcw className="size-4" />} onClick={rerun}>
                 Run again
               </Button>

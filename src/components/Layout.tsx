@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, Server, ShieldCheck, Sun, Terminal, X } from 'lucide-react'
+import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, Search, Server, ShieldCheck, Sun, Terminal, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
+import { CommandPalette } from './CommandPalette'
 import { Logo } from './Logo'
 import { EventNotifications } from './Toasts'
 import { StatusDot } from './ui'
@@ -14,6 +15,7 @@ const nav = [
   { to: '/patches', label: 'Patches', icon: Package },
   { to: '/keys', label: 'Enrollment', icon: KeyRound },
   { to: '/run', label: 'Run', icon: Terminal },
+  { to: '/orchestrate', label: 'Orchestrate', icon: Workflow },
   { to: '/jobs', label: 'Jobs', icon: History },
   { to: '/files', label: 'States & Pillar', icon: FolderTree },
   { to: '/events', label: 'Events', icon: Activity },
@@ -41,6 +43,18 @@ export function Layout() {
   const { session, logout, eventsConnected } = useSession()
   const [theme, setTheme] = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
   const pending = usePendingKeys()
   const location = useLocation()
   useEffect(() => setMobileOpen(false), [location.pathname])
@@ -56,6 +70,16 @@ export function Layout() {
         {session?.mode === 'demo' && (
           <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-amber-700 uppercase dark:bg-amber-500/15 dark:text-amber-400">Demo</span>
         )}
+      </div>
+      <div className="px-2 pt-1">
+        <button
+          onClick={() => setPaletteOpen(true)}
+          className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-400 shadow-xs hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+        >
+          <Search className="size-4" />
+          Search…
+          <kbd className="ml-auto rounded border border-zinc-200 px-1.5 font-sans text-[10px] dark:border-zinc-700">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+        </button>
       </div>
       <nav className="flex-1 space-y-0.5 px-2 py-2">
         {nav.map(({ to, label, icon: Icon, end }) => (
@@ -112,6 +136,7 @@ export function Layout() {
   return (
     <div className="min-h-screen">
       <EventNotifications />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={nav} />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-zinc-200 bg-zinc-100/60 lg:block dark:border-zinc-800 dark:bg-zinc-900/40">{sidebar}</aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-zinc-50/90 px-4 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/90">

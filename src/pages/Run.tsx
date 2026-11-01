@@ -6,9 +6,9 @@ import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
 import { ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader } from '../components/ui'
+import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader, PermNote } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
-import { useSalt } from '../lib/session'
+import { useCan, useSalt } from '../lib/session'
 import { useJob } from '../lib/useJob'
 
 const PRESETS: Array<{ label: string; fun: string; args?: string; danger?: boolean }> = [
@@ -53,6 +53,8 @@ export function RunPage() {
     }
   }
 
+  const can = useCan()
+  const allowed = !fun.trim() || can('local', fun.trim())
   const isWrite = /^state\.(apply|highstate|sls)$/.test(fun) && !/test=(True|true)/.test(args)
   const isCmd = fun.startsWith('cmd.')
 
@@ -123,13 +125,14 @@ export function RunPage() {
                     {p.label}
                   </button>
                 ))}
-                <Button type="submit" variant={isWrite ? 'success' : 'primary'} className="ml-auto" icon={<Play className="size-4" />} loading={submitting}>
+                <Button type="submit" variant={isWrite ? 'success' : 'primary'} className="ml-auto" icon={<Play className="size-4" />} loading={submitting} disabled={!allowed}>
                   {isWrite ? 'Apply' : 'Run'}
                   {matched?.length ? ` on ${matched.length}` : ''}
                   <CornerDownLeft className="size-3.5 opacity-60" />
                 </Button>
               </div>
-              {isWrite && (
+              {!allowed && <PermNote>Your eauth permissions don't allow running {fun.trim()}.</PermNote>}
+              {isWrite && allowed && (
                 <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
                   <TriangleAlert className="size-3.5" /> This will change the targeted minions. Add <code className="font-mono">test=True</code> for a dry run.
                 </p>

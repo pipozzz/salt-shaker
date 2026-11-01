@@ -1,4 +1,4 @@
-export type Client = 'local' | 'local_async' | 'runner' | 'wheel'
+export type Client = 'local' | 'local_async' | 'runner' | 'runner_async' | 'wheel'
 
 export type TargetType = 'glob' | 'list' | 'grain' | 'compound' | 'pcre' | 'pillar' | 'nodegroup'
 
@@ -81,4 +81,11 @@ export class SaltError extends Error {
     super(message)
     this.status = status
   }
+}
+
+/** What a runner job (e.g. state.orchestrate) leaves in the job cache / on its ret event. */
+export interface RunnerReturn {
+  fun?: string
+  return: unknown
+  success?: boolean
 }

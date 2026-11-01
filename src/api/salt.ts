@@ -6,6 +6,7 @@ import {
   type JobSummary,
   type KeyList,
   type Lowstate,
+  type RunnerReturn,
   type SaltEvent,
   type TargetType,
   type Transport,
@@ -127,6 +128,20 @@ export class SaltApi {
     await this.learnOffset()
     const res = await this.runner<JobDetail>('jobs.list_job', { jid })
     return { ...res, jid }
+  }
+
+  // ---- orchestration ----
+  /** Starts a runner in the background; returns its jid (events arrive as salt/run/<jid>/*). */
+  async runnerAsync(fun: string, arg: unknown[] = [], kwarg: Record<string, unknown> = {}) {
+    const res = await this.call<{ jid: string; tag: string }>({ client: 'runner_async', fun, arg, kwarg })
+    return res.jid
+  }
+  /** A finished runner job's return, or null while it is still running. */
+  async runnerResult(jid: string): Promise<RunnerReturn | null> {
+    const res = await this.runner<Record<string, unknown>>('jobs.lookup_jid', { jid })
+    // runner jobs are stored under the master's own id ("<master>_master")
+    const entry = Object.values(res ?? {}).find((v): v is RunnerReturn => !!v && typeof v === 'object' && 'return' in v)
+    return entry ?? null
   }
 
   // ---- states & pillar files ----

@@ -7,7 +7,10 @@ services:
     ports: ["8000:8000"]
     volumes:
       - ./master.conf:/etc/salt/master.d/lab.conf:ro
+      - ./users.txt:/etc/salt/lab-users.txt:ro
       - ./srv:/srv:ro
+      # keep the master's keys (and accepted minions) across container re-creation
+      - master-pki:/etc/salt/pki/master
   web-01: &minion
     build: .
     hostname: web-01
@@ -22,3 +25,6 @@ services:
   db-01:
     <<: *minion
     hostname: db-01
+
+volumes:
+  master-pki:

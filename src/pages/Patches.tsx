@@ -5,9 +5,9 @@ import { Link } from 'react-router-dom'
 import type { TargetType } from '../api/types'
 import { ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, Spinner, Stat, Tabs } from '../components/ui'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Spinner, Stat, Tabs } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
-import { useSalt, useSession } from '../lib/session'
+import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from './Jobs'
 
@@ -24,6 +24,10 @@ const isUpgrades = (v: unknown): v is Upgrades => !!v && typeof v === 'object' &
 
 export function PatchesPage() {
   const { session } = useSession()
+  const can = useCan()
+  const canScan = can('local', 'pkg.list_upgrades')
+  const canInstall = can('local', 'pkg.install')
+  const canUpgradeAll = can('local', 'pkg.upgrade')
   const scan = useJob()
   const upgrade = useJob()
   const scope = `salt-shaker.patches.${session?.mode}.${session?.apiUrl}`
@@ -111,7 +115,7 @@ export function PatchesPage() {
             />
           </div>
           <div className="flex flex-col gap-2 sm:mt-[22px]">
-            <Button type="submit" variant="primary" icon={<Search className="size-4" />} loading={scanning}>
+            <Button type="submit" variant="primary" icon={<Search className="size-4" />} loading={scanning} disabled={!canScan}>
               {scanning ? `Scanning… ${Object.keys(run.results).length}/${run.minions.length}` : 'Scan for updates'}
             </Button>
             <label className="flex items-center gap-2 text-xs text-zinc-500">
@@ -120,6 +124,11 @@ export function PatchesPage() {
             </label>
           </div>
         </form>
+        {(!canScan || !canInstall || !canUpgradeAll) && (
+          <PermNote className="px-4 pb-3">
+            {!canScan ? 'Your account cannot scan for upgrades.' : 'Your account can scan but not upgrade' + (canInstall ? ' everything at once.' : canUpgradeAll ? ' single packages.' : ' packages.')}
+          </PermNote>
+        )}
         {run && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
             <span>
@@ -194,7 +203,7 @@ export function PatchesPage() {
                 <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter packages or minions…" className="pl-9" />
               </div>
-              {needing > 0 && run.done && (
+              {needing > 0 && run.done && canUpgradeAll && (
                 <Button
                   variant="primary"
                   icon={<Play className="size-4" />}
@@ -238,7 +247,7 @@ export function PatchesPage() {
                           </div>
                         </td>
                         <td className="px-3 py-2.5 pr-4 text-right">
-                          <Button size="sm" disabled={!run.done} onClick={() => setPlan({ title: `Upgrade ${pkg}`, fun: 'pkg.install', minions: [...p.minions].sort(), pkgs: [pkg] })}>
+                          <Button size="sm" disabled={!run.done || !canInstall} onClick={() => setPlan({ title: `Upgrade ${pkg}`, fun: 'pkg.install', minions: [...p.minions].sort(), pkgs: [pkg] })}>
                             Upgrade
                           </Button>
                         </td>
@@ -252,7 +261,7 @@ export function PatchesPage() {
             {view === 'minion' && minions.length > 0 && (
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
                 {minions.map(([id, ups]) => (
-                  <MinionRow key={id} id={id} ups={ups} disabled={!run.done} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
+                  <MinionRow key={id} id={id} ups={ups} disabled={!run.done || !canUpgradeAll} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
                 ))}
               </ul>
             )}

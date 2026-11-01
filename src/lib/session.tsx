@@ -3,6 +3,7 @@ import { HttpTransport } from '../api/http'
 import { MockTransport } from '../api/mock'
 import { SaltApi } from '../api/salt'
 import type { SaltEvent, Session, Transport } from '../api/types'
+import { makeCan, type Can } from './perms'
 import { storage } from './storage'
 
 export type Mode = 'live' | 'demo'
@@ -22,6 +23,8 @@ interface SessionCtx {
   clearEvents(): void
   /** Get every event as it arrives (the events list may batch several into one render). */
   subscribe(fn: (e: SaltEvent) => void): () => void
+  /** Whether the logged-in user's eauth perms allow a call (UI hint only). */
+  can: Can
 }
 
 const Ctx = createContext<SessionCtx | null>(null)
@@ -62,6 +65,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [session, logout],
   )
 
+  const can = useMemo(() => makeCan(session?.perms), [session])
+
   useEffect(() => {
     if (!salt) return
     return salt.events(
@@ -81,7 +86,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe }}>
+    <Ctx.Provider value={{ session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe, can }}>
       {children}
     </Ctx.Provider>
   )
@@ -98,4 +103,8 @@ export function useSalt() {
   const { salt } = useSession()
   if (!salt) throw new Error('Not logged in')
   return salt
+}
+
+export function useCan() {
+  return useSession().can
 }

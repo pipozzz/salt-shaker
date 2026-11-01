@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertTriangle, Check, Copy, Loader2, X } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Loader2, Lock, X } from 'lucide-react'
 import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
@@ -110,6 +110,15 @@ export function PageHeader({ title, description, actions }: { title: string; des
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
+  )
+}
+
+/** Explains why an action is unavailable for the logged-in user. */
+export function PermNote({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={clsx('flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400', className)}>
+      <Lock className="size-3.5 shrink-0" /> {children}
+    </p>
   )
 }
 

@@ -12,6 +12,7 @@ import { KeysPage } from './pages/Keys'
 import { LoginPage } from './pages/Login'
 import { MinionDetailPage } from './pages/MinionDetail'
 import { MinionsPage } from './pages/Minions'
+import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
 
@@ -28,6 +29,7 @@ function Gate() {
         <Route path="patches" element={<PatchesPage />} />
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
+        <Route path="orchestrate" element={<OrchestratePage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />

@@ -9,9 +9,14 @@ A web UI for SaltStack, built with React, Vite, TypeScript and Tailwind. It talk
 | **Patches** | Scans for pending package upgrades (`pkg.list_upgrades`) and shows them by package or by minion, with installed → available versions. You can upgrade one package where it's pending (`pkg.install only_upgrade=True`) or upgrade everything on a minion (`pkg.upgrade`), after a confirmation. |
 | **Enrollment** | Accept or reject pending keys (with fingerprints), reject or delete keys, and enroll new minions with a bootstrap script. Enrollment works either as "install, then approve" or with pre-seeded keys via `key.gen_accept`. |
 | **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Before you run, it previews which minions the target matches (from the master cache, so nothing executes). Returns stream in live over the event bus, and minions that are offline are detected with `saltutil.find_job` instead of waiting for a timeout. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
+| **Orchestrate** | Lists orchestration SLS files under `orch/` and shows their source. Runs them with `state.orchestrate`, optionally as a dry run and with pillar overrides, in the background (`runner_async`, falling back to the sync runner). Each step's result is shown with nested per-minion output, and recent runs are kept. |
 | **Jobs** | The job cache history. The detail page shows results and has a "Run again" button. |
 | **States & Pillar** | Browse `file_roots` and `pillar_roots` with syntax highlighting, and see a minion's compiled pillar. |
 | **Events** | A live stream from the master event bus, with filters. |
+
+Press **⌘K / Ctrl+K** anywhere to jump to a page, minion, saved target or recent command, open a job by jid, or start typing a function to run it.
+
+The UI reads the eauth `perms` that salt-api returns at login and disables what your account can't do (for example a read-only user can browse but not accept keys, run `cmd.run` or upgrade packages). The master still enforces the permissions; the UI only avoids offering actions that would fail.
 
 Every page that takes a target previews the minions it matches, and you can save named targets (such as `webservers` = `G@roles:web`) for reuse. Toast notifications pop up when a job fails on any minion (from any client, not just this UI) and when a new minion is waiting for approval.
 
@@ -36,7 +41,7 @@ In dev, Vite proxies `/salt-api` to `http://localhost:8000`. Point it somewhere 
 cd lab && docker compose up -d --build
 ```
 
-Sign in with URL `/salt-api`, user `shaker`, password `shaker` and eauth `sharedsecret`. The minion keys start out pending, so accept them on the **Enrollment** page. These credentials are for the lab only.
+Sign in with URL `/salt-api`, user `shaker`, password `shaker` and eauth `sharedsecret` (full access), or as `viewer` / `viewer` with eauth `file` (read-only, to see the permission-aware UI). The master's keys are kept in a Docker volume, so re-creating the container doesn't break the minions. The minion keys start out pending, so accept them on the **Enrollment** page. These credentials are for the lab only.
 
 ## Configuring salt-api on a real master
 
@@ -48,7 +53,7 @@ rest_cherrypy:
   ssl_key: /etc/pki/tls/certs/localhost.key
 
 # Salt 3006+ disables all netapi clients by default
-netapi_enable_clients: [local, local_async, runner, wheel]
+netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
 
 external_auth:
   pam:

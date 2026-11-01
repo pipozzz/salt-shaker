@@ -6,9 +6,9 @@ import type { TargetType } from '../api/types'
 import { JsonView } from '../components/JsonView'
 import { stateSummary, StateList } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, Stat } from '../components/ui'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, Stat } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
-import { useSession } from '../lib/session'
+import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from './Jobs'
 
@@ -36,6 +36,9 @@ function classify(id: string, results: Record<string, unknown>, done: boolean): 
 
 export function CompliancePage() {
   const { session } = useSession()
+  const can = useCan()
+  const canCheck = can('local', 'state.apply')
+  const canFix = canCheck
   const navigate = useNavigate()
   const { run, start, load } = useJob()
   const scope = `salt-shaker.compliance.${session?.mode}.${session?.apiUrl}`
@@ -96,10 +99,11 @@ export function CompliancePage() {
               }}
             />
           </div>
-          <Button type="submit" variant="primary" className="sm:mt-[22px]" icon={<Play className="size-4" />} loading={starting || (run !== null && !run.done)}>
+          <Button type="submit" variant="primary" className="sm:mt-[22px]" icon={<Play className="size-4" />} loading={starting || (run !== null && !run.done)} disabled={!canCheck}>
             {run && !run.done ? `Checking… ${returned}/${run.minions.length}` : 'Check now'}
           </Button>
         </form>
+        {!canCheck && <PermNote className="px-4 pb-3">Your account cannot run state.apply, so it can only view earlier checks.</PermNote>}
         {run && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
             <span>
@@ -162,6 +166,7 @@ export function CompliancePage() {
               title={filter === 'all' ? 'All minions' : `Filtered: ${filter}`}
               subtitle="Sorted by severity. Expand a minion to see what would change."
               actions={
+                canFix &&
                 drifted.length > 0 &&
                 run.done && (
                   <Button size="sm" variant="primary" icon={<Wrench className="size-3.5" />} onClick={() => fix(drifted)}>
@@ -175,7 +180,7 @@ export function CompliancePage() {
             ) : (
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
                 {shown.map((r) => (
-                  <MinionRow key={r.id} row={r} onFix={() => fix([r.id])} />
+                  <MinionRow key={r.id} row={r} onFix={canFix ? () => fix([r.id]) : undefined} />
                 ))}
               </ul>
             )}
@@ -202,7 +207,7 @@ const STATUS_UI: Record<Status, { icon: ReactNode; label: string }> = {
   waiting: { icon: <CircleDashed className="size-4 animate-spin text-zinc-400" />, label: 'Waiting…' },
 }
 
-function MinionRow({ row, onFix }: { row: Row; onFix: () => void }) {
+function MinionRow({ row, onFix }: { row: Row; onFix?: () => void }) {
   const [open, setOpen] = useState(false)
   const expandable = row.status === 'drift' || row.status === 'error'
   const isStates = !!stateSummary(row.ret)
@@ -220,7 +225,7 @@ function MinionRow({ row, onFix }: { row: Row; onFix: () => void }) {
             {(row.status === 'ok' || row.status === 'noreturn' || row.status === 'waiting') && <span className="text-xs text-zinc-500">{STATUS_UI[row.status].label}</span>}
           </span>
         </button>
-        {row.status === 'drift' && (
+        {row.status === 'drift' && onFix && (
           <Button size="sm" variant="ghost" icon={<Wrench className="size-3.5" />} onClick={onFix}>
             Remediate
           </Button>

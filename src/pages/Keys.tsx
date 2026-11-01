@@ -2,15 +2,18 @@ import clsx from 'clsx'
 import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import type { KeyList } from '../api/types'
-import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, Spinner, Tabs } from '../components/ui'
+import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, Spinner, Tabs } from '../components/ui'
 import { useAsync, useStoredState } from '../lib/hooks'
-import { useSalt, useSession } from '../lib/session'
+import { useCan, useSalt, useSession } from '../lib/session'
 
 type Action = 'accept' | 'reject' | 'delete'
 
 export function KeysPage() {
   const salt = useSalt()
   const { events } = useSession()
+  const can = useCan()
+  const canManage = can('wheel', 'key.accept')
+  const canEnroll = can('wheel', 'key.gen_accept')
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<Error | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
@@ -67,13 +70,14 @@ export function KeysPage() {
             <Button icon={<RefreshCw className={clsx('size-4', loading && 'animate-spin')} />} onClick={reload} disabled={loading}>
               Refresh
             </Button>
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEnrollOpen(true)}>
+            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEnrollOpen(true)} disabled={!canManage && !canEnroll}>
               Enroll minion
             </Button>
           </>
         }
       />
 
+      {!canManage && <PermNote className="mb-4">Read-only: your account can view keys but not accept, reject or delete them.</PermNote>}
       {error && <ErrorBox error={error} onRetry={reload} />}
       {actionError && (
         <div className="mb-4">
@@ -94,6 +98,7 @@ export function KeysPage() {
               }
               subtitle="Compare the fingerprint with `salt-call --local key.finger` on the minion before accepting."
               actions={
+                canManage &&
                 k.minions_pre.length > 1 && (
                   <Button size="sm" variant="success" icon={<CheckCheck className="size-3.5" />} loading={busy === 'accept:*'} onClick={acceptAll}>
                     Accept all
@@ -195,6 +200,7 @@ export function KeysPage() {
 }
 
 function KeyRows({ ids, fingers, children, tag }: { ids: string[]; fingers: Record<string, string>; children: (id: string) => ReactNode; tag?: (id: string) => ReactNode }) {
+  const canManage = useCan()('wheel', 'key.accept')
   return (
     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
       {[...ids].sort().map((id) => (
@@ -207,7 +213,7 @@ function KeyRows({ ids, fingers, children, tag }: { ids: string[]; fingers: Reco
               <span className="truncate font-mono">{fingers[id].slice(0, 23)}…</span>
             </span>
           )}
-          <span className="ml-auto flex gap-1.5">{children(id)}</span>
+          {canManage && <span className="ml-auto flex gap-1.5">{children(id)}</span>}
         </li>
       ))}
     </ul>
@@ -223,6 +229,7 @@ function bootstrapCmd(id: string, master: string, roles: string[]) {
 
 function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; onClose: () => void; existing?: KeyList; onEnrolled: () => void }) {
   const salt = useSalt()
+  const canEnroll = useCan()('wheel', 'key.gen_accept')
   const [method, setMethod] = useState<'approve' | 'preseed'>('approve')
   const [id, setId] = useState('')
   const [master, setMaster] = useStoredState('salt-shaker.enroll.master', window.location.hostname === 'localhost' ? 'salt.example.com' : window.location.hostname)
@@ -296,7 +303,8 @@ function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; o
 
         {method === 'approve' && id && validId && master && <Script code={bootstrapCmd(id, master, roleList)} />}
 
-        {method === 'preseed' && !keys && (
+        {method === 'preseed' && !keys && !canEnroll && <PermNote>Your account cannot generate keys (wheel key.gen_accept).</PermNote>}
+        {method === 'preseed' && !keys && canEnroll && (
           <Button variant="primary" icon={<KeyRound className="size-4" />} disabled={!validId || !master || !!taken} loading={busy} onClick={generate}>
             Generate & accept keypair
           </Button>

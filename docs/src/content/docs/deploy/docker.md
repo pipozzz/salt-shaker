@@ -22,37 +22,55 @@ All settings are environment variables, listed in [Configuration](/salt-shaker/r
 
 ## With Docker Compose
 
-Keep the secret in a `.env` file next to `compose.yaml`, readable only by root (`chmod 600 .env`):
-
-```bash
-SALT_API_PASSWORD=<the shared secret>
-```
+[`deploy/compose.yml`](https://github.com/pipozzz/salt-shaker/blob/main/deploy/compose.yml) runs Salt Shaker behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain. DNS for the domain must point at the host, and ports 80 and 443 must be open.
 
 ```yaml
-# compose.yaml
+# compose.yml
 services:
   salt-shaker:
     image: ghcr.io/pipozzz/salt-shaker:latest
     restart: unless-stopped
-    ports: ["127.0.0.1:8080:8080"]
     volumes: [salt-shaker-data:/data]
     environment:
-      SALT_API_URL: https://salt-master:8000
-      SALT_API_USERNAME: salt-shaker
+      SALT_API_URL: ${SALT_API_URL}
+      SALT_API_USERNAME: ${SALT_API_USERNAME:-salt-shaker}
       SALT_API_PASSWORD: ${SALT_API_PASSWORD}
-      SALT_API_EAUTH: sharedsecret
-      PUBLIC_URL: https://salt.example.com
+      SALT_API_EAUTH: ${SALT_API_EAUTH:-sharedsecret}
+      PUBLIC_URL: https://${DOMAIN}
       TRUST_PROXY: "1"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${DOMAIN} --to salt-shaker:8080
+    volumes: [caddy-data:/data]
+    depends_on: [salt-shaker]
 
 volumes:
   salt-shaker-data:
+  caddy-data:
+```
+
+Settings go in `.env` next to it, readable only by root:
+
+```bash
+# .env
+DOMAIN=salt.example.com
+SALT_API_URL=https://salt-master:8000
+SALT_API_USERNAME=salt-shaker
+SALT_API_EAUTH=sharedsecret
+SALT_API_PASSWORD=<the shared secret>
 ```
 
 ```bash
+chmod 600 .env
 docker compose up -d
 ```
 
-The port is bound to localhost, for a [reverse proxy](/salt-shaker/deploy/reverse-proxy/) on the same host.
+Open `https://salt.example.com` and create the admin account.
+
+If you already run a reverse proxy, drop the `caddy` service and publish `127.0.0.1:8080:8080` on `salt-shaker` instead. See [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
 
 ## Database
 

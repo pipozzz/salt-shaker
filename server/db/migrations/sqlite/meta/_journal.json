@@ -22,6 +22,13 @@
       "when": 1793560922863,
       "tag": "0002_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793563957228,
+      "tag": "0003_leases",
+      "breakpoints": true
     }
   ]
 }

@@ -117,7 +117,7 @@ export class HistoryRecorder {
   private schema: Schema
   private salt: SaltService
   private retentionDays: number
-  private ctrl = new AbortController()
+  private ctrl: AbortController | null = null
   private timers: ReturnType<typeof setInterval>[] = []
   private eventListeners: Array<(tag: string, data: Record<string, unknown>) => void> = []
   private returnListeners: Array<(r: JobRet) => void> = []
@@ -139,21 +139,27 @@ export class HistoryRecorder {
     this.returnListeners.push(fn)
   }
 
+  /** Safe to call again after stop() (the leader may lose and regain its lease). */
   start() {
-    void this.listen()
+    if (this.ctrl) return
+    const ctrl = new AbortController()
+    this.ctrl = ctrl
+    void this.listen(ctrl.signal)
     void this.prune()
     this.timers.push(setInterval(() => void this.prune(), 6 * 3600_000))
   }
 
   stop() {
-    this.ctrl.abort()
+    this.ctrl?.abort()
+    this.ctrl = null
     this.timers.forEach(clearInterval)
+    this.timers = []
   }
 
-  private async listen() {
-    while (!this.ctrl.signal.aborted) {
+  private async listen(signal: AbortSignal) {
+    while (!signal.aborted) {
       try {
-        const body = await this.salt.events(this.ctrl.signal)
+        const body = await this.salt.events(signal)
         const reader = body.pipeThrough(new TextDecoderStream()).getReader()
         let buf = ''
         for (;;) {
@@ -171,7 +177,7 @@ export class HistoryRecorder {
           }
         }
       } catch (err) {
-        if (this.ctrl.signal.aborted) return
+        if (signal.aborted) return
         console.warn('history: event stream lost, retrying', err instanceof Error ? err.message : err)
       }
       await new Promise((r) => setTimeout(r, 5000))

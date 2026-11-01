@@ -89,6 +89,8 @@ docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
 
 Then open the URL and create the admin.
 
+For a complete setup with Postgres and automatic HTTPS (Caddy), use [`deploy/`](deploy): copy `deploy/.env.example` to `deploy/.env`, fill it in and run `docker compose up -d` there.
+
 | Variable | Default | |
 | --- | --- | --- |
 | `SALT_API_URL` | *(required)* | salt-api (`rest_cherrypy`) base URL |
@@ -105,7 +107,7 @@ Then open the URL and create the admin.
 
 The database schema is migrated on start, for both SQLite and Postgres.
 
-Running several instances against one Postgres database works: sessions, history and the audit log are shared, and each scheduled run starts exactly once. Alerts triggered by events (failed jobs, pending keys) are sent by every instance, so with more than one instance, subscribe only one channel to those or run a single instance.
+Several instances can share one Postgres database: sessions, history and the audit log are shared, each scheduled run starts exactly once, and one instance (elected through a lease in the database) follows the event bus to record jobs and send event alerts. If it stops, another one takes over within about 30 seconds.
 
 Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`.
 

@@ -7,3 +7,4 @@ lab
 .claude
 .env
 *.log
+deploy

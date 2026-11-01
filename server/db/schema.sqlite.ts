@@ -145,3 +145,10 @@ export const notificationChannel = sqliteTable('notification_channel', {
   lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
   lastError: text('last_error'),
 })
+
+/** Leader election: one row per role (e.g. "events"), held by one server instance until it expires. */
+export const lease = sqliteTable('lease', {
+  name: text('name').primaryKey(),
+  holder: text('holder').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+})

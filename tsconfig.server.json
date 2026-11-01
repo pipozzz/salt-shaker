@@ -17,12 +17,14 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true
   },
   "include": [
     "server",
     "drizzle.*.config.ts",
     "src/lib/perms.ts",
-    "src/lib/states.ts"
+    "src/lib/states.ts",
+    "package.json"
   ]
 }

@@ -146,3 +146,10 @@ export const notificationChannel = pgTable('notification_channel', {
   lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
   lastError: text('last_error'),
 })
+
+/** Leader election: one row per role (e.g. "events"), held by one server instance until it expires. */
+export const lease = pgTable('lease', {
+  name: text('name').primaryKey(),
+  holder: text('holder').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+})

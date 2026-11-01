@@ -4,3 +4,4 @@
  */
 export const SOURCE_URL = (import.meta.env.VITE_SOURCE_URL as string | undefined) ?? 'https://github.com/pipozzz/salt-shaker'
 export const LICENSE_NAME = 'AGPL-3.0'
+export const VERSION = __APP_VERSION__

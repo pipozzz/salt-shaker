@@ -10,11 +10,13 @@ import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
+import { Leader } from './leader'
 import { Notifier } from './notify'
 import { automationRoutes } from './routes/automation'
 import { Scheduler } from './scheduler'
 import { authorize, jidOf } from './policy'
 import { isRole, ROLE_PERMS } from './roles'
+import pkg from '../package.json' with { type: 'json' }
 import { SaltService, UpstreamError } from './salt'
 import type { AuditRow, Env, SessionUser } from './types'
 
@@ -45,7 +47,10 @@ const history = new HistoryRecorder(db, schema, salt, config.historyDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
-history.start()
+// with several instances on one database, only the lease holder follows the event bus, so jobs
+// are recorded once and event alerts aren't duplicated
+const eventsLeader = new Leader(db, schema, 'events', { onAcquire: () => history.start(), onLose: () => history.stop() })
+eventsLeader.start()
 
 const app = new Hono<Env>()
 
@@ -112,6 +117,7 @@ const userCount = async () => (await db.select({ n: count() }).from(schema.user)
 app.get('/api/config', async (c) =>
   c.json({
     mode: 'server',
+    version: pkg.version,
     setupRequired: (await userCount()) === 0,
     sso: config.oidc ? { name: config.oidc.name, providerId: 'oidc', rolesFromIdp: !!config.oidc.roleClaim } : null,
     passwordLogin: config.oidc ? config.passwordLogin : 'all',
@@ -299,6 +305,16 @@ app.get('*', (c) => {
   return c.html(readFileSync(indexHtml, 'utf8'))
 })
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`salt-shaker listening on :${info.port} (${provider}, salt-api ${config.saltApi.url})`)
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+  console.log(`salt-shaker ${pkg.version} listening on :${info.port} (${provider}, salt-api ${config.saltApi.url})`)
 })
+
+// release the events lease on shutdown so another instance takes over without waiting for it to expire
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(sig, async () => {
+    scheduler.stop()
+    await eventsLeader.stop()
+    server.close()
+    process.exit(0)
+  })
+}

@@ -55,6 +55,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refreshServer = useCallback(async () => {
     const info = await detectServer()
     setServer(info)
+    // a direct salt-api session left over from before this deployment had a server is useless now
+    if (info) {
+      setSession((s) => (s?.mode === 'live' ? null : s))
+      if (storage.get<StoredSession>(KEY)?.mode === 'live') storage.remove(KEY)
+    }
     // restore a server session from its cookie, unless the user is in the demo
     if (info && !info.setupRequired) {
       const me = await currentUser().catch(() => null)

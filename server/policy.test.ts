@@ -25,9 +25,10 @@ describe('authorize', () => {
     expect(authorize('admin', 'a', { client: 'wheel', fun: 'key.delete', match: 'x' }).ok).toBe(true)
   })
 
-  it('treats an unknown or missing role as viewer', () => {
-    expect(authorize(null, 'x', { client: 'local', fun: 'cmd.run' })).toMatchObject({ ok: false, status: 403 })
-    expect(authorize('superuser', 'x', { client: 'local', fun: 'test.ping' }).ok).toBe(true)
+  it('gives an unknown, missing or "none" role no permissions at all', () => {
+    expect(authorize(null, 'x', { client: 'local', fun: 'test.ping' })).toMatchObject({ ok: false, status: 403 })
+    expect(authorize('superuser', 'x', { client: 'local', fun: 'test.ping' })).toMatchObject({ ok: false, status: 403 })
+    expect(authorize('none', 'x', { client: 'runner', fun: 'jobs.list_jobs' })).toMatchObject({ ok: false, status: 403 })
   })
 
   it('limits salt.cmd to test.version for non-admins', () => {

@@ -20,7 +20,26 @@ import type { AuditRow, Env, SessionUser } from './types'
 
 const config = loadConfig()
 const { db, schema, provider } = await openDatabase(config)
-const auth = createAuth(config, db, schema, provider)
+let auth = createAuth(config, db, schema, provider)
+
+// Better Auth reads the OIDC discovery document once, when it is created, and drops the provider if
+// that fails. If the IdP isn't reachable at start-up, keep checking and rebuild auth once it is.
+if (config.oidc) {
+  const discoveryUrl = config.oidc.discoveryUrl
+  const reachable = () =>
+    fetch(discoveryUrl, { signal: AbortSignal.timeout(5000) })
+      .then((r) => r.ok)
+      .catch(() => false)
+  if (!(await reachable())) {
+    console.warn(`sso: ${discoveryUrl} is not reachable yet; SSO stays off until it is`)
+    const retry = setInterval(async () => {
+      if (!(await reachable())) return
+      clearInterval(retry)
+      auth = createAuth(config, db, schema, provider)
+      console.log('sso: identity provider reachable, SSO enabled')
+    }, 10_000)
+  }
+}
 const salt = new SaltService(config.saltApi)
 const history = new HistoryRecorder(db, schema, salt, config.historyDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
@@ -68,11 +87,17 @@ app.use('/api/*', async (c, next) => {
   await next()
 })
 
-app.on(['GET', 'POST'], '/api/auth/*', (c) => {
+app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
   // hand Better Auth a trustworthy client IP for its rate limiter (overwriting anything the client sent)
   const headers = new Headers(c.req.raw.headers)
   headers.set(CLIENT_IP_HEADER, clientIp(c) ?? 'unknown')
-  return auth.handler(new Request(c.req.raw, { headers }))
+  const res = await auth.handler(new Request(c.req.raw, { headers }))
+  // our session hook refusing a user surfaces as a 500 from Better Auth; it's a 403
+  if (res.status === 500 && res.headers.get('content-type')?.includes('json')) {
+    const body = (await res.clone().json().catch(() => null)) as { code?: string } | null
+    if (body?.code === 'FAILED_TO_CREATE_SESSION') return c.json({ error: 'This account cannot sign in here', code: body.code }, 403)
+  }
+  return res
 })
 
 app.use('/api/*', async (c, next) => {
@@ -84,7 +109,14 @@ app.use('/api/*', async (c, next) => {
 
 const userCount = async () => (await db.select({ n: count() }).from(schema.user))[0]?.n ?? 0
 
-app.get('/api/config', async (c) => c.json({ mode: 'server', setupRequired: (await userCount()) === 0 }))
+app.get('/api/config', async (c) =>
+  c.json({
+    mode: 'server',
+    setupRequired: (await userCount()) === 0,
+    sso: config.oidc ? { name: config.oidc.name, providerId: 'oidc', rolesFromIdp: !!config.oidc.roleClaim } : null,
+    passwordLogin: config.oidc ? config.passwordLogin : 'all',
+  }),
+)
 
 // first run: create the initial admin while there are no users at all
 let settingUp = false

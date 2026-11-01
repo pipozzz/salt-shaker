@@ -10,10 +10,15 @@ const ROLE_INFO: Record<Role, { tone: Tone; text: string }> = {
   admin: { tone: 'accent', text: 'Everything, including keys and users' },
   operator: { tone: 'blue', text: 'Runs anything on minions; no key or user management' },
   viewer: { tone: 'zinc', text: 'Read-only; no pillar access' },
+  none: { tone: 'red', text: 'Cannot sign in (e.g. SSO users waiting for a role)' },
 }
 
+/** Local users get a synthetic email; anyone else came in through SSO. */
+const isSso = (u: UserRow) => !u.email.endsWith('@users.salt-shaker.invalid')
+
 export function UsersPage() {
-  const { session } = useSession()
+  const { session, server } = useSession()
+  const rolesFromIdp = !!server?.sso?.rolesFromIdp
   const list = useAsync(() => users.list(), [])
   const [creating, setCreating] = useState(false)
   const [resetFor, setResetFor] = useState<UserRow | null>(null)
@@ -53,7 +58,7 @@ export function UsersPage() {
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {ROLES.map((r) => (
           <Card key={r} className="p-4">
             <Badge tone={ROLE_INFO[r].tone}>{r}</Badge>
@@ -93,8 +98,9 @@ export function UsersPage() {
                   return (
                     <tr key={u.id} className={u.banned ? 'opacity-60' : ''}>
                       <td className="py-2.5 pr-3 pl-4">
-                        <p className="font-mono font-medium">
+                        <p className="flex items-center gap-2 font-mono font-medium">
                           {u.username ?? u.name} {isMe && <span className="font-sans text-xs text-zinc-400">(you)</span>}
+                          {isSso(u) && <Badge tone="blue">{server?.sso?.name ?? 'SSO'}</Badge>}
                         </p>
                         {u.name !== u.username && <p className="text-xs text-zinc-500">{u.name}</p>}
                       </td>
@@ -102,7 +108,8 @@ export function UsersPage() {
                         <div className="flex items-center gap-2">
                           <Select
                             value={u.role ?? 'viewer'}
-                            disabled={isMe || busy === `role:${u.id}`}
+                            disabled={isMe || busy === `role:${u.id}` || (isSso(u) && rolesFromIdp)}
+                            title={isSso(u) && rolesFromIdp ? `Set by ${server?.sso?.name} groups on every sign-in` : undefined}
                             onChange={(e) => act(`role:${u.id}`, () => users.setRole(u.id, e.target.value as Role))}
                             className="h-8 w-32"
                             aria-label={`Role of ${u.username ?? u.name}`}
@@ -118,9 +125,11 @@ export function UsersPage() {
                       <td className="px-3 py-2.5 pr-4">
                         {!isMe && (
                           <div className="flex justify-end gap-1">
-                            <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => setResetFor(u)}>
-                              Password
-                            </Button>
+                            {!isSso(u) && (
+                              <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => setResetFor(u)}>
+                                Password
+                              </Button>
+                            )}
                             {u.banned ? (
                               <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `ban:${u.id}`} onClick={() => act(`ban:${u.id}`, () => users.unban(u.id))}>
                                 Enable

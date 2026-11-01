@@ -6,10 +6,12 @@ import { SaltError, type Lowstate, type SaltEvent, type Session, type Transport 
 export interface ServerInfo {
   mode: 'server'
   setupRequired: boolean
+  sso: { name: string; providerId: string; rolesFromIdp: boolean } | null
+  passwordLogin: 'all' | 'admins'
 }
 
-export type Role = 'admin' | 'operator' | 'viewer'
-export const ROLES: Role[] = ['admin', 'operator', 'viewer']
+export type Role = 'admin' | 'operator' | 'viewer' | 'none'
+export const ROLES: Role[] = ['admin', 'operator', 'viewer', 'none']
 
 export interface Me {
   user: { id: string; name: string; username: string; role: Role }
@@ -50,6 +52,17 @@ export async function detectServer(): Promise<ServerInfo | null> {
     return null
   }
 }
+
+/** Starts the OIDC redirect; the server sends the browser back here with a session cookie. */
+export async function startSso(providerId: string) {
+  // Better Auth serves generic OIDC providers through its standard social sign-in endpoint
+  const res = await post<{ url?: string }>('/api/auth/sign-in/social', { provider: providerId, callbackURL: '/', errorCallbackURL: '/?sso_error=1' })
+  if (!res.url) throw new SaltError('The identity provider did not return a sign-in URL')
+  window.location.assign(res.url)
+}
+
+/** Better Auth's generic "no session" error, which our session hook triggers for users without access. */
+export const isNoAccessError = (e: unknown) => e instanceof SaltError && /session/i.test(e.message)
 
 export const setupAdmin = (username: string, password: string, name?: string) => post<{ ok: true }>('/api/setup', { username, password, name })
 
@@ -99,6 +112,7 @@ export class ServerTransport implements Transport {
 export interface UserRow {
   id: string
   name: string
+  email: string
   username?: string | null
   role?: string | null
   banned?: boolean | null

@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { FlaskConical, KeyRound, PlugZap } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { FlaskConical, KeyRound, LogIn, PlugZap } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Logo } from '../components/Logo'
 import { Button, ErrorBox, Field, Input, Select } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { LICENSE_NAME, SOURCE_URL } from '../lib/about'
-import { setupAdmin } from '../api/server'
+import { isNoAccessError, setupAdmin, startSso } from '../api/server'
+import { SaltError } from '../api/types'
 import { DEFAULT_API_URL, useSession, type Mode } from '../lib/session'
 
 export function LoginPage() {
@@ -19,6 +20,36 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
+  const [ssoBusy, setSsoBusy] = useState(false)
+  const sso = server?.sso ?? null
+  const [showPassword, setShowPassword] = useState(false)
+  const passwordVisible = !sso || server?.passwordLogin === 'all' || showPassword
+
+  // the IdP round-trip ends on /?sso_error=1&error=... when it didn't produce a session
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (!p.has('sso_error')) return
+    const code = p.get('error') ?? 'unknown_error'
+    setError(
+      new SaltError(
+        /session/i.test(code)
+          ? `Signed in with ${sso?.name ?? 'SSO'}, but your account has no access to Salt Shaker. Ask an admin to grant you a role.`
+          : `Single sign-on failed (${code.replace(/_/g, ' ')}).`,
+      ),
+    )
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [sso?.name])
+
+  const signInWithSso = async () => {
+    setSsoBusy(true)
+    setError(null)
+    try {
+      await startSso(sso!.providerId)
+    } catch (err) {
+      setError(err as Error)
+      setSsoBusy(false)
+    }
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -27,7 +58,11 @@ export function LoginPage() {
     try {
       await login({ mode, apiUrl: mode === 'live' ? apiUrl : '', username: mode === 'demo' ? username || 'demo' : username, password, eauth })
     } catch (err) {
-      setError(err as Error)
+      setError(
+        mode === 'server' && isNoAccessError(err)
+          ? new SaltError(sso && server?.passwordLogin === 'admins' ? `Password sign-in is only for admins here. Use ${sso.name}.` : 'This account has no access to Salt Shaker.')
+          : (err as Error),
+      )
     } finally {
       setBusy(false)
     }
@@ -59,10 +94,28 @@ export function LoginPage() {
           ))}
         </div>
 
-        {mode === 'server' && (
+        {mode === 'server' && sso && (
+          <>
+            <Button type="button" variant="primary" className="w-full" icon={<LogIn className="size-4" />} loading={ssoBusy} onClick={signInWithSso}>
+              Sign in with {sso.name}
+            </Button>
+            {passwordVisible ? (
+              <div className="flex items-center gap-3 text-xs text-zinc-400">
+                <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                {server?.passwordLogin === 'admins' ? 'admins only' : 'or with a password'}
+                <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowPassword(true)} className="w-full text-center text-xs text-zinc-500 hover:underline">
+                Admin sign-in with a password
+              </button>
+            )}
+          </>
+        )}
+        {mode === 'server' && passwordVisible && (
           <>
             <Field label="Username">
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required autoFocus />
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required autoFocus={!sso} />
             </Field>
             <Field label="Password">
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
@@ -101,9 +154,11 @@ export function LoginPage() {
 
         {error && <ErrorBox error={error} />}
 
-        <Button type="submit" variant="primary" className="w-full" loading={busy}>
-          {mode === 'demo' ? 'Open demo' : 'Sign in'}
-        </Button>
+        {(mode !== 'server' || passwordVisible) && (
+          <Button type="submit" variant={mode === 'server' && sso ? 'secondary' : 'primary'} className="w-full" loading={busy}>
+            {mode === 'demo' ? 'Open demo' : sso ? 'Sign in with password' : 'Sign in'}
+          </Button>
+        )}
       </form>
     </Shell>
   )

@@ -19,6 +19,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
 - **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
+- **Single sign-on:** OIDC with Keycloak, Entra ID, Google, Authentik, Okta and others. Roles can come from IdP groups and are refreshed on every sign-in.
 - **Schedules:** nightly compliance checks, weekly patch scans or any function, on a cron schedule.
 - **Notifications:** Slack-format or JSON webhooks for drift, available upgrades, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
@@ -55,6 +56,8 @@ cd lab && docker compose up -d --build
 
 Open http://localhost:8080. The first visit asks you to create the admin account. The minion keys start out pending, so accept them on **Enrollment**.
 
+The lab also runs a mock OIDC provider. Click **Sign in with Lab SSO**, type any username and add claims such as `{"groups": ["salt-operators"]}` (or `salt-admins` / `salt-viewers`). Without one of those groups, the sign-in is refused.
+
 ## How it works
 
 ```
@@ -70,6 +73,7 @@ The server signs in to salt-api with **one service account**. It also listens to
 | **admin** | Everything, including accepting keys and managing users. |
 | **operator** | Runs anything on minions (states, commands, packages, orchestration). Can't manage keys, users or files on the master. |
 | **viewer** | Read-only. Sees minions, jobs and states, but not pillar data, which often holds secrets. |
+| **none** | Can't sign in. Use it to switch off an account, or for SSO users who haven't been granted a role yet. |
 
 Roles are written in Salt's eauth format (`server/roles.ts`). The UI and the server read the same rules.
 
@@ -106,6 +110,23 @@ Running several instances against one Postgres database works: sessions, history
 Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`.
 
 Images are published to GHCR from `main` (`:latest`, `:sha-…`) and from version tags (`:1.2.0`, `:1.2`).
+
+### Single sign-on (OIDC)
+
+Register Salt Shaker as a confidential client with the redirect URI `<PUBLIC_URL>/api/auth/callback/oidc`, then set:
+
+| Variable | |
+| --- | --- |
+| `OIDC_ISSUER` | issuer URL; discovery is read from `/.well-known/openid-configuration` |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | the client credentials |
+| `OIDC_NAME` | button label, e.g. `Keycloak` (default `SSO`) |
+| `OIDC_SCOPES` | default `openid,profile,email`; add `groups` if your IdP needs it |
+| `OIDC_ROLE_CLAIM` | claim holding groups or roles, e.g. `groups` or `realm_access.roles`. When set, the IdP decides each user's role on every sign-in. |
+| `OIDC_ADMIN_GROUPS` / `OIDC_OPERATOR_GROUPS` / `OIDC_VIEWER_GROUPS` | comma-separated values of that claim per role; the highest match wins |
+| `OIDC_DEFAULT_ROLE` | role when nothing matches: `none` (default with a role claim, so sign-in is refused) or `viewer` (default without one, so admins assign roles in the UI) |
+| `PASSWORD_LOGIN` | `all` (default), or `admins`: only admins may use passwords, as a break-glass when the IdP is down |
+
+The flow uses PKCE and checks the `id_token` nonce. If the IdP is unreachable when the server starts, SSO stays off and turns itself on once discovery succeeds.
 
 ### The service account on the master
 

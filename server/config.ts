@@ -17,6 +17,41 @@ export interface Config {
   historyDays: number
   /** Behind a reverse proxy: take the client IP from X-Forwarded-For instead of the socket. */
   trustProxy: boolean
+  /** Who may sign in with a password; 'admins' keeps it as a break-glass when SSO is on. */
+  passwordLogin: 'all' | 'admins'
+  oidc: OidcConfig | null
+}
+
+export interface OidcConfig {
+  name: string
+  discoveryUrl: string
+  clientId: string
+  clientSecret: string
+  scopes: string[]
+  /** claim holding groups/roles, e.g. "groups"; when set, the IdP decides roles on every sign-in */
+  roleClaim: string | null
+  groups: { admin: string[]; operator: string[]; viewer: string[] }
+  defaultRole: 'admin' | 'operator' | 'viewer' | 'none'
+}
+
+const list = (v: string | undefined) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+
+function loadOidc(): OidcConfig | null {
+  const issuer = process.env.OIDC_ISSUER?.replace(/\/+$/, '')
+  if (!issuer) return null
+  const roleClaim = process.env.OIDC_ROLE_CLAIM?.trim() || null
+  const defaultRole = (process.env.OIDC_DEFAULT_ROLE ?? (roleClaim ? 'none' : 'viewer')) as OidcConfig['defaultRole']
+  if (!['admin', 'operator', 'viewer', 'none'].includes(defaultRole)) throw new Error('OIDC_DEFAULT_ROLE must be admin, operator, viewer or none')
+  return {
+    name: process.env.OIDC_NAME ?? 'SSO',
+    discoveryUrl: process.env.OIDC_DISCOVERY_URL ?? `${issuer}/.well-known/openid-configuration`,
+    clientId: required('OIDC_CLIENT_ID'),
+    clientSecret: required('OIDC_CLIENT_SECRET'),
+    scopes: list(process.env.OIDC_SCOPES ?? 'openid,profile,email'),
+    roleClaim,
+    groups: { admin: list(process.env.OIDC_ADMIN_GROUPS), operator: list(process.env.OIDC_OPERATOR_GROUPS), viewer: list(process.env.OIDC_VIEWER_GROUPS) },
+    defaultRole,
+  }
 }
 
 function required(name: string) {
@@ -55,6 +90,8 @@ export function loadConfig(): Config {
     },
     staticDir: process.env.STATIC_DIR ?? './dist',
     trustProxy: /^(1|true|yes)$/i.test(process.env.TRUST_PROXY ?? ''),
+    passwordLogin: process.env.PASSWORD_LOGIN === 'admins' ? 'admins' : 'all',
+    oidc: loadOidc(),
     historyDays: Math.max(1, Number(process.env.JOB_RETENTION_DAYS ?? 90) || 90),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }

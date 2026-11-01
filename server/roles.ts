@@ -1,6 +1,7 @@
 import { makeCan } from '../src/lib/perms'
 
-export const ROLES = ['admin', 'operator', 'viewer'] as const
+// 'none' is a user who may not sign in (e.g. an SSO user nobody granted a role yet)
+export const ROLES = ['admin', 'operator', 'viewer', 'none'] as const
 export type Role = (typeof ROLES)[number]
 
 /**
@@ -27,10 +28,11 @@ export const ROLE_PERMS: Record<Role, unknown[]> = {
     { '@runner': ['manage.status', 'cache.grains', 'jobs.*', 'salt.cmd'] },
     { '@wheel': ['key.list_all', 'key.finger', 'file_roots.list_roots', 'file_roots.read', 'file_roots.list_env'] },
   ],
+  none: [],
 }
 
 export const isRole = (r: unknown): r is Role => typeof r === 'string' && (ROLES as readonly string[]).includes(r)
 
 export function canFor(role: string | null | undefined) {
-  return makeCan(ROLE_PERMS[isRole(role) ? role : 'viewer'])
+  return makeCan(ROLE_PERMS[isRole(role) ? role : 'none'])
 }

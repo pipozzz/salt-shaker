@@ -22,55 +22,40 @@ All settings are environment variables, listed in [Configuration](/salt-shaker/r
 
 ## With Docker Compose
 
-[`deploy/compose.yml`](https://github.com/pipozzz/salt-shaker/blob/main/deploy/compose.yml) runs Salt Shaker behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain. DNS for the domain must point at the host, and ports 80 and 443 must be open.
-
-```yaml
-# compose.yml
-services:
-  salt-shaker:
-    image: ghcr.io/pipozzz/salt-shaker:latest
-    restart: unless-stopped
-    volumes: [salt-shaker-data:/data]
-    environment:
-      SALT_API_URL: ${SALT_API_URL}
-      SALT_API_USERNAME: ${SALT_API_USERNAME:-salt-shaker}
-      SALT_API_PASSWORD: ${SALT_API_PASSWORD}
-      SALT_API_EAUTH: ${SALT_API_EAUTH:-sharedsecret}
-      PUBLIC_URL: https://${DOMAIN}
-      TRUST_PROXY: "1"
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    command: caddy reverse-proxy --from ${DOMAIN} --to salt-shaker:8080
-    volumes: [caddy-data:/data]
-    depends_on: [salt-shaker]
-
-volumes:
-  salt-shaker-data:
-  caddy-data:
-```
-
-Settings go in `.env` next to it, readable only by root:
+[`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) has a production example: Salt Shaker with Postgres, behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain. DNS for the domain must point at the host, and ports 80 and 443 must be open.
 
 ```bash
-# .env
+git clone https://github.com/pipozzz/salt-shaker.git
+cd salt-shaker/deploy
+cp .env.example .env && chmod 600 .env
+```
+
+Fill in `.env`:
+
+```bash
 DOMAIN=salt.example.com
-SALT_API_URL=https://salt-master:8000
+SALT_API_URL=https://salt-master.internal:8000
 SALT_API_USERNAME=salt-shaker
-SALT_API_EAUTH=sharedsecret
 SALT_API_PASSWORD=<the shared secret>
+SALT_API_EAUTH=sharedsecret
+
+# generate both with: openssl rand -base64 32
+POSTGRES_PASSWORD=
+BETTER_AUTH_SECRET=
+
+# pin a release instead of following latest
+SALT_SHAKER_VERSION=latest
 ```
 
+The `OIDC_*` settings are optional; leave `OIDC_ISSUER` empty to use local accounts only.
+
 ```bash
-chmod 600 .env
 docker compose up -d
 ```
 
 Open `https://salt.example.com` and create the admin account.
 
-If you already run a reverse proxy, drop the `caddy` service and publish `127.0.0.1:8080:8080` on `salt-shaker` instead. See [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
+If you already run a reverse proxy, drop the `caddy` service, publish `127.0.0.1:8080:8080` on `salt-shaker` and see [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
 
 ## Database
 

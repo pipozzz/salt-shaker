@@ -1,7 +1,7 @@
 ---
 title: Behind a reverse proxy
 description: TLS, proxy headers and Server-Sent Events.
-sidebar: { order: 3 }
+sidebar: { order: 4 }
 ---
 
 Put TLS in front of Salt Shaker, for example with a load balancer, Traefik or nginx.

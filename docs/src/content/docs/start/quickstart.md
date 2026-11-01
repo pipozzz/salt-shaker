@@ -26,3 +26,5 @@ cd lab && docker compose up -d --build
 Open <http://localhost:8080>. The first visit asks you to create the admin account.
 
 The minion keys start out pending, so go to **Enrollment** and accept them. Then you're ready to run commands, check compliance and browse states.
+
+The lab also has a mock OIDC provider for trying [single sign-on](/salt-shaker/deploy/sso/#trying-it).

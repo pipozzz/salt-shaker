@@ -4,9 +4,11 @@ description: Sessions, passwords, reporting vulnerabilities and the license.
 ---
 
 - Sessions are httpOnly cookies, valid for 12 hours and extended while in use. Cross-origin state-changing requests are refused.
-- Passwords must be at least 10 characters. Sign-in attempts are rate-limited. Self-registration is off; only admins create accounts.
+- Passwords must be at least 10 characters. Sign-in attempts are rate-limited per client IP. Self-registration is off; only admins create accounts.
+- [Single sign-on](/salt-shaker/deploy/sso/) uses PKCE and checks the `id_token` nonce. `PASSWORD_LOGIN=admins` keeps passwords as a break-glass for admins only.
 - The UI hides what a role can't do, and the server enforces it. Denied attempts are recorded in the audit log.
 - The user's own credentials and session never reach salt-api; the server uses its service account.
+- Webhook URLs for notifications are stored on the server and shown masked.
 - Pre-seeded enrollment shows a minion's private key once. Copy it over a trusted channel.
 
 ## Reporting a vulnerability

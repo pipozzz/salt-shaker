@@ -1,7 +1,7 @@
 ---
 title: Direct mode
 description: Run the UI as static files that sign in to salt-api directly.
-sidebar: { order: 4 }
+sidebar: { order: 5 }
 ---
 
 The UI also runs without the server, as static files that sign in to salt-api directly. Each user signs in with their own eauth credentials and gets their own eauth permissions.

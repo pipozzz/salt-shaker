@@ -22,7 +22,14 @@ All settings are environment variables, listed in [Configuration](/salt-shaker/r
 
 ## With Docker Compose
 
-[`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) has a production example: Salt Shaker with Postgres, behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain. DNS for the domain must point at the host, and ports 80 and 443 must be open.
+[`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) has two production setups. Both run behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain, and share one `.env`.
+
+| | File | Use it for |
+| --- | --- | --- |
+| **SQLite** | `docker-compose.sqlite.yml` | one instance; the simplest setup, with everything in one volume |
+| **Postgres** | `docker-compose.yml` | [several instances](#several-instances), or when you already run and back up Postgres |
+
+DNS for the domain must point at the host, and ports 80 and 443 must be open.
 
 ```bash
 git clone https://github.com/pipozzz/salt-shaker.git
@@ -39,7 +46,7 @@ SALT_API_USERNAME=salt-shaker
 SALT_API_PASSWORD=<the shared secret>
 SALT_API_EAUTH=sharedsecret
 
-# generate both with: openssl rand -base64 32
+# Postgres only; generate with: openssl rand -base64 32
 POSTGRES_PASSWORD=
 BETTER_AUTH_SECRET=
 
@@ -49,9 +56,23 @@ SALT_SHAKER_VERSION=latest
 
 The `OIDC_*` settings are optional; leave `OIDC_ISSUER` empty to use local accounts only.
 
+### SQLite
+
+```bash
+docker compose -f docker-compose.sqlite.yml up -d
+```
+
+The database and the generated auth secret are kept in the `data` volume. Back it up; losing the auth secret signs everyone out.
+
+### Postgres
+
+Set `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` in `.env`, then:
+
 ```bash
 docker compose up -d
 ```
+
+### Then
 
 Open `https://salt.example.com` and create the admin account.
 
@@ -70,18 +91,6 @@ The schema is migrated on start, for both SQLite and Postgres.
 :::note
 The auth secret is generated into `/data` on first start. When running on Postgres without a data volume, set `BETTER_AUTH_SECRET` explicitly, or sessions are lost on every restart.
 :::
-
-## Compose with Postgres and HTTPS
-
-The repository's [`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) directory has a complete setup: Salt Shaker, Postgres, and Caddy with automatic HTTPS.
-
-```bash
-cd deploy
-cp .env.example .env   # set DOMAIN, the service account, secrets, optional SSO
-docker compose up -d
-```
-
-Point DNS for your domain at the host first, so Caddy can get the certificate.
 
 ## Several instances
 

@@ -43,7 +43,7 @@ const minions: Record<string, MockMinion> = {
   'web-02': { up: true, grains: makeGrains('web-02', 'Ubuntu', '24.04', 4, 7951, '10.0.1.12', ['web', 'nginx']) },
   'db-01': { up: true, grains: makeGrains('db-01', 'Debian', '12', 8, 32093, '10.0.2.21', ['db', 'postgres']) },
   'cache-01': { up: false, grains: makeGrains('cache-01', 'Debian', '12', 2, 3934, '10.0.2.31', ['cache', 'redis']) },
-  'mon-01': { up: true, grains: makeGrains('mon-01', 'Rocky', '9.4', 2, 3934, '10.0.3.41', ['monitoring']) },
+  'mon-01': { up: true, grains: { ...makeGrains('mon-01', 'Rocky', '9.4', 2, 3934, '10.0.3.41', ['monitoring']), saltversion: '3006.9' } },
   'worker-01': { up: true, grains: makeGrains('worker-01', 'Ubuntu', '22.04', 16, 64220, '10.0.4.51', ['worker']) },
 }
 
@@ -460,6 +460,9 @@ export class MockTransport implements Transport {
       switch (fun) {
         case 'manage.status':
           return { up: keys.minions.filter((id) => minions[id]?.up), down: keys.minions.filter((id) => !minions[id]?.up) }
+        case 'salt.cmd':
+          if (low.arg?.[0] === 'test.version') return '3007.1'
+          throw new SaltError(`salt.cmd ${String(low.arg?.[0])} is not available in demo mode`, 500)
         case 'cache.grains':
           return Object.fromEntries(matchTarget(String(kw.tgt), String(kw.tgt_type ?? 'glob')).map((id) => [id, minions[id].grains]))
         case 'pillar.show_pillar':

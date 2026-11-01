@@ -4,11 +4,11 @@ A web UI for SaltStack, built with React, Vite, TypeScript and Tailwind. It talk
 
 | Page | What it does |
 | --- | --- |
-| **Minions** | Lists accepted minions with up/down status, OS, IP, CPU/RAM and roles. The detail page shows grains and pillar, with quick actions. |
+| **Minions** | Lists accepted minions with up/down status, OS, IP, CPU/RAM and roles. Above the list, a fleet breakdown by OS, Salt version and role flags minions running an older Salt than the master; click a row to filter the list. The detail page shows grains and pillar, with quick actions. |
 | **Compliance** | Runs a dry-run highstate (`state.apply test=True`) across a target and sorts minions into in compliance, drifted, errors and no return. Expand a minion to see what would change, and remediate drifted minions with one click. The last check is remembered. |
 | **Patches** | Scans for pending package upgrades (`pkg.list_upgrades`) and shows them by package or by minion, with installed → available versions. You can upgrade one package where it's pending (`pkg.install only_upgrade=True`) or upgrade everything on a minion (`pkg.upgrade`), after a confirmation. |
 | **Enrollment** | Accept or reject pending keys (with fingerprints), reject or delete keys, and enroll new minions with a bootstrap script. Enrollment works either as "install, then approve" or with pre-seeded keys via `key.gen_accept`. |
-| **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Before you run, it previews which minions the target matches (from the master cache, so nothing executes). Returns stream in live over the event bus, and minions that are offline are detected with `saltutil.find_job` instead of waiting for a timeout. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
+| **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Before you run, it previews which minions the target matches (from the master cache, so nothing executes). Functions that change minions (`cmd.*`, `state.apply` without `test=True`, `pkg.*`, `service.restart`, reboot and others) ask for confirmation when they target several minions. From 5 minions up, you have to type the count to confirm. Returns stream in live over the event bus, and minions that are offline are detected with `saltutil.find_job` instead of waiting for a timeout. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
 | **Orchestrate** | Lists orchestration SLS files under `orch/` and shows their source. Runs them with `state.orchestrate`, optionally as a dry run and with pillar overrides, in the background (`runner_async`, falling back to the sync runner). Each step's result is shown with nested per-minion output, and recent runs are kept. |
 | **Jobs** | The job cache history. The detail page shows results and has a "Run again" button. |
 | **States & Pillar** | Browse `file_roots` and `pillar_roots` with syntax highlighting, and see a minion's compiled pillar. |
@@ -82,6 +82,8 @@ docker build -t salt-shaker .
 ```bash
 docker run -d -p 8080:8080 -e SALT_API_URL=http://salt-master:8000 salt-shaker
 ```
+
+Every push to `main` publishes `ghcr.io/<owner>/salt-shaker:latest` (plus a `sha-…` tag). Pushing a tag like `v1.2.0` also publishes `:1.2.0` and `:1.2`.
 
 nginx resolves the salt-api host per request, so the UI starts even when the master is down and recovers once it's back. Put TLS in front of it (a load balancer, Traefik and so on). The lab compose already runs this image as `ui` at http://localhost:8080.
 

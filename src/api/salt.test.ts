@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatArgs, parseArgs, SaltApi } from './salt'
+import { compareVersions, formatArgs, parseArgs, SaltApi } from './salt'
 import type { Lowstate, Transport } from './types'
 
 describe('parseArgs', () => {
@@ -105,5 +105,14 @@ describe('SaltApi', () => {
   it('reports a still-running runner job as null', async () => {
     const api = new SaltApi(fakeTransport(() => ({})), 't', () => undefined)
     expect(await api.runnerResult('1')).toBeNull()
+  })
+})
+
+describe('compareVersions', () => {
+  it('orders Salt versions numerically', () => {
+    expect(compareVersions('3007.17', '3007.9')).toBeGreaterThan(0)
+    expect(compareVersions('3006.9', '3007.1')).toBeLessThan(0)
+    expect(compareVersions('3007.1', '3007.1')).toBe(0)
+    expect(compareVersions('3007', '3007.0')).toBe(0)
   })
 })

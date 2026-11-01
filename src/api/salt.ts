@@ -96,6 +96,15 @@ export class SaltApi {
     const res = await this.runner<Record<string, unknown> | string>('cache.grains', { tgt, tgt_type })
     return typeof res === 'object' && res ? Object.keys(res).sort() : []
   }
+  /** The master's own Salt version (null if the account may not run salt.cmd). */
+  async masterVersion() {
+    try {
+      const v = await this.runner<unknown>('salt.cmd', { arg: ['test.version'] })
+      return typeof v === 'string' ? v : null
+    } catch {
+      return null
+    }
+  }
   pillar(minion: string) {
     return this.runner<Record<string, unknown>>('pillar.show_pillar', { minion })
   }
@@ -230,4 +239,15 @@ function fmtValue(v: unknown) {
   if (typeof v === 'boolean') return v ? 'True' : 'False'
   if (typeof v === 'string') return /\s/.test(v) ? `'${v}'` : v
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
+}
+
+/** Compares Salt versions like "3007.1", "3006.9" or "3007.17rc1" numerically: <0, 0, >0. */
+export function compareVersions(a: string, b: string) {
+  const pa = a.split(/[^\d]+/).filter(Boolean).map(Number)
+  const pb = b.split(/[^\d]+/).filter(Boolean).map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d) return d
+  }
+  return 0
 }

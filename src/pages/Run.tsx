@@ -6,7 +6,8 @@ import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
 import { ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader, PermNote } from '../components/ui'
+import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, Modal, PageHeader, PermNote } from '../components/ui'
+import { confirmLevel } from '../lib/risk'
 import { useStoredState } from '../lib/hooks'
 import { useCan, useSalt } from '../lib/session'
 import { useJob } from '../lib/useJob'
@@ -58,8 +59,22 @@ export function RunPage() {
   const isWrite = /^state\.(apply|highstate|sls)$/.test(fun) && !/test=(True|true)/.test(args)
   const isCmd = fun.startsWith('cmd.')
 
-  const submit = async (e?: FormEvent) => {
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
+  const level = confirmLevel(fun, args, matched)
+
+  const submit = (e?: FormEvent) => {
     e?.preventDefault()
+    if (level !== 'none') {
+      setTyped('')
+      setConfirming(true)
+      return
+    }
+    void execute()
+  }
+
+  const execute = async () => {
+    setConfirming(false)
     setError(null)
     setSubmitting(true)
     try {
@@ -204,6 +219,57 @@ export function RunPage() {
           )}
         </Card>
       </div>
+
+      <Modal open={confirming} onClose={() => setConfirming(false)} title="Confirm run">
+        <div className="space-y-4 text-sm">
+          <p>
+            Run <code className="rounded bg-zinc-100 px-1 font-mono dark:bg-zinc-800">{`${fun.trim()} ${args}`.trim()}</code> on{' '}
+            {matched ? (
+              <strong>
+                {matched.length} {matched.length === 1 ? 'minion' : 'minions'}
+              </strong>
+            ) : (
+              <>
+                target <code className="font-mono">{tgt}</code> <span className="text-zinc-500">(the number of matched minions is unknown)</span>
+              </>
+            )}
+            ?
+          </p>
+          {matched && (
+            <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
+              {matched.map((m) => (
+                <span key={m} className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
+                  {m}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-zinc-500">This changes the targeted minions. Most state and package functions accept test=True for a dry run.</p>
+          {level === 'type' && (
+            <Field label={`Type ${matched?.length} to confirm`}>
+              <Input
+                autoFocus
+                inputMode="numeric"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && typed === String(matched?.length) && execute()}
+              />
+            </Field>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              icon={<Play className="size-4" />}
+              autoFocus={level !== 'type'}
+              disabled={level === 'type' && typed !== String(matched?.length)}
+              onClick={execute}
+            >
+              Run on {matched ? matched.length : tgt}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }

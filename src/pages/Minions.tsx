@@ -1,7 +1,8 @@
 import clsx from 'clsx'
-import { CircleOff, KeyRound, RefreshCw, Search, Server, Wifi } from 'lucide-react'
+import { CircleOff, KeyRound, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { compareVersions } from '../api/salt'
 import type { Grains } from '../api/types'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs } from '../components/ui'
 import { useAsync } from '../lib/hooks'
@@ -19,10 +20,11 @@ export function MinionsPage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'up' | 'down'>('all')
+  const [facet, setFacet] = useState<Facet | null>(null)
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [status, grains, keys] = await Promise.all([salt.status(), salt.grains(), salt.keys()])
-    return { status, grains, keys }
+    const [status, grains, keys, masterVersion] = await Promise.all([salt.status(), salt.grains(), salt.keys(), salt.masterVersion()])
+    return { status, grains, keys, masterVersion }
   }, [salt])
 
   const rows = useMemo(() => {
@@ -31,13 +33,14 @@ export function MinionsPage() {
     return data.keys.minions
       .map((id) => ({ id, up: up.has(id), g: (data.grains[id] ?? {}) as Grains }))
       .filter((r) => (filter === 'all' ? true : filter === 'up' ? r.up : !r.up))
+      .filter((r) => !facet || facetValues(facet.kind, r.g).includes(facet.value))
       .filter((r) => {
         if (!query) return true
         const hay = [r.id, r.g.os, r.g.osrelease, ...(r.g.ipv4 ?? []), ...(r.g.roles ?? [])].join(' ').toLowerCase()
         return query.toLowerCase().split(/\s+/).every((q) => hay.includes(q))
       })
       .sort((a, b) => Number(b.up) - Number(a.up) || a.id.localeCompare(b.id))
-  }, [data, query, filter])
+  }, [data, query, filter, facet])
 
   return (
     <>
@@ -66,8 +69,19 @@ export function MinionsPage() {
         </Link>
       </div>
 
+      {data && <Fleet grains={data.grains} masterVersion={data.masterVersion} active={facet} onPick={(f) => setFacet(f && facet?.kind === f.kind && facet.value === f.value ? null : f)} />}
+
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800">
+          {facet && (
+            <button
+              onClick={() => setFacet(null)}
+              className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 py-1 text-xs font-medium text-accent-700 dark:bg-accent-700/20 dark:text-accent-400"
+            >
+              {FACET_LABEL[facet.kind]}: {facet.value}
+              <X className="size-3" />
+            </button>
+          )}
           <div className="relative min-w-48 flex-1">
             <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by id, OS, IP or role…" className="pl-9" />
@@ -144,5 +158,118 @@ export function MinionsPage() {
         )}
       </Card>
     </>
+  )
+}
+
+type FacetKind = 'os' | 'salt' | 'role'
+interface Facet {
+  kind: FacetKind
+  value: string
+}
+const FACET_LABEL: Record<FacetKind, string> = { os: 'OS', salt: 'Salt', role: 'Role' }
+
+function facetValues(kind: FacetKind, g: Grains): string[] {
+  if (kind === 'os') return g.os ? [`${g.os} ${g.osrelease ?? ''}`.trim()] : []
+  if (kind === 'salt') return g.saltversion ? [g.saltversion] : []
+  return Array.isArray(g.roles) ? g.roles.map(String) : []
+}
+
+function countBy(grains: Record<string, Grains>, kind: FacetKind) {
+  const counts = new Map<string, number>()
+  for (const g of Object.values(grains)) {
+    if (!g || typeof g !== 'object') continue
+    for (const v of facetValues(kind, g)) counts.set(v, (counts.get(v) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+}
+
+/** Fleet breakdown by OS, Salt version and role; rows filter the table below. */
+function Fleet({ grains, masterVersion, active, onPick }: { grains: Record<string, Grains>; masterVersion: string | null; active: Facet | null; onPick: (f: Facet) => void }) {
+  const os = countBy(grains, 'os').sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const salt = countBy(grains, 'salt').sort((a, b) => compareVersions(b[0], a[0]))
+  const roles = countBy(grains, 'role').sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  // without the master's version, compare against the newest minion
+  const reference = masterVersion ?? salt[0]?.[0]
+  const behind = salt.filter(([v]) => reference && compareVersions(v, reference) < 0).reduce((n, [, c]) => n + c, 0)
+  if (os.length + salt.length + roles.length === 0) return null
+
+  return (
+    <div className="mb-6 grid gap-3 lg:grid-cols-3">
+      <Breakdown title="Operating systems" kind="os" rows={os} active={active} onPick={onPick} />
+      <Breakdown
+        title="Salt versions"
+        subtitle={
+          behind ? (
+            <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+              <TriangleAlert className="size-3.5" /> {behind} {behind === 1 ? 'minion is' : 'minions are'} behind {masterVersion ? `the master (${masterVersion})` : reference}
+            </span>
+          ) : (
+            masterVersion && `All match the master (${masterVersion})`
+          )
+        }
+        kind="salt"
+        rows={salt}
+        active={active}
+        onPick={onPick}
+        flag={(v) => (reference && compareVersions(v, reference) < 0 ? 'behind' : null)}
+      />
+      <Breakdown title="Roles" subtitle={roles.length === 0 ? 'No roles grain set' : undefined} kind="role" rows={roles} active={active} onPick={onPick} />
+    </div>
+  )
+}
+
+function Breakdown({
+  title,
+  subtitle,
+  kind,
+  rows,
+  active,
+  onPick,
+  flag,
+}: {
+  title: string
+  subtitle?: React.ReactNode
+  kind: FacetKind
+  rows: Array<[string, number]>
+  active: Facet | null
+  onPick: (f: Facet) => void
+  flag?: (value: string) => string | null
+}) {
+  const max = Math.max(1, ...rows.map(([, c]) => c))
+  const shown = rows.slice(0, 6)
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-medium text-zinc-500">{title}</p>
+      {subtitle && <div className="mt-0.5 text-xs text-zinc-500">{subtitle}</div>}
+      <ul className="mt-3 space-y-1">
+        {shown.map(([value, count]) => {
+          const isActive = active?.kind === kind && active.value === value
+          const note = flag?.(value)
+          return (
+            <li key={value}>
+              <button
+                onClick={() => onPick({ kind, value })}
+                aria-pressed={isActive}
+                className={clsx('w-full rounded-md px-2 py-1 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/60', isActive && 'bg-accent-50 ring-1 ring-accent-500/40 dark:bg-accent-700/20')}
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={clsx('truncate', kind === 'salt' && 'font-mono text-xs')}>{value}</span>
+                  {note && (
+                    <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                      <TriangleAlert className="size-3" /> {note}
+                    </span>
+                  )}
+                  <span className="ml-auto text-xs text-zinc-600 tabular-nums dark:text-zinc-400">{count}</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div className="h-full rounded-full bg-accent-500 dark:bg-accent-400" style={{ width: `${(count / max) * 100}%` }} />
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {rows.length > shown.length && <p className="mt-2 px-2 text-xs text-zinc-500">+{rows.length - shown.length} more</p>}
+    </Card>
   )
 }

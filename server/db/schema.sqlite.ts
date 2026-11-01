@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 // Better Auth core tables + the username and admin plugins (see getAuthTables()).
 export const user = sqliteTable('user', {
@@ -78,4 +78,38 @@ export const auditLog = sqliteTable(
     ip: text('ip'),
   },
   (t) => [index('audit_log_at_idx').on(t.at), index('audit_log_username_idx').on(t.username)],
+)
+
+/** Jobs seen on the master's event bus, kept beyond the master's own keep_jobs window. */
+export const job = sqliteTable(
+  'job',
+  {
+    jid: text('jid').primaryKey(),
+    fun: text('fun').notNull(),
+    args: text('args'),
+    target: text('target'),
+    targetType: text('target_type'),
+    saltUser: text('salt_user'),
+    // from job metadata: the Salt Shaker user who started it (null for CLI and other tools)
+    shakerUser: text('shaker_user'),
+    minions: text('minions'),
+    dryRun: integer('dry_run', { mode: 'boolean' }).notNull().default(false),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('job_started_at_idx').on(t.startedAt), index('job_fun_idx').on(t.fun)],
+)
+
+export const jobReturn = sqliteTable(
+  'job_return',
+  {
+    jid: text('jid').notNull(),
+    minion: text('minion').notNull(),
+    ret: text('ret'),
+    retcode: integer('retcode'),
+    success: integer('success', { mode: 'boolean' }),
+    // for state runs: {ok, changed, pending, failed}, so history doesn't have to parse ret
+    summary: text('summary'),
+    returnedAt: integer('returned_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.jid, t.minion] })],
 )

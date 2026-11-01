@@ -1,13 +1,16 @@
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { and, count, desc, eq, like, lt, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, like, lt, or, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { createAuth, emailFor } from './auth'
+import type { HttpBindings } from '@hono/node-server'
+import type { Context } from 'hono'
+import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
+import { HistoryRecorder } from './history'
 import { authorize, jidOf } from './policy'
 import { isRole, ROLE_PERMS } from './roles'
 import { SaltService, UpstreamError } from './salt'
@@ -16,9 +19,21 @@ const config = loadConfig()
 const { db, schema, provider } = await openDatabase(config)
 const auth = createAuth(config, db, schema, provider)
 const salt = new SaltService(config.saltApi)
+const history = new HistoryRecorder(db, schema, salt, config.historyDays)
+history.start()
 
 type SessionUser = { id: string; name: string; username?: string | null; role?: string | null }
-const app = new Hono<{ Variables: { user: SessionUser | null; expiresAt: Date | null } }>()
+type Env = { Bindings: HttpBindings; Variables: { user: SessionUser | null; expiresAt: Date | null } }
+const app = new Hono<Env>()
+
+/** The caller's IP: the socket peer, or the first X-Forwarded-For hop when behind a trusted proxy. */
+function clientIp(c: Context<Env>) {
+  if (config.trustProxy) {
+    const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+    if (fwd) return fwd
+  }
+  return c.env.incoming?.socket?.remoteAddress ?? null
+}
 
 app.use(
   '*',
@@ -49,7 +64,12 @@ app.use('/api/*', async (c, next) => {
   await next()
 })
 
-app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+app.on(['GET', 'POST'], '/api/auth/*', (c) => {
+  // hand Better Auth a trustworthy client IP for its rate limiter (overwriting anything the client sent)
+  const headers = new Headers(c.req.raw.headers)
+  headers.set(CLIENT_IP_HEADER, clientIp(c) ?? 'unknown')
+  return auth.handler(new Request(c.req.raw, { headers }))
+})
 
 app.use('/api/*', async (c, next) => {
   const s = await auth.api.getSession({ headers: c.req.raw.headers })
@@ -92,7 +112,7 @@ app.post('/api/salt', async (c) => {
   const user = c.get('user')
   if (!user) return c.json({ error: 'Not signed in' }, 401)
   const username = user.username ?? user.name
-  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+  const ip = clientIp(c)
   const decision = authorize(user.role, username, await c.req.json().catch(() => null))
   if (!decision.ok) {
     if (decision.status === 403 && decision.fun) {
@@ -148,6 +168,83 @@ app.get('/api/audit', async (c) => {
   )
   const rows = await db.select().from(t).where(where).orderBy(desc(t.id)).limit(limit)
   return c.json({ rows })
+})
+
+// ---- job history (recorded from the event bus by HistoryRecorder) ----
+
+app.get('/api/history/jobs', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const limit = Math.min(Number(c.req.query('limit') ?? 100) || 100, 500)
+  const before = Number(c.req.query('before')) || null
+  const q = c.req.query('q')?.trim().toLowerCase()
+  const t = schema.job
+  const r = schema.jobReturn
+  const rows = await db
+    .select({
+      jid: t.jid,
+      fun: t.fun,
+      args: t.args,
+      target: t.target,
+      targetType: t.targetType,
+      saltUser: t.saltUser,
+      shakerUser: t.shakerUser,
+      minions: t.minions,
+      dryRun: t.dryRun,
+      startedAt: t.startedAt,
+      returned: count(r.minion),
+      // no bound booleans (SQLite can't bind them); `not coalesce(x, true)` works in both dialects
+      failed: sql<number>`coalesce(sum(case when ${r.retcode} <> 0 or not coalesce(${r.success}, true) then 1 else 0 end), 0)`.mapWith(Number),
+    })
+    .from(t)
+    .leftJoin(r, eq(r.jid, t.jid))
+    .where(
+      and(
+        before ? lt(t.startedAt, new Date(before)) : undefined,
+        q ? or(...[t.fun, t.target, t.shakerUser, t.saltUser].map((col) => like(sql`lower(${col})`, `%${q}%`)), eq(t.jid, q)) : undefined,
+      ),
+    )
+    .groupBy(t.jid)
+    .orderBy(desc(t.startedAt))
+    .limit(limit)
+  return c.json({ rows, retentionDays: config.historyDays })
+})
+
+app.get('/api/history/jobs/:jid', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const jid = c.req.param('jid')
+  const [jobRow] = await db.select().from(schema.job).where(eq(schema.job.jid, jid)).limit(1)
+  if (!jobRow) return c.json({ error: 'Not in history' }, 404)
+  const returns = await db.select().from(schema.jobReturn).where(eq(schema.jobReturn.jid, jid))
+  return c.json({ job: jobRow, returns: returns.map((x) => ({ ...x, ret: x.ret ? JSON.parse(x.ret) : null })) })
+})
+
+/** Past compliance checks (dry-run highstates) with per-status minion counts. */
+app.get('/api/history/compliance', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const limit = Math.min(Number(c.req.query('limit') ?? 30) || 30, 200)
+  const t = schema.job
+  const jobs = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.dryRun, true), or(eq(t.fun, 'state.apply'), eq(t.fun, 'state.highstate'))))
+    .orderBy(desc(t.startedAt))
+    .limit(limit)
+  const jids = jobs.map((j) => j.jid)
+  const rets = jids.length ? await db.select({ jid: schema.jobReturn.jid, summary: schema.jobReturn.summary }).from(schema.jobReturn).where(inArray(schema.jobReturn.jid, jids)) : []
+  const runs = jobs.map((j) => {
+    const counts = { ok: 0, drift: 0, error: 0, noreturn: 0 }
+    const mine = rets.filter((x) => x.jid === j.jid)
+    for (const x of mine) {
+      const s = x.summary ? (JSON.parse(x.summary) as { failed: number; pending: number; changed: number }) : null
+      if (!s || s.failed) counts.error++
+      else if (s.pending + s.changed) counts.drift++
+      else counts.ok++
+    }
+    const minions = JSON.parse(j.minions ?? '[]') as string[]
+    counts.noreturn = Math.max(0, minions.length - mine.length)
+    return { jid: j.jid, target: j.target, targetType: j.targetType, startedAt: j.startedAt, by: j.shakerUser ?? j.saltUser, args: j.args, counts }
+  })
+  return c.json({ runs })
 })
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))

@@ -4,7 +4,9 @@ import { formatArgs } from '../api/salt'
 import { ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { useCan, useSalt } from '../lib/session'
+import { history, parseStoredArgs } from '../api/server'
+import { SaltError, type JobDetail } from '../api/types'
+import { useCan, useSalt, useSession } from '../lib/session'
 import { funTone } from './Jobs'
 
 export function JobDetailPage() {
@@ -12,7 +14,30 @@ export function JobDetailPage() {
   const salt = useSalt()
   const can = useCan()
   const navigate = useNavigate()
-  const { data, error, loading, reload } = useAsync(() => salt.job(jid), [salt, jid])
+  const { session } = useSession()
+  const fromServer = session?.mode === 'server'
+  // with the server, prefer its history (kept for weeks); the master's cache only keeps ~24h
+  const { data, error, loading, reload } = useAsync(async (): Promise<JobDetail> => {
+    if (fromServer) {
+      try {
+        const { job, returns } = await history.job(jid)
+        return {
+          jid,
+          Function: job.fun,
+          Arguments: parseStoredArgs(job.args),
+          Target: job.target ?? '',
+          'Target-type': job.targetType ?? 'glob',
+          User: job.shakerUser ?? job.saltUser ?? '',
+          StartTime: job.startedAt,
+          Minions: JSON.parse(job.minions ?? '[]') as string[],
+          Result: Object.fromEntries(returns.map((r) => [r.minion, { return: r.ret, retcode: r.retcode ?? undefined, success: r.success ?? undefined }])),
+        }
+      } catch (e) {
+        if (!(e instanceof SaltError && e.status === 404)) throw e
+      }
+    }
+    return salt.job(jid)
+  }, [salt, jid, fromServer])
 
   const results = Object.fromEntries(Object.entries(data?.Result ?? {}).map(([id, r]) => [id, r.return]))
   const missing = (data?.Minions ?? []).filter((m) => !(m in results))

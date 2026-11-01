@@ -142,3 +142,60 @@ export const auditLog = (opts: { q?: string; before?: number; limit?: number } =
   p.set('limit', String(opts.limit ?? 100))
   return request<{ rows: AuditRow[] }>(`/api/audit?${p}`)
 }
+
+// ---- history (recorded by the server from the event bus) ----
+
+export interface HistoryJob {
+  jid: string
+  fun: string
+  args: string | null
+  target: string | null
+  targetType: string | null
+  saltUser: string | null
+  shakerUser: string | null
+  minions: string | null
+  dryRun: boolean
+  startedAt: string
+  returned: number
+  failed: number
+}
+
+export interface HistoryReturn {
+  jid: string
+  minion: string
+  ret: unknown
+  retcode: number | null
+  success: boolean | null
+  returnedAt: string
+}
+
+export interface ComplianceRun {
+  jid: string
+  target: string | null
+  targetType: string | null
+  startedAt: string
+  by: string | null
+  counts: { ok: number; drift: number; error: number; noreturn: number }
+}
+
+export const history = {
+  jobs: (opts: { q?: string; before?: number; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.q) p.set('q', opts.q)
+    if (opts.before) p.set('before', String(opts.before))
+    p.set('limit', String(opts.limit ?? 100))
+    return request<{ rows: HistoryJob[]; retentionDays: number }>(`/api/history/jobs?${p}`)
+  },
+  job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
+  compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),
+}
+
+/** Job arguments as stored by the master: positional args plus a trailing {__kwarg__: true, ...}. */
+export const parseStoredArgs = (args: string | null): unknown[] => {
+  try {
+    const v = args ? JSON.parse(args) : []
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}

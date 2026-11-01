@@ -13,6 +13,10 @@ export interface Config {
   staticDir: string
   /** Extra origins allowed to call the API with cookies (e.g. the Vite dev server). */
   trustedOrigins: string[]
+  /** How long job history is kept in the database. */
+  historyDays: number
+  /** Behind a reverse proxy: take the client IP from X-Forwarded-For instead of the socket. */
+  trustProxy: boolean
 }
 
 function required(name: string) {
@@ -50,6 +54,8 @@ export function loadConfig(): Config {
       eauth: process.env.SALT_API_EAUTH ?? 'pam',
     },
     staticDir: process.env.STATIC_DIR ?? './dist',
+    trustProxy: /^(1|true|yes)$/i.test(process.env.TRUST_PROXY ?? ''),
+    historyDays: Math.max(1, Number(process.env.JOB_RETENTION_DAYS ?? 90) || 90),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }
 }

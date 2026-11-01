@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isFailure, stateSummary } from '../components/ResultView'
+import { isFailure, stateSummary } from './states'
 import { classify } from './compliance'
 
 // trimmed from a real `state.apply test=True` return on Salt 3007

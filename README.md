@@ -10,12 +10,12 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 ## Features
 
 - **Minions:** status, OS, IPs, CPU/RAM and roles at a glance. A fleet breakdown flags minions running an older Salt than the master. Each minion's page shows its grains and compiled pillar.
-- **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions.
+- **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions. Past checks are kept, so you can follow drift over time.
 - **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, or everything on a minion.
 - **Enrollment:** accept or reject keys after checking fingerprints. Generates bootstrap commands, including **pre-seeded keys**, so a new minion is trusted on first contact.
 - **Run:** any execution module against any target type. You see which minions the target matches before you run. Results stream in live, and state output is rendered with diffs. Risky commands on many minions need an explicit confirmation.
 - **Orchestrate:** runs `state.orchestrate` files, with dry-run and pillar overrides, and shows step-by-step results with per-minion output.
-- **Jobs:** the job cache with full results and *run again*.
+- **Jobs:** full results and *run again*. With the server, jobs are recorded from the event bus and kept for 90 days by default (the master keeps them about 24 hours). That includes jobs run from the salt CLI, along with who ran them.
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
 - **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
@@ -61,7 +61,7 @@ browser ──cookie session──▶ Salt Shaker server ──service account�
                               SQLite or Postgres
 ```
 
-The server signs in to salt-api with **one service account**. Every request from a user is checked against their role first, then passed on. The user's own credentials and token never reach salt-api. Local jobs get the user's name in their job metadata (`salt_shaker_user`), so `jobs.list_job` shows who ran them.
+The server signs in to salt-api with **one service account**. It also listens to the master's event bus and records every job and its returns, including jobs it didn't start, to keep history beyond the master's job cache. Every request from a user is checked against their role first, then passed on. The user's own credentials and token never reach salt-api. Local jobs get the user's name in their job metadata (`salt_shaker_user`), so `jobs.list_job` shows who ran them.
 
 | Role | Can do |
 | --- | --- |
@@ -93,6 +93,8 @@ Then open the URL and create the admin.
 | `DATA_DIR` | `/data` | SQLite database and the generated auth secret |
 | `BETTER_AUTH_SECRET` | generated into `DATA_DIR` | set it explicitly when running on Postgres without a data volume |
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
+| `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
+| `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
 
 The database schema is migrated on start, for both SQLite and Postgres.
 

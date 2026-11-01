@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/Toasts'
 import { useTheme } from './lib/hooks'
@@ -8,6 +8,7 @@ import { CompliancePage } from './pages/Compliance'
 import { EventsPage } from './pages/Events'
 import { FilesPage } from './pages/Files'
 import { JobDetailPage } from './pages/JobDetail'
+import { JobHistoryPage } from './pages/JobHistory'
 import { JobsPage } from './pages/Jobs'
 import { KeysPage } from './pages/Keys'
 import { LoginPage } from './pages/Login'
@@ -44,7 +45,7 @@ function Gate() {
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
         <Route path="orchestrate" element={<OrchestratePage />} />
-        <Route path="jobs" element={<JobsPage />} />
+        <Route path="jobs" element={<JobsSwitch />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />
         <Route path="events" element={<EventsPage />} />
@@ -54,6 +55,13 @@ function Gate() {
       </Route>
     </Routes>
   )
+}
+
+/** With a server, Jobs shows its long-term history; ?source=master shows the master's cache. */
+function JobsSwitch() {
+  const { session } = useSession()
+  const [params] = useSearchParams()
+  return session?.mode === 'server' && params.get('source') !== 'master' ? <JobHistoryPage /> : <JobsPage />
 }
 
 export default function App() {

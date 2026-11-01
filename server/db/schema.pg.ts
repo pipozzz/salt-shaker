@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, primaryKey, serial, text, timestamp } from 'drizzle-orm/pg-core'
 
 // Postgres twin of schema.sqlite.ts — keep the two in sync.
 // Better Auth core tables + the username and admin plugins (see getAuthTables()).
@@ -79,4 +79,38 @@ export const auditLog = pgTable(
     ip: text('ip'),
   },
   (t) => [index('audit_log_at_idx').on(t.at), index('audit_log_username_idx').on(t.username)],
+)
+
+/** Jobs seen on the master's event bus, kept beyond the master's own keep_jobs window. */
+export const job = pgTable(
+  'job',
+  {
+    jid: text('jid').primaryKey(),
+    fun: text('fun').notNull(),
+    args: text('args'),
+    target: text('target'),
+    targetType: text('target_type'),
+    saltUser: text('salt_user'),
+    // from job metadata: the Salt Shaker user who started it (null for CLI and other tools)
+    shakerUser: text('shaker_user'),
+    minions: text('minions'),
+    dryRun: boolean('dry_run').notNull().default(false),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('job_started_at_idx').on(t.startedAt), index('job_fun_idx').on(t.fun)],
+)
+
+export const jobReturn = pgTable(
+  'job_return',
+  {
+    jid: text('jid').notNull(),
+    minion: text('minion').notNull(),
+    ret: text('ret'),
+    retcode: integer('retcode'),
+    success: boolean('success'),
+    // for state runs: {ok, changed, pending, failed}, so history doesn't have to parse ret
+    summary: text('summary'),
+    returnedAt: timestamp('returned_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.jid, t.minion] })],
 )

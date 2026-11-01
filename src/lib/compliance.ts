@@ -1,4 +1,4 @@
-import { stateSummary } from '../components/ResultView'
+import { stateSummary } from './states'
 
 /** How one minion's `state.apply test=True` return reads for compliance. */
 export type Status = 'error' | 'drift' | 'noreturn' | 'ok' | 'waiting'

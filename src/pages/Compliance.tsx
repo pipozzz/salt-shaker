@@ -2,13 +2,15 @@ import clsx from 'clsx'
 import { AlertOctagon, CheckCircle2, ChevronRight, CircleDashed, ExternalLink, Play, ShieldCheck, Unplug, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { history, type ComplianceRun } from '../api/server'
 import type { TargetType } from '../api/types'
 import { JsonView } from '../components/JsonView'
-import { stateSummary, StateList } from '../components/ResultView'
+import { StateList } from '../components/ResultView'
+import { stateSummary } from '../lib/states'
 import { classify, ORDER, type Row, type Status } from '../lib/compliance'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, Stat } from '../components/ui'
-import { useStoredState } from '../lib/hooks'
+import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from './Jobs'
@@ -19,7 +21,36 @@ export function CompliancePage() {
   const canCheck = can('local', 'state.apply')
   const canFix = canCheck
   const navigate = useNavigate()
-  const { run, start, load } = useJob()
+  const { run, start, load, setRun } = useJob()
+  const fromServer = session?.mode === 'server'
+  const past = useAsync(() => (fromServer ? history.compliance(20) : Promise.resolve(null)), [fromServer, run?.done])
+
+  /** Opens a past check: from the server's history when available (it outlives the master's cache). */
+  const openRun = async (jid: string) => {
+    if (fromServer) {
+      try {
+        const { job, returns } = await history.job(jid)
+        setRun({
+          jid,
+          fun: job.fun,
+          minions: JSON.parse(job.minions ?? '[]') as string[],
+          results: Object.fromEntries(returns.map((r) => [r.minion, r.ret])),
+          gaveUp: [],
+          done: true,
+          timedOut: false,
+          started: Date.parse(job.startedAt),
+        })
+        if (job.target) {
+          setTgt(job.target)
+          setTgtType((job.targetType as TargetType) ?? 'glob')
+        }
+        return
+      } catch {
+        // not recorded (e.g. older than the server); try the master
+      }
+    }
+    await load(jid)
+  }
   const scope = `salt-shaker.compliance.${session?.mode}.${session?.apiUrl}`
   const [last, setLast] = useStoredState<{ jid: string; tgt: string; tgtType: TargetType } | null>(scope, null)
   const [tgt, setTgt] = useState(last?.tgt ?? '*')
@@ -30,7 +61,7 @@ export function CompliancePage() {
 
   // show the previous check when coming back to the page
   useEffect(() => {
-    if (last && !run) load(last.jid).catch(() => setLast(null))
+    if (last && !run) openRun(last.jid).catch(() => setLast(null))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -122,6 +153,8 @@ export function CompliancePage() {
           </Empty>
         </Card>
       )}
+
+      {fromServer && past.data && past.data.runs.length > 0 && <History runs={past.data.runs} current={run?.jid} onOpen={(jid) => void openRun(jid).catch((e) => setError(e as Error))} />}
 
       {run && !isEmptyJob && (
         <>
@@ -216,5 +249,66 @@ function MinionRow({ row, onFix }: { row: Row; onFix?: () => void }) {
         </div>
       )}
     </li>
+  )
+}
+
+const SEGMENTS: Array<{ key: keyof ComplianceRun['counts']; label: string; className: string }> = [
+  { key: 'ok', label: 'In compliance', className: 'bg-emerald-500' },
+  { key: 'drift', label: 'Drifted', className: 'bg-amber-500' },
+  { key: 'error', label: 'Errors', className: 'bg-red-500' },
+  { key: 'noreturn', label: 'No return', className: 'bg-zinc-300 dark:bg-zinc-600' },
+]
+
+/** Past checks as one stacked status bar each, newest first. */
+function History({ runs, current, onOpen }: { runs: ComplianceRun[]; current?: string; onOpen: (jid: string) => void }) {
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title="History"
+        subtitle="Earlier checks, kept by the server. Open one to see its details."
+        actions={
+          <div className="hidden flex-wrap items-center gap-3 text-xs text-zinc-500 sm:flex">
+            {SEGMENTS.map((s) => (
+              <span key={s.key} className="flex items-center gap-1.5">
+                <span className={clsx('size-2.5 rounded-sm', s.className)} />
+                {s.label}
+              </span>
+            ))}
+          </div>
+        }
+      />
+      <ul className="max-h-72 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/70">
+        {runs.map((r) => {
+          const total = SEGMENTS.reduce((n, s) => n + r.counts[s.key], 0)
+          const at = new Date(r.startedAt)
+          return (
+            <li key={r.jid}>
+              <button
+                onClick={() => onOpen(r.jid)}
+                className={clsx('grid w-full grid-cols-[7rem_1fr] items-center gap-x-4 gap-y-1 px-4 py-2 text-left text-sm hover:bg-zinc-50 sm:grid-cols-[7rem_10rem_1fr_9rem] dark:hover:bg-zinc-800/30', current === r.jid && 'bg-accent-50/60 dark:bg-accent-700/10')}
+              >
+                <span className="text-xs text-zinc-500" title={at.toLocaleString()}>
+                  {relTime(at)}
+                </span>
+                <span className="hidden truncate font-mono text-xs sm:block">
+                  {r.targetType && r.targetType !== 'glob' ? `${r.targetType}:` : ''}
+                  {r.target ?? '*'}
+                  {r.by && <span className="font-sans text-zinc-400"> · {r.by}</span>}
+                </span>
+                <span className="flex h-2.5 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+                  {SEGMENTS.filter((s) => r.counts[s.key] > 0).map((s) => (
+                    <span key={s.key} className={clsx('h-full first:rounded-l-full last:rounded-r-full', s.className)} style={{ flexGrow: r.counts[s.key] }} />
+                  ))}
+                  {total === 0 && <span className="h-full flex-1 rounded-full bg-zinc-100 dark:bg-zinc-800" />}
+                </span>
+                <span className="col-span-2 text-xs text-zinc-600 tabular-nums sm:col-span-1 sm:text-right dark:text-zinc-400">
+                  {r.counts.ok} ok · {r.counts.drift} drifted{r.counts.error > 0 && ` · ${r.counts.error} errors`}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }

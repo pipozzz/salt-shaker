@@ -2,8 +2,13 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
     "skipLibCheck": true,
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -14,5 +19,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server", "drizzle.*.config.ts", "src/lib/perms.ts"]
+  "include": [
+    "server",
+    "drizzle.*.config.ts",
+    "src/lib/perms.ts",
+    "src/lib/states.ts"
+  ]
 }

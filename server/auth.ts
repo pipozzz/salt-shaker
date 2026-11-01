@@ -16,6 +16,8 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
     emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 10 },
     session: { expiresIn: 60 * 60 * 12, updateAge: 60 * 60 },
     rateLimit: { enabled: true, window: 60, max: 30 },
+    // set by server/index.ts from the socket (or X-Forwarded-For when TRUST_PROXY is on), never by the client
+    advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
     plugins: [
       username(),
       admin({
@@ -28,6 +30,8 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
 }
 
 export type Auth = ReturnType<typeof createAuth>
+
+export const CLIENT_IP_HEADER = 'x-salt-shaker-client-ip'
 
 /** Users sign in by username; Better Auth still wants a unique email, so derive one. */
 export const emailFor = (name: string) => `${name.toLowerCase()}@users.salt-shaker.invalid`

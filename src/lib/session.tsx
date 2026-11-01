@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HttpTransport } from '../api/http'
 import { MockTransport } from '../api/mock'
 import { SaltApi } from '../api/salt'
@@ -20,6 +20,8 @@ interface SessionCtx {
   events: SaltEvent[]
   eventsConnected: boolean
   clearEvents(): void
+  /** Get every event as it arrives (the events list may batch several into one render). */
+  subscribe(fn: (e: SaltEvent) => void): () => void
 }
 
 const Ctx = createContext<SessionCtx | null>(null)
@@ -40,6 +42,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StoredSession | null>(loadSession)
   const [events, setEvents] = useState<SaltEvent[]>([])
   const [eventsConnected, setConnected] = useState(false)
+  const listeners = useRef(new Set<(e: SaltEvent) => void>())
+  const subscribe = useCallback((fn: (e: SaltEvent) => void) => {
+    listeners.current.add(fn)
+    return () => void listeners.current.delete(fn)
+  }, [])
 
   const logout = useCallback(() => {
     setSession((s) => {
@@ -58,7 +65,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!salt) return
     return salt.events(
-      (e) => setEvents((prev) => [{ ...e, data: { _received: Date.now(), ...e.data } }, ...prev].slice(0, MAX_EVENTS)),
+      (e) => {
+        listeners.current.forEach((l) => l(e))
+        setEvents((prev) => [{ ...e, data: { _received: Date.now(), ...e.data } }, ...prev].slice(0, MAX_EVENTS))
+      },
       setConnected,
     )
   }, [salt])
@@ -71,7 +81,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]) }}>
+    <Ctx.Provider value={{ session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe }}>
       {children}
     </Ctx.Provider>
   )

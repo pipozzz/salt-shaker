@@ -5,8 +5,9 @@ A web UI for SaltStack, built with React, Vite, TypeScript and Tailwind. It talk
 | Page | What it does |
 | --- | --- |
 | **Minions** | Lists accepted minions with up/down status, OS, IP, CPU/RAM and roles. The detail page shows grains and pillar, with quick actions. |
+| **Compliance** | Runs a dry-run highstate (`state.apply test=True`) across a target and sorts minions into in compliance, drifted, errors and no return. Expand a minion to see what would change, and remediate drifted minions with one click. The last check is remembered. |
 | **Enrollment** | Accept or reject pending keys (with fingerprints), reject or delete keys, and enroll new minions with a bootstrap script. Enrollment works either as "install, then approve" or with pre-seeded keys via `key.gen_accept`. |
-| **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Jobs run async with live polling. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
+| **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Before you run, it previews which minions the target matches (from the master cache, so nothing executes). Returns stream in live over the event bus, and minions that are offline are detected with `saltutil.find_job` instead of waiting for a timeout. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
 | **Jobs** | The job cache history. The detail page shows results and has a "Run again" button. |
 | **States & Pillar** | Browse `file_roots` and `pillar_roots` with syntax highlighting, and see a minion's compiled pillar. |
 | **Events** | A live stream from the master event bus, with filters. |
@@ -58,7 +59,7 @@ external_auth:
 The UI uses these:
 
 - `wheel`: `key.*`, `file_roots.*` and `pillar_roots.*`
-- `runner`: `manage.status`, `jobs.*` and `pillar.show_pillar`
+- `runner`: `manage.status`, `cache.grains` (target preview), `jobs.*` and `pillar.show_pillar`
 - `local`/`local_async`: everything else
 
 The `/events` stream authenticates with the `X-Auth-Token` header, because recent salt-api versions reject a token in the query string.

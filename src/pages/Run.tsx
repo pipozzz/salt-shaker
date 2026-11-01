@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Crosshair, CornerDownLeft, ExternalLink, History, Loader2, Play, TriangleAlert } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
@@ -8,6 +8,7 @@ import { ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader, Select } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { useSalt } from '../lib/session'
+import { useJob } from '../lib/useJob'
 
 const PRESETS: Array<{ label: string; fun: string; args?: string; danger?: boolean }> = [
   { label: 'Ping', fun: 'test.ping' },
@@ -37,16 +38,11 @@ interface HistoryItem {
   at: number
 }
 
-interface RunState {
-  jid: string
-  minions: string[]
-  results: Record<string, unknown>
-  done: boolean
-  timedOut: boolean
-  started: number
+interface Preview {
+  key: string
+  minions?: string[]
+  error?: boolean
 }
-
-const TIMEOUT_MS = 120_000
 
 export function RunPage() {
   const salt = useSalt()
@@ -57,12 +53,28 @@ export function RunPage() {
   const [args, setArgs] = useState(params.get('args') ?? '')
   const [history, setHistory] = useStoredState<HistoryItem[]>('salt-shaker.run.history', [])
   const [functions, setFunctions] = useState<string[]>([])
-  const [run, setRun] = useState<RunState | null>(null)
+  const { run, start } = useJob()
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const poll = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [preview, setPreview] = useState<Preview | null>(null)
 
-  useEffect(() => () => clearTimeout(poll.current), [])
+  // debounced "who would this hit?" lookup against the master's cache
+  const previewKey = `${tgtType}\u0000${tgt.trim()}`
+  useEffect(() => {
+    if (!tgt.trim()) return
+    let alive = true
+    const t = setTimeout(() => {
+      salt
+        .matchTarget(tgt.trim(), tgtType)
+        .then((minions) => alive && setPreview({ key: previewKey, minions }))
+        .catch(() => alive && setPreview({ key: previewKey, error: true }))
+    }, 400)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [salt, tgt, tgtType, previewKey])
+  const currentPreview = preview?.key === previewKey ? preview : null
 
   const loadFunctions = async () => {
     if (functions.length) return
@@ -79,28 +91,12 @@ export function RunPage() {
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
-    clearTimeout(poll.current)
     setError(null)
     setSubmitting(true)
     try {
       const { arg, kwarg } = parseArgs(args)
-      const { jid, minions } = await salt.runAsync(tgt, tgtType, fun.trim(), arg, kwarg)
-      const started = Date.now()
-      setRun({ jid, minions, results: {}, done: false, timedOut: false, started })
+      await start(tgt, tgtType, fun.trim(), arg, kwarg)
       setHistory((h) => [{ tgt, tgt_type: tgtType, fun, args, at: Date.now() }, ...h.filter((x) => !(x.tgt === tgt && x.fun === fun && x.args === args && x.tgt_type === tgtType))].slice(0, 12))
-
-      const tick = async () => {
-        try {
-          const results = await salt.lookupJid(jid)
-          const done = minions.every((m) => m in results)
-          const timedOut = !done && Date.now() - started > TIMEOUT_MS
-          setRun((r) => (r && r.jid === jid ? { ...r, results, done: done || timedOut, timedOut } : r))
-          if (!done && !timedOut) poll.current = setTimeout(tick, 1000)
-        } catch (err) {
-          setError(err as Error)
-        }
-      }
-      poll.current = setTimeout(tick, 400)
     } catch (err) {
       setError(err as Error)
     } finally {
@@ -119,7 +115,7 @@ export function RunPage() {
           <Card>
             <form onSubmit={submit} className="space-y-4 p-4">
               <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-                <Field label="Target" hint={<span className="font-mono">{TARGET_HINTS[tgtType]}</span>}>
+                <Field label="Target" hint={<TargetPreview hint={TARGET_HINTS[tgtType]} preview={tgt.trim() ? currentPreview : null} />}>
                   <Input value={tgt} onChange={(e) => setTgt(e.target.value)} className="font-mono" required />
                 </Field>
                 <Field label="Match by">
@@ -167,6 +163,7 @@ export function RunPage() {
                 ))}
                 <Button type="submit" variant={isWrite ? 'success' : 'primary'} className="ml-auto" icon={<Play className="size-4" />} loading={submitting}>
                   {isWrite ? 'Apply' : 'Run'}
+                  {currentPreview?.minions?.length ? ` on ${currentPreview.minions.length}` : ''}
                   <CornerDownLeft className="size-3.5 opacity-60" />
                 </Button>
               </div>
@@ -189,7 +186,7 @@ export function RunPage() {
                     <Badge tone={run.done ? (run.timedOut ? 'amber' : 'green') : 'blue'}>
                       {returned}/{run.minions.length} returned
                     </Badge>
-                    {run.timedOut && <Badge tone="amber">timed out</Badge>}
+                    {run.timedOut && <Badge tone="amber">incomplete</Badge>}
                   </span>
                 }
                 subtitle={<span className="font-mono">jid {run.jid}</span>}
@@ -243,5 +240,45 @@ export function RunPage() {
         </Card>
       </div>
     </>
+  )
+}
+
+function TargetPreview({ hint, preview }: { hint: string; preview: Preview | null }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!preview) {
+    return (
+      <span className="flex items-center gap-2">
+        <span className="font-mono">{hint}</span>
+        <Loader2 className="size-3 animate-spin text-zinc-400" />
+      </span>
+    )
+  }
+  if (preview.error || !preview.minions) return <span className="font-mono">{hint}</span>
+  const { minions } = preview
+  if (minions.length === 0) {
+    return (
+      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+        <TriangleAlert className="size-3.5" /> Matches no known minions
+      </span>
+    )
+  }
+  const shown = expanded ? minions : minions.slice(0, 6)
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <Crosshair className="size-3.5 text-accent-600 dark:text-accent-400" />
+      <span className="font-medium text-zinc-700 dark:text-zinc-300">
+        {minions.length} {minions.length === 1 ? 'minion' : 'minions'}:
+      </span>
+      {shown.map((m) => (
+        <span key={m} className="rounded bg-zinc-100 px-1.5 font-mono text-[11px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          {m}
+        </span>
+      ))}
+      {minions.length > shown.length && (
+        <button type="button" onClick={() => setExpanded(true)} className="text-accent-600 hover:underline dark:text-accent-400">
+          +{minions.length - shown.length} more
+        </button>
+      )}
+    </span>
   )
 }

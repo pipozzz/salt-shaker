@@ -37,7 +37,7 @@ export function stateSummary(ret: unknown) {
 }
 
 /** Did a minion's return look like a failure? */
-function isFailure(ret: unknown) {
+export function isFailure(ret: unknown) {
   const sum = stateSummary(ret)
   if (sum) return sum.failed > 0
   if (Array.isArray(ret) && ret.every((x) => typeof x === 'string')) return ret.some((x) => /^(Rendering SLS|No matching sls|Pillar failed)/.test(x))
@@ -110,8 +110,8 @@ function Raw({ ret }: { ret: unknown }) {
   return <JsonView value={ret} />
 }
 
-function StateList({ ret }: { ret: unknown }) {
-  const [onlyInteresting, setOnly] = useState(false)
+export function StateList({ ret, interesting = false }: { ret: unknown; interesting?: boolean }) {
+  const [onlyInteresting, setOnly] = useState(interesting)
   const states = asStates(ret) ?? []
   const shown = onlyInteresting ? states.filter(([, s]) => s.result !== true || (s.changes && Object.keys(s.changes).length)) : states
   return (

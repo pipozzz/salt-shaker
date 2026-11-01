@@ -90,6 +90,11 @@ export class SaltApi {
   grains(tgt = '*', tgt_type: TargetType = 'glob') {
     return this.local<Grains>(tgt, 'grains.items', [], {}, tgt_type)
   }
+  /** Which minions a target matches, from the master's cache — nothing runs on minions. */
+  async matchTarget(tgt: string, tgt_type: TargetType) {
+    const res = await this.runner<Record<string, unknown> | string>('cache.grains', { tgt, tgt_type })
+    return typeof res === 'object' && res ? Object.keys(res).sort() : []
+  }
   pillar(minion: string) {
     return this.runner<Record<string, unknown>>('pillar.show_pillar', { minion })
   }

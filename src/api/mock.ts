@@ -215,6 +215,11 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
       return (g.ipv4 as string[]).filter((ip) => ip !== '127.0.0.1')
     case 'sys.list_functions':
       return FUNCTIONS
+    case 'saltutil.find_job': {
+      const job = jobs.find((j) => j.jid === arg[0])
+      const r = job?.results[id]
+      return r && r.at > Date.now() ? { jid: job.jid, fun: job.Function, pid: rand(1000, 9999) } : {}
+    }
     case 'saltutil.sync_all':
       return { modules: [], states: [], grains: [], beacons: [] }
     default:
@@ -360,6 +365,8 @@ export class MockTransport implements Transport {
       switch (fun) {
         case 'manage.status':
           return { up: keys.minions.filter((id) => minions[id]?.up), down: keys.minions.filter((id) => !minions[id]?.up) }
+        case 'cache.grains':
+          return Object.fromEntries(matchTarget(String(kw.tgt), String(kw.tgt_type ?? 'glob')).map((id) => [id, minions[id].grains]))
         case 'pillar.show_pillar':
           return pillarFor(String(kw.minion))
         case 'jobs.list_jobs':

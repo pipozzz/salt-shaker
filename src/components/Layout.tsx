@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Server, Sun, Terminal, X } from 'lucide-react'
+import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Server, ShieldCheck, Sun, Terminal, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -9,6 +9,7 @@ import { StatusDot } from './ui'
 
 const nav = [
   { to: '/', label: 'Minions', icon: Server, end: true },
+  { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
   { to: '/keys', label: 'Enrollment', icon: KeyRound },
   { to: '/run', label: 'Run', icon: Terminal },
   { to: '/jobs', label: 'Jobs', icon: History },

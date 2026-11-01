@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { useTheme } from './lib/hooks'
 import { SessionProvider, useSession } from './lib/session'
+import { CompliancePage } from './pages/Compliance'
 import { EventsPage } from './pages/Events'
 import { FilesPage } from './pages/Files'
 import { JobDetailPage } from './pages/JobDetail'
@@ -21,6 +22,7 @@ function Gate() {
       <Route element={<Layout />}>
         <Route index element={<MinionsPage />} />
         <Route path="minions/:id" element={<MinionDetailPage />} />
+        <Route path="compliance" element={<CompliancePage />} />
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
         <Route path="jobs" element={<JobsPage />} />

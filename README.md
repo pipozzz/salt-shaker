@@ -5,6 +5,8 @@
 
 A web UI for [SaltStack](https://saltproject.io) that works with your master through **salt-api** (`rest_cherrypy`). It ships as one container with its own users, roles and audit log. It can also run as a plain static app that signs in to salt-api directly. Try it in your browser without a Salt master.
 
+**Documentation:** https://pipozzz.github.io/salt-shaker/
+
 ![Minions overview](docs/screenshots/minions.png)
 
 ## Features

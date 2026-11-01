@@ -1,0 +1,33 @@
+---
+title: Salt Shaker
+description: A web UI for SaltStack that works with your master through salt-api.
+template: splash
+hero:
+  tagline: A web UI for SaltStack that works with your master through salt-api. One container, with its own users, roles and audit log.
+  image:
+    file: ../../../screenshots/minions.png
+  actions:
+    - text: Try it
+      link: /salt-shaker/start/quickstart/
+      icon: right-arrow
+    - text: Deploy
+      link: /salt-shaker/deploy/docker/
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components'
+
+<CardGrid>
+  <Card title="Fleet at a glance" icon="laptop">
+    Status, OS, IPs, CPU/RAM and roles of every minion. Grains and compiled pillar per minion.
+  </Card>
+  <Card title="Compliance" icon="approve-check">
+    Dry-run the highstate across a target, see what drifted and remediate with one click.
+  </Card>
+  <Card title="Run & orchestrate" icon="rocket">
+    Any execution module against any target, with live results. Orchestrate files with dry-run.
+  </Card>
+  <Card title="Users, roles, audit" icon="seti:lock">
+    Admin, operator and viewer accounts without Linux users on the master. Every change is audited.
+  </Card>
+</CardGrid>

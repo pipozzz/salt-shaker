@@ -1,0 +1,20 @@
+---
+title: Security
+description: Sessions, passwords, reporting vulnerabilities and the license.
+---
+
+- Sessions are httpOnly cookies, valid for 12 hours and extended while in use. Cross-origin state-changing requests are refused.
+- Passwords must be at least 10 characters. Sign-in attempts are rate-limited. Self-registration is off; only admins create accounts.
+- The UI hides what a role can't do, and the server enforces it. Denied attempts are recorded in the audit log.
+- The user's own credentials and session never reach salt-api; the server uses its service account.
+- Pre-seeded enrollment shows a minion's private key once. Copy it over a trusted channel.
+
+## Reporting a vulnerability
+
+Use GitHub's private [security advisories](https://github.com/pipozzz/salt-shaker/security/advisories/new) rather than a public issue.
+
+## License
+
+Salt Shaker is licensed under the [GNU Affero General Public License v3.0 or later](https://github.com/pipozzz/salt-shaker/blob/main/LICENSE).
+
+If you run a modified version for others over a network, the AGPL requires you to offer them its source. The UI links to the source in the sidebar and on the login page; set `VITE_SOURCE_URL` to your fork.

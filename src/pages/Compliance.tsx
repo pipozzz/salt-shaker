@@ -5,7 +5,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { TargetType } from '../api/types'
 import { JsonView } from '../components/JsonView'
 import { stateSummary, StateList } from '../components/ResultView'
-import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, PageHeader, Select, Stat } from '../components/ui'
+import { TargetField } from '../components/TargetField'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, Stat } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
@@ -84,22 +85,18 @@ export function CompliancePage() {
       <PageHeader title="Compliance" description="Dry-run the highstate across your fleet to find minions that drifted from their desired state." />
 
       <Card className="mb-6">
-        <form onSubmit={check} className="flex flex-wrap items-end gap-3 p-4">
-          <div className="min-w-48 flex-1">
-            <Field label="Target">
-              <Input value={tgt} onChange={(e) => setTgt(e.target.value)} className="font-mono" required />
-            </Field>
+        <form onSubmit={check} className="flex flex-wrap items-start gap-3 p-4">
+          <div className="min-w-64 flex-1">
+            <TargetField
+              tgt={tgt}
+              tgtType={tgtType}
+              onChange={(t, tt) => {
+                setTgt(t)
+                setTgtType(tt)
+              }}
+            />
           </div>
-          <div className="w-36">
-            <Field label="Match by">
-              <Select value={tgtType} onChange={(e) => setTgtType(e.target.value as TargetType)}>
-                {['glob', 'list', 'grain', 'compound', 'pcre', 'pillar', 'nodegroup'].map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <Button type="submit" variant="primary" icon={<Play className="size-4" />} loading={starting || (run !== null && !run.done)}>
+          <Button type="submit" variant="primary" className="sm:mt-[22px]" icon={<Play className="size-4" />} loading={starting || (run !== null && !run.done)}>
             {run && !run.done ? `Checking… ${returned}/${run.minions.length}` : 'Check now'}
           </Button>
         </form>

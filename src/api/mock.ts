@@ -71,6 +71,29 @@ const files: Record<'file' | 'pillar', Record<string, string>> = {
   },
 }
 
+// pending package upgrades per minion: name -> [installed, available]
+const upgrades: Record<string, Record<string, [string, string]>> = {}
+for (const [id, m] of Object.entries(minions)) {
+  const os = m.grains.os
+  const u: Record<string, [string, string]> = {}
+  if (os === 'Ubuntu') Object.assign(u, { openssl: ['3.0.13-0ubuntu3.3', '3.0.13-0ubuntu3.4'], libssl3t64: ['3.0.13-0ubuntu3.3', '3.0.13-0ubuntu3.4'], tzdata: ['2026a-0ubuntu0.24.04', '2026f-0ubuntu0.24.04'] })
+  if (os === 'Debian') Object.assign(u, { tzdata: ['2026a-0+deb12u1', '2026f-0+deb12u1'], 'linux-image-amd64': ['6.1.112-1', '6.1.119-1'] })
+  if (os === 'Rocky') Object.assign(u, { kernel: ['5.14.0-503.11.1.el9_5', '5.14.0-503.14.1.el9_5'], curl: ['7.76.1-29.el9_4', '7.76.1-31.el9'] })
+  if (id === 'web-01') u.nginx = ['1.24.0-2ubuntu7', '1.24.0-2ubuntu7.1']
+  if (id === 'worker-01') delete u.openssl
+  upgrades[id] = u
+}
+
+function applyUpgrades(id: string, only?: string[]) {
+  const done: Record<string, { old: string; new: string }> = {}
+  for (const [name, [old, nw]] of Object.entries(upgrades[id] ?? {})) {
+    if (only && !only.includes(name)) continue
+    done[name] = { old, new: nw }
+    delete upgrades[id][name]
+  }
+  return done
+}
+
 const pillarFor = (id: string): Record<string, unknown> => {
   const base: Record<string, unknown> = { env: 'lab', admins: ['pipo', 'ops'], ntp_servers: ['0.pool.ntp.org', '1.pool.ntp.org'] }
   if (id.startsWith('web')) Object.assign(base, { site_name: 'shaker.lab.internal', workers: 4 })
@@ -204,7 +227,16 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
       return `[demo] ${cmd}: executed on ${id}`
     }
     case 'pkg.list_upgrades':
-      return id.startsWith('web') ? { openssl: '3.0.13-0ubuntu3.4', 'libssl3t64': '3.0.13-0ubuntu3.4' } : {}
+      return Object.fromEntries(Object.entries(upgrades[id] ?? {}).map(([name, [, nw]]) => [name, nw]))
+    case 'pkg.version': {
+      const ver = (name: string) => upgrades[id]?.[name]?.[0] ?? ''
+      return arg.length === 1 ? ver(String(arg[0])) : Object.fromEntries(arg.map((n) => [n, ver(String(n))]))
+    }
+    case 'pkg.install':
+      // only_upgrade semantics: never installs something new in the demo
+      return applyUpgrades(id, (kwarg.pkgs as string[] | undefined) ?? arg.map(String))
+    case 'pkg.upgrade':
+      return applyUpgrades(id)
     case 'service.status':
       return id === 'web-02' && arg[0] === 'nginx' ? false : true
     case 'status.uptime':
@@ -262,7 +294,11 @@ function startJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwa
     const delay = instant ? 0 : fun.startsWith('state.') ? rand(1200, 3500) : rand(150, 900)
     job.results[id] = { at: when.getTime() + delay, ret: execute(id, fun, arg, kwarg) }
     if (!instant) {
-      setTimeout(() => emit(`salt/job/${jid}/ret/${id}`, { id, jid, fun, return: job.results[id].ret, success: true }), delay)
+      const ret = job.results[id].ret
+      const failed =
+        (typeof ret === 'string' && ret.endsWith('is not available.')) ||
+        (!!ret && typeof ret === 'object' && Object.values(ret).some((v) => v && typeof v === 'object' && (v as { result?: unknown }).result === false))
+      setTimeout(() => emit(`salt/job/${jid}/ret/${id}`, { id, jid, fun, return: ret, retcode: failed ? 2 : 0, success: true }), delay)
     }
   }
   jobs.unshift(job)

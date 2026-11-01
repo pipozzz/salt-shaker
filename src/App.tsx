@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { ToastProvider } from './components/Toasts'
 import { useTheme } from './lib/hooks'
 import { SessionProvider, useSession } from './lib/session'
 import { CompliancePage } from './pages/Compliance'
@@ -11,6 +12,7 @@ import { KeysPage } from './pages/Keys'
 import { LoginPage } from './pages/Login'
 import { MinionDetailPage } from './pages/MinionDetail'
 import { MinionsPage } from './pages/Minions'
+import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
 
 function Gate() {
@@ -23,6 +25,7 @@ function Gate() {
         <Route index element={<MinionsPage />} />
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
+        <Route path="patches" element={<PatchesPage />} />
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
         <Route path="jobs" element={<JobsPage />} />
@@ -39,7 +42,9 @@ export default function App() {
   return (
     <SessionProvider>
       <BrowserRouter>
-        <Gate />
+        <ToastProvider>
+          <Gate />
+        </ToastProvider>
       </BrowserRouter>
     </SessionProvider>
   )

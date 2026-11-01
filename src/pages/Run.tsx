@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { Crosshair, CornerDownLeft, ExternalLink, History, Loader2, Play, TriangleAlert } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
 import { ResultView } from '../components/ResultView'
-import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader, Select } from '../components/ui'
+import { TargetField } from '../components/TargetField'
+import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, PageHeader } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { useSalt } from '../lib/session'
 import { useJob } from '../lib/useJob'
@@ -20,28 +21,12 @@ const PRESETS: Array<{ label: string; fun: string; args?: string; danger?: boole
   { label: 'Sync modules', fun: 'saltutil.sync_all' },
 ]
 
-const TARGET_HINTS: Record<TargetType, string> = {
-  glob: 'web-*  ·  *',
-  list: 'web-01,db-01',
-  grain: 'os:Ubuntu  ·  roles:web',
-  compound: 'G@os:Debian and web*',
-  pcre: '^(web|db)-0[12]$',
-  pillar: 'env:prod',
-  nodegroup: 'webservers',
-}
-
 interface HistoryItem {
   tgt: string
   tgt_type: TargetType
   fun: string
   args: string
   at: number
-}
-
-interface Preview {
-  key: string
-  minions?: string[]
-  error?: boolean
 }
 
 export function RunPage() {
@@ -56,25 +41,7 @@ export function RunPage() {
   const { run, start } = useJob()
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [preview, setPreview] = useState<Preview | null>(null)
-
-  // debounced "who would this hit?" lookup against the master's cache
-  const previewKey = `${tgtType}\u0000${tgt.trim()}`
-  useEffect(() => {
-    if (!tgt.trim()) return
-    let alive = true
-    const t = setTimeout(() => {
-      salt
-        .matchTarget(tgt.trim(), tgtType)
-        .then((minions) => alive && setPreview({ key: previewKey, minions }))
-        .catch(() => alive && setPreview({ key: previewKey, error: true }))
-    }, 400)
-    return () => {
-      alive = false
-      clearTimeout(t)
-    }
-  }, [salt, tgt, tgtType, previewKey])
-  const currentPreview = preview?.key === previewKey ? preview : null
+  const [matched, setMatched] = useState<string[] | null>(null)
 
   const loadFunctions = async () => {
     if (functions.length) return
@@ -114,20 +81,15 @@ export function RunPage() {
         <div className="min-w-0 space-y-6">
           <Card>
             <form onSubmit={submit} className="space-y-4 p-4">
-              <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-                <Field label="Target" hint={<TargetPreview hint={TARGET_HINTS[tgtType]} preview={tgt.trim() ? currentPreview : null} />}>
-                  <Input value={tgt} onChange={(e) => setTgt(e.target.value)} className="font-mono" required />
-                </Field>
-                <Field label="Match by">
-                  <Select value={tgtType} onChange={(e) => setTgtType(e.target.value as TargetType)}>
-                    {Object.keys(TARGET_HINTS).map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
+              <TargetField
+                tgt={tgt}
+                tgtType={tgtType}
+                onChange={(t, tt) => {
+                  setTgt(t)
+                  setTgtType(tt)
+                }}
+                onMatched={setMatched}
+              />
               <div className="grid gap-4 sm:grid-cols-[minmax(0,240px)_1fr]">
                 <Field label="Function">
                   <Input value={fun} onChange={(e) => setFun(e.target.value)} onFocus={loadFunctions} list="salt-functions" className="font-mono" placeholder="module.function" required />
@@ -163,7 +125,7 @@ export function RunPage() {
                 ))}
                 <Button type="submit" variant={isWrite ? 'success' : 'primary'} className="ml-auto" icon={<Play className="size-4" />} loading={submitting}>
                   {isWrite ? 'Apply' : 'Run'}
-                  {currentPreview?.minions?.length ? ` on ${currentPreview.minions.length}` : ''}
+                  {matched?.length ? ` on ${matched.length}` : ''}
                   <CornerDownLeft className="size-3.5 opacity-60" />
                 </Button>
               </div>
@@ -243,42 +205,3 @@ export function RunPage() {
   )
 }
 
-function TargetPreview({ hint, preview }: { hint: string; preview: Preview | null }) {
-  const [expanded, setExpanded] = useState(false)
-  if (!preview) {
-    return (
-      <span className="flex items-center gap-2">
-        <span className="font-mono">{hint}</span>
-        <Loader2 className="size-3 animate-spin text-zinc-400" />
-      </span>
-    )
-  }
-  if (preview.error || !preview.minions) return <span className="font-mono">{hint}</span>
-  const { minions } = preview
-  if (minions.length === 0) {
-    return (
-      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-        <TriangleAlert className="size-3.5" /> Matches no known minions
-      </span>
-    )
-  }
-  const shown = expanded ? minions : minions.slice(0, 6)
-  return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      <Crosshair className="size-3.5 text-accent-600 dark:text-accent-400" />
-      <span className="font-medium text-zinc-700 dark:text-zinc-300">
-        {minions.length} {minions.length === 1 ? 'minion' : 'minions'}:
-      </span>
-      {shown.map((m) => (
-        <span key={m} className="rounded bg-zinc-100 px-1.5 font-mono text-[11px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-          {m}
-        </span>
-      ))}
-      {minions.length > shown.length && (
-        <button type="button" onClick={() => setExpanded(true)} className="text-accent-600 hover:underline dark:text-accent-400">
-          +{minions.length - shown.length} more
-        </button>
-      )}
-    </span>
-  )
-}

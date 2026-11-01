@@ -1,15 +1,17 @@
 import clsx from 'clsx'
-import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Server, ShieldCheck, Sun, Terminal, X } from 'lucide-react'
+import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, Server, ShieldCheck, Sun, Terminal, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { Logo } from './Logo'
+import { EventNotifications } from './Toasts'
 import { StatusDot } from './ui'
 
 const nav = [
   { to: '/', label: 'Minions', icon: Server, end: true },
   { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
+  { to: '/patches', label: 'Patches', icon: Package },
   { to: '/keys', label: 'Enrollment', icon: KeyRound },
   { to: '/run', label: 'Run', icon: Terminal },
   { to: '/jobs', label: 'Jobs', icon: History },
@@ -109,6 +111,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen">
+      <EventNotifications />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-zinc-200 bg-zinc-100/60 lg:block dark:border-zinc-800 dark:bg-zinc-900/40">{sidebar}</aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-zinc-50/90 px-4 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/90">

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/Toasts'
@@ -17,8 +18,17 @@ import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
 
 function Gate() {
-  const { session } = useSession()
+  const { session, login } = useSession()
   useTheme()
+  // ?demo opens the simulated master straight away (handy for shareable demo links)
+  const wantsDemo = !session && new URLSearchParams(window.location.search).has('demo')
+  const started = useRef(false)
+  useEffect(() => {
+    if (!wantsDemo || started.current) return
+    started.current = true
+    void login({ mode: 'demo', apiUrl: '', username: 'demo', password: '', eauth: 'pam' })
+  }, [wantsDemo, login])
+  if (wantsDemo) return null
   if (!session) return <LoginPage />
   return (
     <Routes>

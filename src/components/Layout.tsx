@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
+import { LICENSE_NAME, SOURCE_URL } from '../lib/about'
 import { CommandPalette } from './CommandPalette'
 import { Logo } from './Logo'
 import { EventNotifications } from './Toasts'
@@ -114,6 +115,9 @@ export function Layout() {
         ))}
       </nav>
       <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="mb-2.5 block px-1 text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+          Free software · {LICENSE_NAME} · Source code
+        </a>
         <div className="flex items-center gap-2.5">
           <div className="flex size-8 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white uppercase">{session?.user.slice(0, 2)}</div>
           <div className="min-w-0 flex-1">

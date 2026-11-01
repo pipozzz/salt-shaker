@@ -1,104 +1,158 @@
 # Salt Shaker
 
-A web UI for SaltStack, built with React, Vite, TypeScript and Tailwind. It talks to the master through **salt-api** (`rest_cherrypy`), so you don't need a separate backend.
+[![CI](https://github.com/pipozzz/salt-shaker/actions/workflows/ci.yml/badge.svg)](https://github.com/pipozzz/salt-shaker/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-| Page | What it does |
-| --- | --- |
-| **Minions** | Lists accepted minions with up/down status, OS, IP, CPU/RAM and roles. Above the list, a fleet breakdown by OS, Salt version and role flags minions running an older Salt than the master; click a row to filter the list. The detail page shows grains and pillar, with quick actions. |
-| **Compliance** | Runs a dry-run highstate (`state.apply test=True`) across a target and sorts minions into in compliance, drifted, errors and no return. Expand a minion to see what would change, and remediate drifted minions with one click. The last check is remembered. |
-| **Patches** | Scans for pending package upgrades (`pkg.list_upgrades`) and shows them by package or by minion, with installed → available versions. You can upgrade one package where it's pending (`pkg.install only_upgrade=True`) or upgrade everything on a minion (`pkg.upgrade`), after a confirmation. |
-| **Enrollment** | Accept or reject pending keys (with fingerprints), reject or delete keys, and enroll new minions with a bootstrap script. Enrollment works either as "install, then approve" or with pre-seeded keys via `key.gen_accept`. |
-| **Run** | Runs any execution module against a glob, list, grain, compound, pcre, pillar or nodegroup target. Before you run, it previews which minions the target matches (from the master cache, so nothing executes). Functions that change minions (`cmd.*`, `state.apply` without `test=True`, `pkg.*`, `service.restart`, reboot and others) ask for confirmation when they target several minions. From 5 minions up, you have to type the count to confirm. Returns stream in live over the event bus, and minions that are offline are detected with `saltutil.find_job` instead of waiting for a timeout. State output is rendered with ok/changed/failed counts and diffs. Keeps a history of recent commands. |
-| **Orchestrate** | Lists orchestration SLS files under `orch/` and shows their source. Runs them with `state.orchestrate`, optionally as a dry run and with pillar overrides, in the background (`runner_async`, falling back to the sync runner). Each step's result is shown with nested per-minion output, and recent runs are kept. |
-| **Jobs** | The job cache history. The detail page shows results and has a "Run again" button. |
-| **States & Pillar** | Browse `file_roots` and `pillar_roots` with syntax highlighting, and see a minion's compiled pillar. |
-| **Events** | A live stream from the master event bus, with filters. |
+A web UI for [SaltStack](https://saltproject.io). It talks to your master through **salt-api** (`rest_cherrypy`), so there is nothing extra to run on the server side. It's a single static app, and you can try it in your browser without a Salt master.
 
-Press **⌘K / Ctrl+K** anywhere to jump to a page, minion, saved target or recent command, open a job by jid, or start typing a function to run it.
+![Minions overview](docs/screenshots/minions.png)
 
-The UI reads the eauth `perms` that salt-api returns at login and disables what your account can't do (for example a read-only user can browse but not accept keys, run `cmd.run` or upgrade packages). The master still enforces the permissions; the UI only avoids offering actions that would fail.
+## Features
 
-Every page that takes a target previews the minions it matches, and you can save named targets (such as `webservers` = `G@roles:web`) for reuse. Toast notifications pop up when a job fails on any minion (from any client, not just this UI) and when a new minion is waiting for approval.
+- **Minions:** status, OS, IPs, CPU/RAM and roles at a glance. A fleet breakdown flags minions running an older Salt than the master. Each minion's page shows its grains and compiled pillar.
+- **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions.
+- **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, or everything on a minion.
+- **Enrollment:** accept or reject keys after checking fingerprints. Generates bootstrap commands, including **pre-seeded keys**, so a new minion is trusted on first contact.
+- **Run:** any execution module against any target type. You see which minions the target matches before you run. Results stream in live, and state output is rendered with diffs. Risky commands on many minions need an explicit confirmation.
+- **Orchestrate:** runs `state.orchestrate` files, with dry-run and pillar overrides, and shows step-by-step results with per-minion output.
+- **Jobs:** the job cache with full results and *run again*.
+- **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
+- **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
+- **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
+- **Permission-aware:** reads your eauth permissions at login and disables what your account can't do. Read-only users get a read-only UI.
+- **Demo mode:** a simulated master in the browser, for trying it out.
 
-There is also a **Demo** mode on the login screen. It runs a simulated master in the browser, so you can try the UI without Salt.
+<table>
+  <tr>
+    <td><img src="docs/screenshots/enrollment.png" alt="Enrollment" /></td>
+    <td><img src="docs/screenshots/minions-dark.png" alt="Dark mode" /></td>
+  </tr>
+  <tr>
+    <td align="center">Enrollment</td>
+    <td align="center">Dark mode</td>
+  </tr>
+</table>
 
-## Quick start
+## Try it
+
+**Demo, no Salt needed:**
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and pick **Demo**, or sign in through salt-api.
+Open http://localhost:5173/?demo.
 
-In dev, Vite proxies `/salt-api` to `http://localhost:8000`. Point it somewhere else with `SALT_API_URL=https://master:8000 npm run dev`.
-
-## Local Salt lab
-
-`lab/` contains a docker-compose setup with one master (salt-api on `:8000`) and three minions (`web-01`, `web-02`, `db-01`):
+**Full local lab:** a Salt master with salt-api, three minions and the production UI.
 
 ```bash
 cd lab && docker compose up -d --build
 ```
 
-Sign in with URL `/salt-api`, user `shaker`, password `shaker` and eauth `sharedsecret` (full access), or as `viewer` / `viewer` with eauth `file` (read-only, to see the permission-aware UI). The master's keys are kept in a Docker volume, so re-creating the container doesn't break the minions. The minion keys start out pending, so accept them on the **Enrollment** page. These credentials are for the lab only.
+Open http://localhost:8080 and sign in:
 
-## Configuring salt-api on a real master
+| User | Password | eauth | Access |
+| --- | --- | --- | --- |
+| `shaker` | `shaker` | `sharedsecret` | everything |
+| `viewer` | `viewer` | `file` | read-only, to see the permission-aware UI |
+
+The minion keys start out pending, so accept them on **Enrollment**. These credentials exist only for the lab.
+
+## Connecting to your master
+
+Salt Shaker needs **Salt 3006 or newer** with salt-api enabled:
 
 ```yaml
 # /etc/salt/master.d/api.conf
 rest_cherrypy:
   port: 8000
-  ssl_crt: /etc/pki/tls/certs/localhost.crt
-  ssl_key: /etc/pki/tls/certs/localhost.key
+  ssl_crt: /etc/pki/tls/certs/salt-api.crt
+  ssl_key: /etc/pki/tls/private/salt-api.key
 
 # Salt 3006+ disables all netapi clients by default
 netapi_enable_clients: [local, local_async, runner, runner_async, wheel]
 
 external_auth:
   pam:
-    saltadmins%:          # Linux group
+    saltadmins%:                 # members of the Linux group "saltadmins"
       - '.*'
-      - '@wheel'          # keys, file_roots
-      - '@runner'         # manage.status, jobs, pillar.show_pillar
+      - '@wheel'
+      - '@runner'
       - '@jobs'
+    auditors%:                   # a read-only role
+      - test.ping
+      - grains.*
+      - pkg.list_upgrades
+      - pkg.version
+      - saltutil.find_job
+      - '@runner': [manage.status, cache.grains, jobs.*, pillar.show_pillar]
+      - '@wheel': [key.list_all, key.finger, file_roots.*, pillar_roots.*]
 ```
 
-The UI uses these:
+What the UI calls:
 
-- `wheel`: `key.*`, `file_roots.*` and `pillar_roots.*`
-- `runner`: `manage.status`, `cache.grains` (target preview), `jobs.*` and `pillar.show_pillar`
-- `local`/`local_async`: everything else
+| Client | Functions |
+| --- | --- |
+| `wheel` | `key.*` (enrollment), `file_roots.*` / `pillar_roots.*` (browsing) |
+| `runner` | `manage.status`, `cache.grains` (target preview), `jobs.*`, `pillar.show_pillar`, `salt.cmd test.version` (master version), `state.orchestrate` |
+| `local` / `local_async` | everything you run on minions |
 
-The `/events` stream authenticates with the `X-Auth-Token` header, because recent salt-api versions reject a token in the query string.
+## Deploying
 
-## Production
-
-The repo ships a production image: nginx serves the built UI and proxies `/salt-api/` to `rest_cherrypy` on the same origin, so CORS isn't needed. Response buffering is turned off so the `/events` stream works. It also sets security headers including a CSP, and exposes `/healthz`.
+The Docker image serves the UI with nginx and proxies `/salt-api/` to salt-api on the same origin, so you don't need CORS:
 
 ```bash
-docker build -t salt-shaker .
-```
-```bash
-docker run -d -p 8080:8080 -e SALT_API_URL=http://salt-master:8000 salt-shaker
+docker run -d -p 8080:8080 -e SALT_API_URL=https://salt-master:8000 ghcr.io/pipozzz/salt-shaker:latest
 ```
 
-Every push to `main` publishes `ghcr.io/<owner>/salt-shaker:latest` (plus a `sha-…` tag). Pushing a tag like `v1.2.0` also publishes `:1.2.0` and `:1.2`.
+| Setting | Where | Default | |
+| --- | --- | --- | --- |
+| `SALT_API_URL` | container env | `http://salt-master:8000` | salt-api the proxy talks to |
+| `VITE_SALT_API_URL` | build time | `/salt-api` | for serving the UI from a different origin than salt-api (then enable CORS on salt-api) |
+| `VITE_SOURCE_URL` | build time | this repository | source link shown in the UI; point it at your fork if you modify the code (see [License](#license)) |
 
-nginx resolves the salt-api host per request, so the UI starts even when the master is down and recovers once it's back. Put TLS in front of it (a load balancer, Traefik and so on). The lab compose already runs this image as `ui` at http://localhost:8080.
+Images are published to GHCR from `main` (`:latest`, `:sha-…`) and from version tags (`:1.2.0`, `:1.2`). The proxy streams the event bus (SSE) without buffering. It resolves the salt-api host per request, so the UI starts even while the master is down. It also sets strict security headers (CSP included) and serves `/healthz`.
 
-To serve the static `dist/` some other way (`npm run build`), proxy `/salt-api/` to salt-api with buffering off. If the UI and salt-api must live on different origins, build with `VITE_SALT_API_URL=https://master:8000` and enable CORS on salt-api.
+To serve `dist/` some other way (`npm run build`), proxy `/salt-api/` to salt-api with response buffering turned off.
+
+## Security notes
+
+- Put TLS in front of the UI. The salt-api token is kept in the browser's `localStorage` until it expires or you log out.
+- The master enforces permissions. The UI only hides actions your eauth perms wouldn't allow.
+- Pre-seeded enrollment shows a minion's private key once. Copy it over a trusted channel.
+
+To report a vulnerability, use GitHub's private [security advisories](https://github.com/pipozzz/salt-shaker/security/advisories/new) rather than a public issue.
 
 ## Development
 
 ```bash
-npm run lint
-```
-```bash
+npm run dev         # dev server; proxies /salt-api to $SALT_API_URL (default http://localhost:8000)
+npm test            # unit tests (vitest)
+npm run lint        # oxlint
 npm run typecheck
-```
-```bash
-npm test
+npm run build
 ```
 
-The unit tests in `src/**/*.test.ts` cover argument parsing, eauth permission matching, compliance classification and the salt-api quirks found on Salt 3007 (jid clock offset, `lookup_jid` envelopes, `key.gen_accept` and runner returns). GitHub Actions runs lint, typecheck, tests and the build on every push and PR, then builds the Docker image and smoke-tests it.
+The project is React 19, Vite, TypeScript and Tailwind CSS 4, with no state or data-fetching libraries.
+
+- `src/api/`: the salt-api client (`salt.ts`), the HTTP and SSE transport, and the in-browser mock master used by demo mode.
+- `src/pages/`: one file per page.
+- `src/components/`: shared UI.
+- `src/lib/`: session, permissions, job tracking and risk rules.
+
+A few salt-api behaviours (seen on Salt 3007) that the client handles, in case they save you time too:
+
+- `/events` rejects `?token=`, so the UI reads the SSE stream with `fetch` and an `X-Auth-Token` header.
+- `jobs.lookup_jid` wraps state returns in `{outputter, data}`. Runner jobs come back under `<master>_master`.
+- jids use the master's local time. The UI learns the offset from wheel replies (`_stamp` is UTC).
+- `key.gen_accept` replies `success: true` with an empty dict when the key already exists.
+- Offline minions are detected the way the CLI does it: `saltutil.find_job` with a short `gather_job_timeout`.
+
+CI runs lint, typecheck, tests and build on every push and PR. It then builds the Docker image and smoke-tests it.
+
+## License
+
+[GNU Affero General Public License v3.0 or later](LICENSE).
+
+If you run a modified version for others over a network, the AGPL requires you to offer them its source. The UI links to the source in the sidebar and on the login page; set `VITE_SOURCE_URL` to your fork.

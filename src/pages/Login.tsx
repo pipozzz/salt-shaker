@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { Logo } from '../components/Logo'
 import { Button, ErrorBox, Field, Input, Select } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
+import { LICENSE_NAME, SOURCE_URL } from '../lib/about'
 import { DEFAULT_API_URL, useSession, type Mode } from '../lib/session'
 
 export function LoginPage() {
@@ -97,6 +98,12 @@ export function LoginPage() {
             {mode === 'demo' ? 'Open demo' : 'Sign in'}
           </Button>
         </form>
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          Free software under {LICENSE_NAME} ·{' '}
+          <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="hover:text-zinc-800 hover:underline dark:hover:text-zinc-200">
+            Source code
+          </a>
+        </p>
       </div>
     </div>
   )

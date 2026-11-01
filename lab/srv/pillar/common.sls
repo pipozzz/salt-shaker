@@ -1,0 +1,3 @@
+env: lab
+admins:
+  - pipo

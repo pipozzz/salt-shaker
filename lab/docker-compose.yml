@@ -1,0 +1,24 @@
+# Local Salt lab: one master (with salt-api on :8000) and a few minions.
+services:
+  master:
+    build: .
+    hostname: master
+    command: sh -c "salt-master -d && exec salt-api -l info"
+    ports: ["8000:8000"]
+    volumes:
+      - ./master.conf:/etc/salt/master.d/lab.conf:ro
+      - ./srv:/srv:ro
+  web-01: &minion
+    build: .
+    hostname: web-01
+    command: sh -c "sleep 5 && exec salt-minion -l warning"
+    environment: { SALT_MASTER: master }
+    volumes:
+      - ./minion.conf:/etc/salt/minion.d/lab.conf:ro
+    depends_on: [master]
+  web-02:
+    <<: *minion
+    hostname: web-02
+  db-01:
+    <<: *minion
+    hostname: db-01

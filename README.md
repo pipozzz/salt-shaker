@@ -74,4 +74,29 @@ The `/events` stream authenticates with the `X-Auth-Token` header, because recen
 
 ## Production
 
-`npm run build` produces static files in `dist/`. Serve them from the same origin as salt-api, for example with nginx: put `/` on `dist/` and `/salt-api/` as a `proxy_pass` to `rest_cherrypy`, with `proxy_buffering off` for SSE. If the UI and salt-api run on different origins, set `VITE_SALT_API_URL` at build time and configure CORS on salt-api.
+The repo ships a production image: nginx serves the built UI and proxies `/salt-api/` to `rest_cherrypy` on the same origin, so CORS isn't needed. Response buffering is turned off so the `/events` stream works. It also sets security headers including a CSP, and exposes `/healthz`.
+
+```bash
+docker build -t salt-shaker .
+```
+```bash
+docker run -d -p 8080:8080 -e SALT_API_URL=http://salt-master:8000 salt-shaker
+```
+
+nginx resolves the salt-api host per request, so the UI starts even when the master is down and recovers once it's back. Put TLS in front of it (a load balancer, Traefik and so on). The lab compose already runs this image as `ui` at http://localhost:8080.
+
+To serve the static `dist/` some other way (`npm run build`), proxy `/salt-api/` to salt-api with buffering off. If the UI and salt-api must live on different origins, build with `VITE_SALT_API_URL=https://master:8000` and enable CORS on salt-api.
+
+## Development
+
+```bash
+npm run lint
+```
+```bash
+npm run typecheck
+```
+```bash
+npm test
+```
+
+The unit tests in `src/**/*.test.ts` cover argument parsing, eauth permission matching, compliance classification and the salt-api quirks found on Salt 3007 (jid clock offset, `lookup_jid` envelopes, `key.gen_accept` and runner returns). GitHub Actions runs lint, typecheck, tests and the build on every push and PR, then builds the Docker image and smoke-tests it.

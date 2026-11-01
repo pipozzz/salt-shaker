@@ -11,6 +11,12 @@ services:
       - ./srv:/srv:ro
       # keep the master's keys (and accepted minions) across container re-creation
       - master-pki:/etc/salt/pki/master
+  # the production UI image, proxying /salt-api/ to the master: http://localhost:8080
+  ui:
+    build: ..
+    environment: { SALT_API_URL: "http://master:8000" }
+    ports: ["8080:8080"]
+    depends_on: [master]
   web-01: &minion
     build: .
     hostname: web-01

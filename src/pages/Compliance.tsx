@@ -5,34 +5,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { TargetType } from '../api/types'
 import { JsonView } from '../components/JsonView'
 import { stateSummary, StateList } from '../components/ResultView'
+import { classify, ORDER, type Row, type Status } from '../lib/compliance'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, Stat } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from './Jobs'
-
-type Status = 'error' | 'drift' | 'noreturn' | 'ok' | 'waiting'
-
-interface Row {
-  id: string
-  status: Status
-  ret?: unknown
-  wouldChange: number
-  failed: number
-}
-
-const ORDER: Record<Status, number> = { error: 0, drift: 1, noreturn: 2, waiting: 3, ok: 4 }
-
-function classify(id: string, results: Record<string, unknown>, done: boolean): Row {
-  if (!(id in results)) return { id, status: done ? 'noreturn' : 'waiting', wouldChange: 0, failed: 0 }
-  const ret = results[id]
-  const sum = stateSummary(ret)
-  // a non-state return from state.apply means the run never started (render error, no top match…)
-  if (!sum) return { id, status: 'error', ret, wouldChange: 0, failed: 0 }
-  const wouldChange = sum.pending + sum.changed
-  return { id, status: sum.failed ? 'error' : wouldChange ? 'drift' : 'ok', ret, wouldChange, failed: sum.failed }
-}
 
 export function CompliancePage() {
   const { session } = useSession()

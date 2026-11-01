@@ -19,6 +19,8 @@ import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
 import { AuditPage } from './pages/Audit'
 import { UsersPage } from './pages/Users'
+import { NotificationsPage } from './pages/Notifications'
+import { SchedulesPage } from './pages/Schedules'
 
 function Gate() {
   const { session, login, server } = useSession()
@@ -50,6 +52,8 @@ function Gate() {
         <Route path="files" element={<FilesPage />} />
         <Route path="events" element={<EventsPage />} />
         {session.mode === 'server' && session.eauth === 'admin' && <Route path="users" element={<UsersPage />} />}
+        {session.mode === 'server' && session.eauth === 'admin' && <Route path="schedules" element={<SchedulesPage />} />}
+        {session.mode === 'server' && session.eauth === 'admin' && <Route path="notifications" element={<NotificationsPage />} />}
         {session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator') && <Route path="audit" element={<AuditPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -114,3 +114,35 @@ export const jobReturn = pgTable(
   },
   (t) => [primaryKey({ columns: [t.jid, t.minion] })],
 )
+
+/** Recurring jobs the server starts on a cron schedule (compliance checks, patch scans, any function). */
+export const schedule = pgTable('schedule', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  kind: text('kind').notNull(),
+  fun: text('fun'),
+  args: text('args'),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  cron: text('cron').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  // claimed atomically before each run, so several server instances never run it twice
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  lastJid: text('last_jid'),
+  lastSummary: text('last_summary'),
+})
+
+/** Where alerts go: a Slack-compatible incoming webhook or a generic JSON webhook. */
+export const notificationChannel = pgTable('notification_channel', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  kind: text('kind').notNull(),
+  url: text('url').notNull(),
+  events: text('events').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  lastError: text('last_error'),
+})

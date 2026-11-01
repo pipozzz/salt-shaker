@@ -15,6 +15,13 @@
       "when": 1793560354074,
       "tag": "0001_job_history",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793560922863,
+      "tag": "0002_automation",
+      "breakpoints": true
     }
   ]
 }

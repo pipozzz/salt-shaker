@@ -19,6 +19,8 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
 - **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
+- **Schedules:** nightly compliance checks, weekly patch scans or any function, on a cron schedule.
+- **Notifications:** Slack-format or JSON webhooks for drift, available upgrades, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
 - **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
 - **Demo mode:** a simulated master in the browser, for trying it out.
@@ -95,8 +97,11 @@ Then open the URL and create the admin.
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
 | `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
+| `TZ` | `UTC` in the image | time zone for schedules, e.g. `Europe/Bratislava` |
 
 The database schema is migrated on start, for both SQLite and Postgres.
+
+Running several instances against one Postgres database works: sessions, history and the audit log are shared, and each scheduled run starts exactly once. Alerts triggered by events (failed jobs, pending keys) are sent by every instance, so with more than one instance, subscribe only one channel to those or run a single instance.
 
 Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`.
 

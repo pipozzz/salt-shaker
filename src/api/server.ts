@@ -199,3 +199,69 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
     return []
   }
 }
+
+// ---- automation (admin) ----
+
+export type ScheduleKind = 'compliance' | 'patches' | 'function'
+export type NotifyEvent = 'drift' | 'patches' | 'schedule' | 'job_failed' | 'pending_key'
+
+export interface Schedule {
+  id: number
+  name: string
+  kind: ScheduleKind
+  fun: string | null
+  args: { arg?: unknown[]; kwarg?: Record<string, unknown> } | null
+  target: string
+  targetType: string
+  cron: string
+  enabled: boolean
+  createdBy: string | null
+  lastRunAt: string | null
+  lastJid: string | null
+  lastSummary: Record<string, unknown> | null
+  nextRunAt: string | null
+  cronError: string | null
+}
+
+export interface ScheduleInput {
+  name: string
+  kind: ScheduleKind
+  fun?: string | null
+  args?: { arg: unknown[]; kwarg: Record<string, unknown> } | null
+  target: string
+  targetType: string
+  cron: string
+}
+
+export interface Channel {
+  id: number
+  name: string
+  kind: 'slack' | 'webhook'
+  url: string
+  events: NotifyEvent[]
+  enabled: boolean
+  lastSentAt: string | null
+  lastError: string | null
+}
+
+export interface AutomationMeta {
+  kinds: Record<ScheduleKind, string>
+  events: Record<NotifyEvent, string>
+  timezone: string
+}
+
+const send = <T>(method: string, path: string, body?: unknown) => request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+
+export const automation = {
+  meta: () => request<AutomationMeta>('/api/automation/meta'),
+  schedules: () => request<{ schedules: Schedule[] }>('/api/schedules'),
+  createSchedule: (s: ScheduleInput) => send('POST', '/api/schedules', s),
+  updateSchedule: (id: number, s: Partial<ScheduleInput> & { enabled?: boolean }) => send('PATCH', `/api/schedules/${id}`, s),
+  deleteSchedule: (id: number) => send('DELETE', `/api/schedules/${id}`),
+  runSchedule: (id: number) => send<{ jid: string }>('POST', `/api/schedules/${id}/run`, {}),
+  channels: () => request<{ channels: Channel[] }>('/api/notifications'),
+  createChannel: (c: { name: string; kind: string; url: string; events: NotifyEvent[] }) => send('POST', '/api/notifications', c),
+  updateChannel: (id: number, c: { name?: string; url?: string; events?: NotifyEvent[]; enabled?: boolean }) => send('PATCH', `/api/notifications/${id}`, c),
+  deleteChannel: (id: number) => send('DELETE', `/api/notifications/${id}`),
+  testChannel: (id: number) => send('POST', `/api/notifications/${id}/test`, {}),
+}

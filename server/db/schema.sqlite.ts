@@ -113,3 +113,35 @@ export const jobReturn = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.jid, t.minion] })],
 )
+
+/** Recurring jobs the server starts on a cron schedule (compliance checks, patch scans, any function). */
+export const schedule = sqliteTable('schedule', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  kind: text('kind').notNull(),
+  fun: text('fun'),
+  args: text('args'),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  cron: text('cron').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  // claimed atomically before each run, so several server instances never run it twice
+  lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+  lastJid: text('last_jid'),
+  lastSummary: text('last_summary'),
+})
+
+/** Where alerts go: a Slack-compatible incoming webhook or a generic JSON webhook. */
+export const notificationChannel = sqliteTable('notification_channel', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  kind: text('kind').notNull(),
+  url: text('url').notNull(),
+  events: text('events').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
+  lastError: text('last_error'),
+})

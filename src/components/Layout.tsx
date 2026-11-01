@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, CalendarClock, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -63,7 +63,13 @@ export function Layout() {
   const items = [
     ...nav,
     ...(role === 'admin' || role === 'operator' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
-    ...(role === 'admin' ? [{ to: '/users', label: 'Users', icon: Users }] : []),
+    ...(role === 'admin'
+      ? [
+          { to: '/schedules', label: 'Schedules', icon: CalendarClock },
+          { to: '/notifications', label: 'Notifications', icon: BellRing },
+          { to: '/users', label: 'Users', icon: Users },
+        ]
+      : []),
   ]
   const pending = usePendingKeys()
   const location = useLocation()

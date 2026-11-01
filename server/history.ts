@@ -119,12 +119,24 @@ export class HistoryRecorder {
   private retentionDays: number
   private ctrl = new AbortController()
   private timers: ReturnType<typeof setInterval>[] = []
+  private eventListeners: Array<(tag: string, data: Record<string, unknown>) => void> = []
+  private returnListeners: Array<(r: JobRet) => void> = []
 
   constructor(db: Db, schema: Schema, salt: SaltService, retentionDays: number) {
     this.db = db
     this.schema = schema
     this.salt = salt
     this.retentionDays = retentionDays
+  }
+
+  /** Called for every master event, before filtering. */
+  onEvent(fn: (tag: string, data: Record<string, unknown>) => void) {
+    this.eventListeners.push(fn)
+  }
+
+  /** Called for every job return that is recorded. */
+  onReturn(fn: (r: JobRet) => void) {
+    this.returnListeners.push(fn)
   }
 
   start() {
@@ -167,6 +179,7 @@ export class HistoryRecorder {
   }
 
   async record(tag: string, data: Record<string, unknown>) {
+    for (const l of this.eventListeners) l(tag, data)
     const parsed = parseJobEvent(tag, data)
     if (!parsed) return
     const { job, jobReturn } = this.schema
@@ -186,6 +199,7 @@ export class HistoryRecorder {
       .insert(jobReturn)
       .values(row)
       .onConflictDoUpdate({ target: [jobReturn.jid, jobReturn.minion], set: row })
+    for (const l of this.returnListeners) l(r)
   }
 
   async prune() {

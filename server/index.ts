@@ -5,25 +5,29 @@ import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { HttpBindings } from '@hono/node-server'
 import type { Context } from 'hono'
 import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
+import { Notifier } from './notify'
+import { automationRoutes } from './routes/automation'
+import { Scheduler } from './scheduler'
 import { authorize, jidOf } from './policy'
 import { isRole, ROLE_PERMS } from './roles'
 import { SaltService, UpstreamError } from './salt'
+import type { AuditRow, Env, SessionUser } from './types'
 
 const config = loadConfig()
 const { db, schema, provider } = await openDatabase(config)
 const auth = createAuth(config, db, schema, provider)
 const salt = new SaltService(config.saltApi)
 const history = new HistoryRecorder(db, schema, salt, config.historyDays)
+const notifier = new Notifier(db, schema, config.publicUrl)
+history.onEvent((tag, data) => notifier.onEvent(tag, data))
+history.onReturn((r) => notifier.onReturn(r))
 history.start()
 
-type SessionUser = { id: string; name: string; username?: string | null; role?: string | null }
-type Env = { Bindings: HttpBindings; Variables: { user: SessionUser | null; expiresAt: Date | null } }
 const app = new Hono<Env>()
 
 /** The caller's IP: the socket peer, or the first X-Forwarded-For hop when behind a trusted proxy. */
@@ -106,7 +110,7 @@ app.get('/api/me', (c) => {
   return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], expiresAt: c.get('expiresAt') })
 })
 
-const audit = (row: Omit<typeof schema.auditLog.$inferInsert, 'at'>) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
+const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
 
 app.post('/api/salt', async (c) => {
   const user = c.get('user')
@@ -246,6 +250,10 @@ app.get('/api/history/compliance', async (c) => {
   })
   return c.json({ runs })
 })
+
+const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...row, role: 'system' }))
+scheduler.start()
+app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))
 

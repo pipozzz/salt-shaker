@@ -89,7 +89,7 @@ docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
   ghcr.io/pipozzz/salt-shaker:latest
 ```
 
-Then open the URL and create the admin. [`deploy/compose.yml`](deploy/compose.yml) does the same with Docker Compose, behind Caddy with automatic HTTPS.
+Then open the URL and create the admin.
 
 For a complete setup with Postgres and automatic HTTPS (Caddy), use [`deploy/`](deploy): copy `deploy/.env.example` to `deploy/.env`, fill it in and run `docker compose up -d` there.
 

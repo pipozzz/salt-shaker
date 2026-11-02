@@ -30,6 +30,8 @@ export interface Transport {
   login(username: string, password: string, eauth: string): Promise<Session>
   logout(token: string): Promise<void>
   call(low: Lowstate, token: string): Promise<unknown>
+  /** Optional shortcut for fleet grains (the server caches and trims them). */
+  fleet?(fresh: boolean): Promise<Record<string, Grains>>
   /** Subscribes to the master event bus; returns an unsubscribe function. */
   events(token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void): () => void
 }

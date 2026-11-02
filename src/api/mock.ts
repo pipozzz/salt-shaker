@@ -47,6 +47,40 @@ const minions: Record<string, MockMinion> = {
   'worker-01': { up: true, grains: makeGrains('worker-01', 'Ubuntu', '22.04', 16, 64220, '10.0.4.51', ['worker']) },
 }
 
+/**
+ * `?demo=large` (remembered for the tab) adds a few hundred generated minions, to see how the
+ * UI copes with a big fleet. Seeded, so every load looks the same.
+ */
+const LARGE_FLEET = (() => {
+  try {
+    if (new URLSearchParams(window.location.search).get('demo') === 'large') sessionStorage.setItem('salt-shaker.demo', 'large')
+    return sessionStorage.getItem('salt-shaker.demo') === 'large'
+  } catch {
+    return false
+  }
+})()
+
+if (LARGE_FLEET) {
+  let seed = 42
+  const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+  const sites = ['fra', 'ams', 'lon', 'nyc']
+  const kinds: Array<[string, string[], string, string]> = [
+    ['web', ['web', 'nginx'], 'Ubuntu', '24.04'],
+    ['api', ['api'], 'Ubuntu', '22.04'],
+    ['db', ['db', 'postgres'], 'Debian', '12'],
+    ['cache', ['cache', 'redis'], 'Debian', '12'],
+    ['worker', ['worker'], 'Rocky', '9.4'],
+  ]
+  for (let i = 1; i <= 600; i++) {
+    const [kind, roles, os, rel] = kinds[i % kinds.length]
+    const id = `${kind}-${sites[i % sites.length]}-${String(i).padStart(3, '0')}`
+    const g = makeGrains(id, os, rel, [2, 4, 8, 16][i % 4], [3934, 7951, 15903, 32093][i % 4], `10.${1 + (i % 4)}.${Math.floor(i / 250)}.${i % 250}`, roles)
+    // a slice of the fleet lags behind on Salt, and a few minions are down
+    if (next() < 0.08) g.saltversion = '3006.9'
+    minions[id] = { up: next() > 0.04, grains: g }
+  }
+}
+
 const keys: KeyList = {
   minions: Object.keys(minions),
   minions_pre: ['worker-02', 'edge-lon-01'],
@@ -459,6 +493,8 @@ export class MockTransport implements Transport {
     if (client === 'runner') {
       switch (fun) {
         case 'manage.status':
+          // like a real master, this waits for minions that don't answer
+          await sleep(1200)
           return { up: keys.minions.filter((id) => minions[id]?.up), down: keys.minions.filter((id) => !minions[id]?.up) }
         case 'salt.cmd':
           if (low.arg?.[0] === 'test.version') return '3007.1'

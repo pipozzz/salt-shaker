@@ -1,3 +1,4 @@
+import { trimFleet } from '../lib/fleet'
 import {
   SaltError,
   type FileTree,
@@ -104,6 +105,28 @@ export class SaltApi {
     } catch {
       return null
     }
+  }
+  /**
+   * Fleet-wide grains for overviews, from the master's minion data cache: no job on the minions,
+   * and offline minions keep their last known grains. Falls back to live grains.items when the
+   * cache is empty (minion_data_cache off) or the account may not read it.
+   */
+  async fleet(fresh = false): Promise<Record<string, Grains>> {
+    if (this.transport.fleet) {
+      try {
+        return await this.transport.fleet(fresh)
+      } catch (e) {
+        if (e instanceof SaltError && e.status === 401) this.onAuthError()
+        throw e
+      }
+    }
+    try {
+      const cached = trimFleet(await this.runner<Record<string, unknown>>('cache.grains', { tgt: '*', tgt_type: 'glob' }))
+      if (Object.keys(cached).length) return cached
+    } catch (e) {
+      if (e instanceof SaltError && e.status === 401) throw e
+    }
+    return trimFleet(await this.grains())
   }
   pillar(minion: string) {
     return this.runner<Record<string, unknown>>('pillar.show_pillar', { minion })

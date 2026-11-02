@@ -14,8 +14,9 @@ import { Leader } from './leader'
 import { Notifier } from './notify'
 import { automationRoutes } from './routes/automation'
 import { Scheduler } from './scheduler'
+import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
-import { isRole, ROLE_PERMS } from './roles'
+import { canFor, isRole, ROLE_PERMS } from './roles'
 import pkg from '../package.json' with { type: 'json' }
 import { SaltService, UpstreamError } from './salt'
 import type { AuditRow, Env, SessionUser } from './types'
@@ -210,6 +211,32 @@ app.get('/api/audit', async (c) => {
   )
   const rows = await db.select().from(t).where(where).orderBy(desc(t.id)).limit(limit)
   return c.json({ rows })
+})
+
+// ---- fleet: grains from the master's minion data cache, trimmed and shared ----
+
+// one short-lived copy for every user, so opening Minions doesn't hit the master each time
+let fleetCache: { at: number; data: ReturnType<typeof trimFleet> } | null = null
+let fleetLoading: Promise<ReturnType<typeof trimFleet>> | null = null
+const FLEET_TTL_MS = 15_000
+
+app.get('/api/fleet', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  if (!canFor(user.role)('runner', 'cache.grains')) return c.json({ error: 'Your role may not read grains' }, 403)
+  const fresh = c.req.query('fresh') === '1'
+  if (fresh || !fleetCache || Date.now() - fleetCache.at > FLEET_TTL_MS) {
+    fleetLoading ??= salt
+      .call({ client: 'runner', fun: 'cache.grains', tgt: '*', tgt_type: 'glob' })
+      .then((all) => trimFleet(all as Record<string, unknown>))
+      .finally(() => (fleetLoading = null))
+    try {
+      fleetCache = { at: Date.now(), data: await fleetLoading }
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'cache.grains failed' }, 502)
+    }
+  }
+  return c.json({ minions: fleetCache.data, cachedAt: new Date(fleetCache.at).toISOString() })
 })
 
 // ---- job history (recorded from the event bus by HistoryRecorder) ----

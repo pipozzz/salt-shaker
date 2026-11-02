@@ -1,5 +1,5 @@
 import { streamEvents } from './sse'
-import { SaltError, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
+import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /** Talks to the Salt Shaker server (server/), which holds users and proxies salt-api. */
 
@@ -100,6 +100,11 @@ export class ServerTransport implements Transport {
   async call(low: Lowstate): Promise<unknown> {
     const res = await post<{ return: unknown }>('/api/salt', low)
     return res.return
+  }
+
+  async fleet(fresh: boolean) {
+    const res = await request<{ minions: Record<string, Grains> }>(`/api/fleet${fresh ? '?fresh=1' : ''}`)
+    return res.minions
   }
 
   events(_token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void) {

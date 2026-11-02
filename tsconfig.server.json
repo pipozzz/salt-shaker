@@ -25,6 +25,7 @@
     "drizzle.*.config.ts",
     "src/lib/perms.ts",
     "src/lib/states.ts",
-    "package.json"
+    "package.json",
+    "src/lib/fleet.ts"
   ]
 }

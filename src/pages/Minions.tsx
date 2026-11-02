@@ -14,6 +14,8 @@ export function OsIcon({ os }: { os?: string }) {
   return <span className={clsx('inline-flex size-5 items-center justify-center rounded text-[10px] font-bold text-white', color[os ?? ''] ?? 'bg-zinc-400')}>{os?.[0] ?? '?'}</span>
 }
 
+const PAGE = 100
+
 export function MinionsPage() {
   const salt = useSalt()
   const navigate = useNavigate()
@@ -21,25 +23,36 @@ export function MinionsPage() {
   const [filter, setFilter] = useState<'all' | 'up' | 'down'>('all')
   const [facet, setFacet] = useState<Facet | null>(null)
 
-  const { data, error, loading, reload } = useAsync(async () => {
-    const [status, grains, keys, masterVersion] = await Promise.all([salt.status(), salt.grains(), salt.keys(), salt.masterVersion()])
-    return { status, grains, keys, masterVersion }
-  }, [salt])
+  // grains come from the master's cache and render right away; who answers (manage.status pings
+  // every minion and waits for the slow ones) fills in when it's ready
+  const [refreshes, setRefreshes] = useState(0)
+  const { data, error, loading } = useAsync(async () => {
+    const [grains, keys, masterVersion] = await Promise.all([salt.fleet(refreshes > 0), salt.keys(), salt.masterVersion()])
+    return { grains, keys, masterVersion }
+  }, [salt, refreshes])
+  const status = useAsync(() => salt.status(), [salt, refreshes])
+  const reload = () => setRefreshes((n) => n + 1)
 
   const rows = useMemo(() => {
     if (!data) return []
-    const up = new Set(data.status.up)
+    const up = status.data ? new Set(status.data.up) : null
     return data.keys.minions
-      .map((id) => ({ id, up: up.has(id), g: (data.grains[id] ?? {}) as Grains }))
-      .filter((r) => (filter === 'all' ? true : filter === 'up' ? r.up : !r.up))
+      .map((id) => ({ id, up: up ? up.has(id) : undefined, g: (data.grains[id] ?? {}) as Grains }))
+      .filter((r) => (filter === 'all' || r.up === undefined ? true : filter === 'up' ? r.up : !r.up))
       .filter((r) => !facet || facetValues(facet.kind, r.g).includes(facet.value))
       .filter((r) => {
         if (!query) return true
         const hay = [r.id, r.g.os, r.g.osrelease, ...(r.g.ipv4 ?? []), ...(r.g.roles ?? [])].join(' ').toLowerCase()
         return query.toLowerCase().split(/\s+/).every((q) => hay.includes(q))
       })
-      .sort((a, b) => Number(b.up) - Number(a.up) || a.id.localeCompare(b.id))
-  }, [data, query, filter, facet])
+      .sort((a, b) => Number(b.up ?? 0) - Number(a.up ?? 0) || a.id.localeCompare(b.id))
+  }, [data, status.data, query, filter, facet])
+
+  // render in pages; any change of filters starts again from the first page
+  const filterKey = `${query}|${filter}|${facet?.kind}:${facet?.value}`
+  const [paging, setPaging] = useState({ key: '', count: PAGE })
+  const visibleCount = paging.key === filterKey ? paging.count : PAGE
+  const visible = rows.slice(0, visibleCount)
 
   return (
     <>
@@ -55,8 +68,8 @@ export function MinionsPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Accepted" value={data?.keys.minions.length ?? '—'} icon={<Server />} tone="accent" />
-        <Stat label="Responding" value={data?.status.up.length ?? '—'} icon={<Wifi />} tone="green" />
-        <Stat label="Not responding" value={data?.status.down.length ?? '—'} icon={<CircleOff />} tone={data?.status.down.length ? 'red' : 'zinc'} />
+        <Stat label="Responding" value={status.data?.up.length ?? '—'} icon={<Wifi />} tone="green" hint={status.loading && !status.data ? 'Pinging minions…' : undefined} />
+        <Stat label="Not responding" value={status.data?.down.length ?? '—'} icon={<CircleOff />} tone={status.data?.down.length ? 'red' : 'zinc'} />
         <Link to="/keys" className="rounded-xl transition hover:ring-2 hover:ring-amber-500/30">
           <Stat
             label="Pending keys"
@@ -121,7 +134,7 @@ export function MinionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-                {rows.map(({ id, up, g }) => (
+                {visible.map(({ id, up, g }) => (
                   <tr key={id} onClick={() => navigate(`/minions/${encodeURIComponent(id)}`)} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
                     <td className="py-2.5 pr-3 pl-4">
                       <div className="flex items-center gap-2.5">
@@ -155,6 +168,17 @@ export function MinionsPage() {
             </table>
           </div>
         )}
+        {rows.length > visible.length && (
+          <div className="flex items-center justify-center gap-3 border-t border-zinc-100 p-3 text-sm dark:border-zinc-800">
+            <span className="text-zinc-500">
+              Showing {visible.length} of {rows.length}
+            </span>
+            <Button size="sm" onClick={() => setPaging({ key: filterKey, count: visibleCount + PAGE })}>
+              Show {Math.min(PAGE, rows.length - visible.length)} more
+            </Button>
+          </div>
+        )}
+        {status.error && <p className="border-t border-zinc-100 px-4 py-2 text-xs text-amber-700 dark:border-zinc-800 dark:text-amber-400">Couldn't check which minions respond: {status.error.message}</p>}
       </Card>
     </>
   )

@@ -194,7 +194,7 @@ export function KeysPage() {
         </div>
       </Modal>
 
-      <EnrollModal open={enrollOpen} onClose={() => setEnrollOpen(false)} existing={k} onEnrolled={reload} />
+      {enrollOpen && <EnrollModal open onClose={() => setEnrollOpen(false)} existing={k} onEnrolled={reload} />}
     </>
   )
 }
@@ -237,14 +237,6 @@ function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; o
   const [keys, setKeys] = useState<{ pub: string; priv: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      setKeys(null)
-      setError(null)
-      setId('')
-    }
-  }, [open])
 
   const roleList = roles.split(/[\s,]+/).filter(Boolean)
   const validId = /^[A-Za-z0-9][\w.-]*$/.test(id)

@@ -4,7 +4,7 @@ import { ROLES, users, type Role, type UserRow } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSession } from '../lib/session'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 const ROLE_INFO: Record<Role, { tone: Tone; text: string }> = {
   admin: { tone: 'accent', text: 'Everything, including keys and users' },

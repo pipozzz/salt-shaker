@@ -13,7 +13,7 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote,
 import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 export function CompliancePage() {
   const { session } = useSession()

@@ -6,7 +6,8 @@ import { JsonView } from '../components/JsonView'
 import { Badge, Button, Card, CardHeader, ErrorBox, Input, Spinner, StatusDot, Tabs } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSalt } from '../lib/session'
-import { fmtMem, OsIcon } from './Minions'
+import { OsIcon } from './Minions'
+import { fmtMem } from '../lib/format'
 
 export function MinionDetailPage() {
   const { id = '' } = useParams()

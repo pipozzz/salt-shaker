@@ -6,7 +6,7 @@ import { auditLog, type AuditRow } from '../api/server'
 import { JsonView } from '../components/JsonView'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 const PAGE = 100
 

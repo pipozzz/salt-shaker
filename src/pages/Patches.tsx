@@ -9,7 +9,7 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHea
 import { useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 type Upgrades = Record<string, string> // package -> available version
 

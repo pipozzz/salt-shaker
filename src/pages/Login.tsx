@@ -9,6 +9,17 @@ import { isNoAccessError, setupAdmin, startSso } from '../api/server'
 import { SaltError } from '../api/types'
 import { DEFAULT_API_URL, useSession, type Mode } from '../lib/session'
 
+function ssoErrorFromUrl(ssoName?: string) {
+  const p = new URLSearchParams(window.location.search)
+  if (!p.has('sso_error')) return null
+  const code = p.get('error') ?? 'unknown_error'
+  return new SaltError(
+    /session/i.test(code)
+      ? `Signed in with ${ssoName ?? 'SSO'}, but your account has no access to Salt Shaker. Ask an admin to grant you a role.`
+      : `Single sign-on failed (${code.replace(/_/g, ' ')}).`,
+  )
+}
+
 export function LoginPage() {
   const { login, server } = useSession()
   const [storedMode, setMode] = useStoredState<Mode>('salt-shaker.login.mode', 'live')
@@ -18,7 +29,7 @@ export function LoginPage() {
   const [username, setUsername] = useStoredState('salt-shaker.login.user', '')
   const [eauth, setEauth] = useStoredState('salt-shaker.login.eauth', 'pam')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<Error | null>(null)
+  const [error, setError] = useState<Error | null>(() => ssoErrorFromUrl(server?.sso?.name))
   const [busy, setBusy] = useState(false)
   const [ssoBusy, setSsoBusy] = useState(false)
   const sso = server?.sso ?? null
@@ -27,18 +38,8 @@ export function LoginPage() {
 
   // the IdP round-trip ends on /?sso_error=1&error=... when it didn't produce a session
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search)
-    if (!p.has('sso_error')) return
-    const code = p.get('error') ?? 'unknown_error'
-    setError(
-      new SaltError(
-        /session/i.test(code)
-          ? `Signed in with ${sso?.name ?? 'SSO'}, but your account has no access to Salt Shaker. Ask an admin to grant you a role.`
-          : `Single sign-on failed (${code.replace(/_/g, ' ')}).`,
-      ),
-    )
-    window.history.replaceState(null, '', window.location.pathname)
-  }, [sso?.name])
+    if (new URLSearchParams(window.location.search).has('sso_error')) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
 
   const signInWithSso = async () => {
     setSsoBusy(true)

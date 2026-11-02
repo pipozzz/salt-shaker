@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { ChevronRight, Database, FileCode2, FileText, Folder, FolderOpen, Layers } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { RootsKind } from '../api/salt'
 import type { FileTree } from '../api/types'
 import { CodeView } from '../components/CodeView'
@@ -146,10 +146,10 @@ function Dir({ name, node, path, selected, onSelect, depth }: { name: string; no
 function RenderedPillar() {
   const salt = useSalt()
   const keys = useAsync(() => salt.keys(), [salt])
-  const [minion, setMinion] = useState('')
-  useEffect(() => {
-    if (!minion && keys.data?.minions[0]) setMinion([...keys.data.minions].sort()[0])
-  }, [keys.data, minion])
+  const [picked, setMinion] = useState('')
+  const sorted = useMemo(() => [...(keys.data?.minions ?? [])].sort(), [keys.data])
+  // until someone picks one, show the first minion
+  const minion = picked || sorted[0] || ''
   const pillar = useAsync(() => (minion ? salt.pillar(minion) : Promise.resolve(undefined)), [salt, minion])
 
   return (
@@ -159,7 +159,7 @@ function RenderedPillar() {
         subtitle="What the minion sees after top.sls matching and rendering (pillar.show_pillar)."
         actions={
           <Select value={minion} onChange={(e) => setMinion(e.target.value)} className="w-48 font-mono">
-            {[...(keys.data?.minions ?? [])].sort().map((m) => (
+            {sorted.map((m) => (
               <option key={m}>{m}</option>
             ))}
           </Select>

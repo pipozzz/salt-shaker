@@ -181,6 +181,7 @@ npm run dev             # UI on :5173, proxies /api to the server
 | Command | |
 | --- | --- |
 | `npm test` | unit tests (vitest) |
+| `npm run test:e2e` | browser tests (Playwright) against the demo; run `npx playwright install chromium` once first |
 | `npm run lint` / `npm run typecheck` | oxlint / TypeScript |
 | `npm run build` / `npm run build:server` | UI → `dist/`, server bundle → `dist-server/` |
 | `npm run db:generate` | after changing `server/db/schema.*.ts` (keep the SQLite and Postgres schemas in sync), generates migrations for both |
@@ -200,7 +201,7 @@ A few salt-api behaviours (seen on Salt 3007) that the client handles, in case t
 - `key.gen_accept` replies `success: true` with an empty dict when the key already exists.
 - Offline minions are detected the way the CLI does it: `saltutil.find_job` with a short `gather_job_timeout`.
 
-CI runs lint, typecheck, tests and build on every push and PR. It then builds the Docker image and smoke-tests it.
+CI runs lint (no warnings allowed), typecheck, unit tests, browser tests and the build on every push and PR. It then builds the Docker image and smoke-tests it. Dependabot proposes dependency updates weekly.
 
 ## License
 

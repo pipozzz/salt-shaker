@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { automation, type Channel, type NotifyEvent } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 const EVENT_SHORT: Record<NotifyEvent, string> = {
   drift: 'Drift',

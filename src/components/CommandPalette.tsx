@@ -29,10 +29,9 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
   const [minions, setMinions] = useState<string[]>([])
   const listRef = useRef<HTMLDivElement>(null)
 
+  // the palette is mounted fresh on every open, so query and selection start empty
   useEffect(() => {
     if (!open) return
-    setQuery('')
-    setActive(0)
     salt
       .keys()
       .then((k) => setMinions([...k.minions].sort()))
@@ -85,7 +84,6 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
     return out
   }, [query, minions, pages, navigate, onClose])
 
-  useEffect(() => setActive(0), [query])
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [active])
@@ -101,7 +99,10 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
           <input
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setActive(0)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') onClose()
               if (e.key === 'ArrowDown') {

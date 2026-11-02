@@ -7,7 +7,7 @@ import { useAsync } from '../lib/hooks'
 import { history, parseStoredArgs } from '../api/server'
 import { SaltError, type JobDetail } from '../api/types'
 import { useCan, useSalt, useSession } from '../lib/session'
-import { funTone } from './Jobs'
+import { funTone } from '../lib/format'
 
 export function JobDetailPage() {
   const { jid = '' } = useParams()

@@ -7,13 +7,12 @@ import type { Grains } from '../api/types'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSalt } from '../lib/session'
+import { fmtMem } from '../lib/format'
 
 export function OsIcon({ os }: { os?: string }) {
   const color: Record<string, string> = { Ubuntu: 'bg-orange-500', Debian: 'bg-rose-600', Rocky: 'bg-emerald-600', CentOS: 'bg-violet-600', RedHat: 'bg-red-600', Windows: 'bg-sky-600', MacOS: 'bg-zinc-600' }
   return <span className={clsx('inline-flex size-5 items-center justify-center rounded text-[10px] font-bold text-white', color[os ?? ''] ?? 'bg-zinc-400')}>{os?.[0] ?? '?'}</span>
 }
-
-export const fmtMem = (mb?: number) => (mb ? (mb >= 1024 ? `${Math.round(mb / 1024)} GB` : `${mb} MB`) : '—')
 
 export function MinionsPage() {
   const salt = useSalt()

@@ -12,14 +12,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --external:better-sqlite3 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist-server/index.js && rm -rf dist-server/migrations && cp -r server/db/migrations dist-server/migrations",
     "start": "node dist-server/index.js",
-    "db:generate": "sh -c 'drizzle-kit generate --config drizzle.sqlite.config.ts --name \"${1:-change}\" && drizzle-kit generate --config drizzle.pg.config.ts --name \"${1:-change}\"' --"
+    "db:generate": "sh -c 'drizzle-kit generate --config drizzle.sqlite.config.ts --name \"${1:-change}\" && drizzle-kit generate --config drizzle.pg.config.ts --name \"${1:-change}\"' --",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
@@ -31,6 +32,7 @@
     "postgres": "^4.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",

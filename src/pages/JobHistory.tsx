@@ -6,7 +6,7 @@ import { formatArgs } from '../api/salt'
 import { history, parseStoredArgs, type HistoryJob } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { funTone, relTime } from './Jobs'
+import { funTone, relTime } from '../lib/format'
 
 const PAGE = 100
 

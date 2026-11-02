@@ -6,22 +6,7 @@ import { formatArgs } from '../api/salt'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
 import { useAsync, useStoredState } from '../lib/hooks'
 import { useSalt } from '../lib/session'
-
-export function relTime(d: Date | null) {
-  if (!d) return '—'
-  const s = Math.round((Date.now() - d.getTime()) / 1000)
-  if (s < 60) return `${Math.max(s, 0)}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return d.toLocaleDateString()
-}
-
-export function funTone(fun: string) {
-  if (fun.startsWith('state.')) return 'accent' as const
-  if (fun.startsWith('cmd.')) return 'amber' as const
-  if (fun.startsWith('test.')) return 'zinc' as const
-  return 'blue' as const
-}
+import { funTone, relTime } from '../lib/format'
 
 export function JobsPage() {
   const salt = useSalt()

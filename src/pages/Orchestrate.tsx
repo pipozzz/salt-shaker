@@ -10,7 +10,7 @@ import { stateSummary } from '../lib/states'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, Spinner } from '../components/ui'
 import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 interface Step {
   __id__?: string
@@ -62,7 +62,7 @@ export function OrchestratePage() {
   const canRun = can('runner', 'state.orchestrate')
   const roots = useAsync(() => salt.roots('file'), [salt])
   const [showAll, setShowAll] = useState(false)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [picked, setSelected] = useState<string | null>(null)
   const [test, setTest] = useState(true)
   const [pillar, setPillar] = useState('')
   const [run, setRun] = useState<OrchRun | null>(null)
@@ -80,10 +80,9 @@ export function OrchestratePage() {
   }, [roots.data])
   const orchFiles = files.filter((f) => ORCH_DIRS.test(f))
   const shown = showAll || orchFiles.length === 0 ? files : orchFiles
+  // until someone picks one, show the first file
+  const selected = picked ?? shown[0] ?? null
 
-  useEffect(() => {
-    if (!selected && shown[0]) setSelected(shown[0])
-  }, [shown, selected])
 
   const source = useAsync(() => (selected ? salt.readFile('file', selected) : Promise.resolve('')), [salt, selected])
 

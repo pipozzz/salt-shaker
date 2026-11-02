@@ -67,6 +67,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [])
   useEffect(() => {
+    // fetches /api/config; state is only set once the request answers
+    // oxlint-disable-next-line react/set-state-in-effect
     void refreshServer()
   }, [refreshServer])
   const [events, setEvents] = useState<SaltEvent[]>([])

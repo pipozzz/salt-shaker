@@ -7,7 +7,7 @@ import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { relTime } from './Jobs'
+import { relTime } from '../lib/format'
 
 const PRESETS: Array<[string, string]> = [
   ['0 * * * *', 'Every hour'],

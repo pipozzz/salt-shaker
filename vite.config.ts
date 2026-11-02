@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
@@ -11,6 +12,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     define: { __APP_VERSION__: JSON.stringify(version) },
+    // unit tests only; e2e/ is Playwright and docs/ is its own project
+    test: { exclude: ['**/node_modules/**', 'e2e/**', 'docs/**', 'dist/**'] },
     server: {
       proxy: {
         // the Salt Shaker server (npm run dev:server); without it the UI runs in direct mode

@@ -49,3 +49,19 @@ export function useTheme() {
   }, [theme])
   return [theme, setTheme] as const
 }
+
+/**
+ * Renders long lists a page at a time. `resetKey` identifies the current filter; when it
+ * changes, the list starts again from the first page (derived, no effect needed).
+ */
+export function usePaged<T>(items: T[], resetKey: string, size = 100) {
+  const [state, setState] = useState({ key: resetKey, count: size })
+  const count = state.key === resetKey ? state.count : size
+  return {
+    visible: items.length > count ? items.slice(0, count) : items,
+    remaining: Math.max(0, items.length - count),
+    total: items.length,
+    showMore: () => setState({ key: resetKey, count: count + size }),
+    size,
+  }
+}

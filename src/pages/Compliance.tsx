@@ -9,8 +9,8 @@ import { StateList } from '../components/ResultView'
 import { stateSummary } from '../lib/states'
 import { classify, ORDER, type Row, type Status } from '../lib/compliance'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, Stat } from '../components/ui'
-import { useAsync, useStoredState } from '../lib/hooks'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, PageHeader, PermNote, ShowMore, Stat } from '../components/ui'
+import { useAsync, usePaged, useStoredState } from '../lib/hooks'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from '../lib/format'
@@ -89,6 +89,7 @@ export function CompliancePage() {
   const drifted = rows.filter((r) => r.status === 'drift').map((r) => r.id)
   const returned = run ? Object.keys(run.results).length : 0
   const shown = filter === 'all' ? rows : rows.filter((r) => r.status === filter)
+  const paged = usePaged(shown, `${run?.jid}|${filter}`)
   const isEmptyJob = run && run.done && run.minions.length === 0 && returned === 0
 
   const fix = (ids: string[]) => navigate(`/run?tgt=${encodeURIComponent(ids.join(','))}&tgt_type=list&fun=state.apply&args=`)
@@ -190,11 +191,14 @@ export function CompliancePage() {
             {shown.length === 0 ? (
               <Empty title="Nothing here" />
             ) : (
-              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-                {shown.map((r) => (
-                  <MinionRow key={r.id} row={r} onFix={canFix ? () => fix([r.id]) : undefined} />
-                ))}
-              </ul>
+              <>
+                <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+                  {paged.visible.map((r) => (
+                    <MinionRow key={r.id} row={r} onFix={canFix ? () => fix([r.id]) : undefined} />
+                  ))}
+                </ul>
+                <ShowMore paged={paged} />
+              </>
             )}
           </Card>
         </>

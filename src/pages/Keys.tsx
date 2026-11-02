@@ -1,9 +1,9 @@
 import clsx from 'clsx'
 import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { KeyList } from '../api/types'
-import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, Spinner, Tabs } from '../components/ui'
-import { useAsync, useStoredState } from '../lib/hooks'
+import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, ShowMore, Spinner, Tabs } from '../components/ui'
+import { useAsync, usePaged, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 
 type Action = 'accept' | 'reject' | 'delete'
@@ -59,6 +59,11 @@ export function KeysPage() {
   }
 
   const k: KeyList | undefined = data?.keys
+  const [keyQuery, setKeyQuery] = useState('')
+  const acceptedShown = useMemo(() => {
+    const q = keyQuery.trim().toLowerCase()
+    return (k?.minions ?? []).filter((id) => !q || id.toLowerCase().includes(q))
+  }, [k, keyQuery])
 
   return (
     <>
@@ -127,11 +132,18 @@ export function KeysPage() {
           </Card>
 
           <Card>
-            <CardHeader title={<span className="flex items-center gap-2">Accepted <Badge tone="green">{k.minions.length}</Badge></span>} />
+            <CardHeader
+              title={<span className="flex items-center gap-2">Accepted <Badge tone="green">{k.minions.length}</Badge></span>}
+              actions={
+                k.minions.length > 20 && (
+                  <Input value={keyQuery} onChange={(e) => setKeyQuery(e.target.value)} placeholder="Filter keys…" className="h-8 w-48" aria-label="Filter accepted keys" />
+                )
+              }
+            />
             {k.minions.length === 0 ? (
               <Empty icon={<KeyRound />} title="No accepted keys" />
             ) : (
-              <KeyRows ids={k.minions} fingers={data?.fingers ?? {}}>
+              <KeyRows ids={acceptedShown} fingers={data?.fingers ?? {}} pageKey={keyQuery}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
@@ -199,11 +211,14 @@ export function KeysPage() {
   )
 }
 
-function KeyRows({ ids, fingers, children, tag }: { ids: string[]; fingers: Record<string, string>; children: (id: string) => ReactNode; tag?: (id: string) => ReactNode }) {
+function KeyRows({ ids, fingers, children, tag, pageKey = '' }: { ids: string[]; fingers: Record<string, string>; children: (id: string) => ReactNode; tag?: (id: string) => ReactNode; pageKey?: string }) {
   const canManage = useCan()('wheel', 'key.accept')
+  const sorted = useMemo(() => [...ids].sort(), [ids])
+  const paged = usePaged(sorted, pageKey)
   return (
+    <>
     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      {[...ids].sort().map((id) => (
+      {paged.visible.map((id) => (
         <li key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
           <span className="font-mono text-sm font-medium">{id}</span>
           {tag?.(id)}
@@ -217,6 +232,8 @@ function KeyRows({ ids, fingers, children, tag }: { ids: string[]; fingers: Reco
         </li>
       ))}
     </ul>
+    <ShowMore paged={paged} />
+    </>
   )
 }
 

@@ -1,17 +1,47 @@
 import clsx from 'clsx'
 import { CheckCircle2, ChevronRight, CircleDashed, Clock, Loader2, XCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { JsonView } from './JsonView'
 import { asStates, isFailure, stateSummary } from '../lib/states'
-import { Badge } from './ui'
+import { usePaged } from '../lib/hooks'
+import { Badge, ShowMore, Tabs } from './ui'
+
+type Show = 'all' | 'failed' | 'waiting'
 
 export function ResultView({ results, expected }: { results: Record<string, unknown>; expected?: string[] }) {
-  const ids = [...new Set([...(expected ?? []), ...Object.keys(results)])].sort()
+  const ids = useMemo(() => [...new Set([...(expected ?? []), ...Object.keys(results)])].sort(), [expected, results])
+  const failed = useMemo(() => ids.filter((id) => id in results && isFailure(results[id])), [ids, results])
+  const waiting = ids.filter((id) => !(id in results))
+  const [show, setShow] = useState<Show>('all')
+  const list = show === 'failed' ? failed : show === 'waiting' ? waiting : ids
+  // failures first, so a big run's problems aren't buried on page five
+  const ordered = useMemo(() => (show === 'all' ? [...failed, ...list.filter((id) => !failed.includes(id))] : list), [show, failed, list])
+  const paged = usePaged(ordered, show, 50)
+  const many = ids.length > 10
+
   return (
     <div className="space-y-2">
-      {ids.map((id) => (
+      {many && (
+        <div className="flex flex-wrap items-center gap-3 pb-1 text-sm">
+          <span className="text-zinc-600 tabular-nums dark:text-zinc-400">
+            {ids.length - failed.length - waiting.length} ok · {failed.length} failed · {waiting.length} waiting
+          </span>
+          <Tabs
+            value={show}
+            onChange={setShow}
+            items={[
+              { value: 'all', label: `All ${ids.length}` },
+              { value: 'failed', label: `Failed ${failed.length}` },
+              { value: 'waiting', label: `Waiting ${waiting.length}` },
+            ]}
+          />
+        </div>
+      )}
+      {paged.visible.map((id) => (
         <MinionResult key={id} id={id} returned={id in results} ret={results[id]} defaultOpen={ids.length <= 3} />
       ))}
+      {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500">None</p>}
+      <ShowMore paged={paged} />
     </div>
   )
 }

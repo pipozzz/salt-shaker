@@ -251,3 +251,18 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
     </button>
   )
 }
+
+/** Footer for a list rendered with usePaged(). */
+export function ShowMore({ paged }: { paged: { visible: unknown[]; remaining: number; total: number; showMore: () => void; size: number } }) {
+  if (!paged.remaining) return null
+  return (
+    <div className="flex items-center justify-center gap-3 border-t border-zinc-100 p-3 text-sm dark:border-zinc-800">
+      <span className="text-zinc-500">
+        Showing {paged.visible.length} of {paged.total}
+      </span>
+      <Button size="sm" onClick={paged.showMore}>
+        Show {Math.min(paged.size, paged.remaining)} more
+      </Button>
+    </div>
+  )
+}

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+**Monitoring**
+
+- Prometheus endpoint `/metrics`, enabled with `METRICS_TOKEN`: master reachability, minion keys by status, the latest compliance check, job failures in the last 24 hours and the state of each schedule. See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/) for the metrics and example alerts.
+
+**Accessibility**
+
+- Text and buttons meet WCAG 2.1 AA contrast in both themes. An axe check in the E2E suite keeps it that way.
+- Dark mode no longer flashes light while the app loads.
+- Code panels that scroll can be focused and scrolled from the keyboard.
+
+**Large fleets**
+
+- Enrollment, run results and the compliance list show long lists in pages, so pages with hundreds of minions stay responsive.
+
 ## 1.1.0
 
 **Faster with large fleets**

@@ -111,7 +111,7 @@ The database schema is migrated on start, for both SQLite and Postgres.
 
 Several instances can share one Postgres database: sessions, history and the audit log are shared, each scheduled run starts exactly once, and one instance (elected through a lease in the database) follows the event bus to record jobs and send event alerts. If it stops, another one takes over within about 30 seconds.
 
-Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`.
+Put TLS in front, for example with a load balancer, Traefik or nginx. If you proxy it yourself, turn off response buffering for `/api/salt/events` (Server-Sent Events). The container serves `/healthz`, and with `METRICS_TOKEN` set, Prometheus metrics at `/metrics` ([Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/)).
 
 Images for `linux/amd64` and `linux/arm64` are published to GHCR from `main` (`:latest`, `:sha-…`) and from version tags (`:1.2.0`, `:1.2`).
 

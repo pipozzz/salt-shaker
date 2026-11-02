@@ -20,6 +20,7 @@ The server is configured with environment variables.
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/), e.g. `Europe/Bratislava` |
 | `PASSWORD_LOGIN` | `all` | `admins` allows passwords for admins only, as a break-glass next to [SSO](/salt-shaker/deploy/sso/) |
+| `METRICS_TOKEN` | off | bearer token for the Prometheus endpoint `/metrics`, see [Monitoring](/salt-shaker/deploy/monitoring/) |
 | `STATIC_DIR` | `./dist` | where the built UI is served from |
 
 Single sign-on adds the `OIDC_*` variables, listed in [Single sign-on](/salt-shaker/deploy/sso/).

@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { and, count, desc, eq, inArray, like, lt, or, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
+import { timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from 'hono'
@@ -11,6 +12,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { Leader } from './leader'
+import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
 import { automationRoutes } from './routes/automation'
 import { Scheduler } from './scheduler'
@@ -81,6 +83,16 @@ app.use(
 )
 
 app.get('/healthz', (c) => c.text('ok\n'))
+
+// Prometheus scrape endpoint, off unless METRICS_TOKEN is set (key and schedule names aren't public)
+app.get('/metrics', async (c) => {
+  if (!config.metricsToken) return c.text('Not found\n', 404)
+  const given = Buffer.from(c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? '')
+  const want = Buffer.from(config.metricsToken)
+  if (given.length !== want.length || !timingSafeEqual(given, want)) return c.text('Unauthorized\n', 401, { 'WWW-Authenticate': 'Bearer' })
+  const gauges = await collectMetrics({ db, schema, salt, version: pkg.version, isLeader: eventsLeader.isLeader })
+  return c.text(formatMetrics(gauges), 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
+})
 
 // The API is cookie-authenticated, so refuse state-changing requests from other origins.
 // Browsers always send Origin on POST; requests without one (curl, scripts) carry no cookies by accident.

@@ -98,4 +98,4 @@ Several instances can share one Postgres database. Sessions, history and the aud
 
 ## Health check
 
-The container serves `GET /healthz`, which answers `ok`.
+The container serves `GET /healthz`, which answers `ok`. For Prometheus metrics, see [Monitoring](/salt-shaker/deploy/monitoring/).

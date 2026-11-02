@@ -20,6 +20,8 @@ export interface Config {
   /** Who may sign in with a password; 'admins' keeps it as a break-glass when SSO is on. */
   passwordLogin: 'all' | 'admins'
   oidc: OidcConfig | null
+  /** Bearer token for GET /metrics (Prometheus); the endpoint is off without one. */
+  metricsToken: string | null
 }
 
 export interface OidcConfig {
@@ -92,6 +94,7 @@ export function loadConfig(): Config {
     trustProxy: /^(1|true|yes)$/i.test(process.env.TRUST_PROXY ?? ''),
     passwordLogin: process.env.PASSWORD_LOGIN === 'admins' ? 'admins' : 'all',
     oidc: loadOidc(),
+    metricsToken: process.env.METRICS_TOKEN?.trim() || null,
     historyDays: Math.max(1, Number(process.env.JOB_RETENTION_DAYS ?? 90) || 90),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }

@@ -95,7 +95,7 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-zinc-950/40 p-4 pt-[12vh] backdrop-blur-sm" onMouseDown={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-zinc-200 px-4 dark:border-zinc-800">
-          <Search className="size-4 text-zinc-400" />
+          <Search className="size-4 text-zinc-500 dark:text-zinc-400" />
           <input
             autoFocus
             value={query}
@@ -118,17 +118,17 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
             placeholder="Jump to a page or minion, paste a jid, or type a function like cmd.run…"
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
           />
-          <kbd className="rounded border border-zinc-200 px-1.5 text-[10px] text-zinc-400 dark:border-zinc-700">esc</kbd>
+          <kbd className="rounded border border-zinc-200 px-1.5 text-[10px] text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">esc</kbd>
         </div>
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto p-2">
-          {items.length === 0 && <p className="px-3 py-6 text-center text-sm text-zinc-500">No results</p>}
+          {items.length === 0 && <p className="px-3 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">No results</p>}
           {items.map((it, i) => {
             const header = it.group !== lastGroup ? it.group : null
             lastGroup = it.group
             const Icon = it.icon
             return (
               <div key={it.id}>
-                {header && <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-zinc-400 uppercase">{header}</p>}
+                {header && <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">{header}</p>}
                 <button
                   data-index={i}
                   onMouseMove={() => setActive(i)}
@@ -137,7 +137,7 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
                 >
                   <Icon className="size-4 shrink-0 opacity-70" />
                   <span className={clsx('truncate', it.group === 'Minions' || it.group === 'Recent commands' ? 'font-mono' : 'font-medium')}>{it.label}</span>
-                  {it.hint && <span className="truncate font-mono text-xs text-zinc-400">{it.hint}</span>}
+                  {it.hint && <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{it.hint}</span>}
                   {i === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0 opacity-60" />}
                 </button>
               </div>

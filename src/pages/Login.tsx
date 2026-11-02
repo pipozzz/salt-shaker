@@ -87,7 +87,7 @@ export function LoginPage() {
               onClick={() => setMode(m)}
               className={clsx(
                 'flex items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition',
-                mode === m ? 'bg-white shadow-xs dark:bg-zinc-950' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200',
+                mode === m ? 'bg-white shadow-xs dark:bg-zinc-950' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200',
               )}
             >
               <Icon className="size-3.5" /> {label}
@@ -101,7 +101,7 @@ export function LoginPage() {
               Sign in with {sso.name}
             </Button>
             {passwordVisible ? (
-              <div className="flex items-center gap-3 text-xs text-zinc-400">
+              <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
                 {server?.passwordLogin === 'admins' ? 'admins only' : 'or with a password'}
                 <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
@@ -217,7 +217,7 @@ function SetupForm({ onDemo }: { onDemo: () => void }) {
     <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div>
         <h2 className="font-semibold">Welcome! Create the first admin</h2>
-        <p className="mt-1 text-sm text-zinc-500">This server has no users yet. The account you create here can add everyone else.</p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">This server has no users yet. The account you create here can add everyone else.</p>
       </div>
       <Field label="Username">
         <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required autoFocus />
@@ -232,7 +232,7 @@ function SetupForm({ onDemo }: { onDemo: () => void }) {
       <Button type="submit" variant="primary" className="w-full" loading={busy}>
         Create admin and sign in
       </Button>
-      <button type="button" onClick={onDemo} className="w-full text-center text-xs text-zinc-500 hover:underline">
+      <button type="button" onClick={onDemo} className="w-full text-center text-xs text-zinc-500 hover:underline dark:text-zinc-400">
         Just looking? Open the demo instead
       </button>
     </form>

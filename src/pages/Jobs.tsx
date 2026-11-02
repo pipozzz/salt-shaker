@@ -40,7 +40,7 @@ export function JobsPage() {
       <Card>
         <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 p-3 dark:border-zinc-800">
           <div className="relative min-w-48 flex-1">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by function, target, user, jid…" className="pl-9" />
           </div>
           <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -79,14 +79,14 @@ export function JobsPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs">
-                      {j['Target-type'] !== 'glob' && <span className="text-zinc-400">{j['Target-type']}:</span>}
+                      {j['Target-type'] !== 'glob' && <span className="text-zinc-500 dark:text-zinc-400">{j['Target-type']}:</span>}
                       {Array.isArray(j.Target) ? j.Target.join(',') : j.Target}
                     </td>
                     <td className="hidden px-3 py-2.5 text-zinc-600 md:table-cell dark:text-zinc-400">{j.User}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-zinc-600 dark:text-zinc-400" title={j.date?.toLocaleString()}>
                       {relTime(j.date)}
                     </td>
-                    <td className="hidden px-3 py-2.5 pr-4 font-mono text-xs text-zinc-400 lg:table-cell">{j.jid}</td>
+                    <td className="hidden px-3 py-2.5 pr-4 font-mono text-xs text-zinc-500 dark:text-zinc-400 lg:table-cell">{j.jid}</td>
                   </tr>
                 ))}
               </tbody>

@@ -116,14 +116,14 @@ export function CompliancePage() {
         </form>
         {!canCheck && <PermNote className="px-4 pb-3">Your account cannot run state.apply, so it can only view earlier checks.</PermNote>}
         {run && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             <span>
               {run.done ? 'Checked' : 'Started'} {relTime(new Date(run.started))}
             </span>
             <Link to={`/jobs/${run.jid}`} className="inline-flex items-center gap-1 font-mono hover:text-accent-600">
               jid {run.jid} <ExternalLink className="size-3" />
             </Link>
-            <span className="text-zinc-400">state.apply test=True — nothing is changed on minions</span>
+            <span className="text-zinc-500 dark:text-zinc-400">state.apply test=True — nothing is changed on minions</span>
           </div>
         )}
         {run && !run.done && (
@@ -219,8 +219,8 @@ const STATUS_UI: Record<Status, { icon: ReactNode; label: string }> = {
   ok: { icon: <CheckCircle2 className="size-4 text-emerald-500" />, label: 'In compliance' },
   drift: { icon: <CircleDashed className="size-4 text-amber-500" />, label: 'Drifted' },
   error: { icon: <AlertOctagon className="size-4 text-red-500" />, label: 'Error' },
-  noreturn: { icon: <Unplug className="size-4 text-zinc-400" />, label: 'No return' },
-  waiting: { icon: <CircleDashed className="size-4 animate-spin text-zinc-400" />, label: 'Waiting…' },
+  noreturn: { icon: <Unplug className="size-4 text-zinc-500 dark:text-zinc-400" />, label: 'No return' },
+  waiting: { icon: <CircleDashed className="size-4 animate-spin text-zinc-500 dark:text-zinc-400" />, label: 'Waiting…' },
 }
 
 function MinionRow({ row, onFix }: { row: Row; onFix?: () => void }) {
@@ -231,14 +231,14 @@ function MinionRow({ row, onFix }: { row: Row; onFix?: () => void }) {
     <li>
       <div className="flex items-center gap-3 px-4 py-2.5">
         <button onClick={() => expandable && setOpen(!open)} className={clsx('flex min-w-0 flex-1 items-center gap-3 text-left', !expandable && 'cursor-default')}>
-          <ChevronRight className={clsx('size-4 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90', !expandable && 'invisible')} />
+          <ChevronRight className={clsx('size-4 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90', !expandable && 'invisible')} />
           {STATUS_UI[row.status].icon}
           <span className="font-mono text-sm font-medium">{row.id}</span>
           <span className="flex flex-wrap gap-1.5">
             {row.wouldChange > 0 && <Badge tone="amber">{row.wouldChange} would change</Badge>}
             {row.failed > 0 && <Badge tone="red">{row.failed} failed</Badge>}
             {row.status === 'error' && !isStates && <Badge tone="red">did not run</Badge>}
-            {(row.status === 'ok' || row.status === 'noreturn' || row.status === 'waiting') && <span className="text-xs text-zinc-500">{STATUS_UI[row.status].label}</span>}
+            {(row.status === 'ok' || row.status === 'noreturn' || row.status === 'waiting') && <span className="text-xs text-zinc-500 dark:text-zinc-400">{STATUS_UI[row.status].label}</span>}
           </span>
         </button>
         {row.status === 'drift' && onFix && (
@@ -271,7 +271,7 @@ function History({ runs, current, onOpen }: { runs: ComplianceRun[]; current?: s
         title="History"
         subtitle="Earlier checks, kept by the server. Open one to see its details."
         actions={
-          <div className="hidden flex-wrap items-center gap-3 text-xs text-zinc-500 sm:flex">
+          <div className="hidden flex-wrap items-center gap-3 text-xs text-zinc-500 sm:flex dark:text-zinc-400">
             {SEGMENTS.map((s) => (
               <span key={s.key} className="flex items-center gap-1.5">
                 <span className={clsx('size-2.5 rounded-sm', s.className)} />
@@ -291,13 +291,13 @@ function History({ runs, current, onOpen }: { runs: ComplianceRun[]; current?: s
                 onClick={() => onOpen(r.jid)}
                 className={clsx('grid w-full grid-cols-[7rem_1fr] items-center gap-x-4 gap-y-1 px-4 py-2 text-left text-sm hover:bg-zinc-50 sm:grid-cols-[7rem_10rem_1fr_9rem] dark:hover:bg-zinc-800/30', current === r.jid && 'bg-accent-50/60 dark:bg-accent-700/10')}
               >
-                <span className="text-xs text-zinc-500" title={at.toLocaleString()}>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400" title={at.toLocaleString()}>
                   {relTime(at)}
                 </span>
                 <span className="hidden truncate font-mono text-xs sm:block">
                   {r.targetType && r.targetType !== 'glob' ? `${r.targetType}:` : ''}
                   {r.target ?? '*'}
-                  {r.by && <span className="font-sans text-zinc-400"> · {r.by}</span>}
+                  {r.by && <span className="font-sans text-zinc-500 dark:text-zinc-400"> · {r.by}</span>}
                 </span>
                 <span className="flex h-2.5 gap-0.5 overflow-hidden rounded-full" aria-hidden>
                   {SEGMENTS.filter((s) => r.counts[s.key] > 0).map((s) => (

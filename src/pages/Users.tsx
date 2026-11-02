@@ -85,7 +85,7 @@ export function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">User</th>
                   <th className="px-3 py-2.5 font-medium">Role</th>
                   <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Created</th>
@@ -99,10 +99,10 @@ export function UsersPage() {
                     <tr key={u.id} className={u.banned ? 'opacity-60' : ''}>
                       <td className="py-2.5 pr-3 pl-4">
                         <p className="flex items-center gap-2 font-mono font-medium">
-                          {u.username ?? u.name} {isMe && <span className="font-sans text-xs text-zinc-400">(you)</span>}
+                          {u.username ?? u.name} {isMe && <span className="font-sans text-xs text-zinc-500 dark:text-zinc-400">(you)</span>}
                           {isSso(u) && <Badge tone="blue">{server?.sso?.name ?? 'SSO'}</Badge>}
                         </p>
-                        {u.name !== u.username && <p className="text-xs text-zinc-500">{u.name}</p>}
+                        {u.name !== u.username && <p className="text-xs text-zinc-500 dark:text-zinc-400">{u.name}</p>}
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ export function UsersPage() {
                           {u.banned && <Badge tone="red">disabled</Badge>}
                         </div>
                       </td>
-                      <td className="hidden px-3 py-2.5 text-zinc-500 sm:table-cell">{relTime(new Date(u.createdAt))}</td>
+                      <td className="hidden px-3 py-2.5 text-zinc-500 sm:table-cell dark:text-zinc-400">{relTime(new Date(u.createdAt))}</td>
                       <td className="px-3 py-2.5 pr-4">
                         {!isMe && (
                           <div className="flex justify-end gap-1">

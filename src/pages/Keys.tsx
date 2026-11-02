@@ -223,7 +223,7 @@ function KeyRows({ ids, fingers, children, tag, pageKey = '' }: { ids: string[];
           <span className="font-mono text-sm font-medium">{id}</span>
           {tag?.(id)}
           {fingers[id] && (
-            <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500" title={fingers[id]}>
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400" title={fingers[id]}>
               <Fingerprint className="size-3.5 shrink-0" />
               <span className="truncate font-mono">{fingers[id].slice(0, 23)}…</span>
             </span>
@@ -290,7 +290,7 @@ function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; o
             { value: 'preseed', label: 'Pre-seeded keys' },
           ]}
         />
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
           {method === 'approve'
             ? 'Run the bootstrap on the new host. Its key appears under Pending, where you verify the fingerprint and accept it.'
             : 'The master generates and accepts a keypair now. The script installs it on the host, so the minion is trusted on first contact — no approval step.'}
@@ -308,7 +308,7 @@ function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; o
           </Field>
         </div>
         {id && !validId && <p className="text-xs text-red-600">Use letters, digits, dots, dashes and underscores.</p>}
-        {taken && !keys && <p className="text-xs text-amber-600">A key named {id} already exists on the master.</p>}
+        {taken && !keys && <p className="text-xs text-amber-700">A key named {id} already exists on the master.</p>}
 
         {method === 'approve' && id && validId && master && <Script code={bootstrapCmd(id, master, roleList)} />}
 
@@ -336,10 +336,10 @@ function Script({ code }: { code: string }) {
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
       <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-3 py-1 dark:border-zinc-800 dark:bg-zinc-900">
-        <span className="text-xs font-medium text-zinc-500">bash</span>
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">bash</span>
         <CopyButton text={code} />
       </div>
-      <pre className="max-h-72 overflow-auto bg-zinc-950 p-3 font-mono text-[12px] leading-5 text-zinc-100">{code}</pre>
+      <pre tabIndex={0} aria-label="Bootstrap command" className="max-h-72 overflow-auto bg-zinc-950 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500 p-3 font-mono text-[12px] leading-5 text-zinc-100">{code}</pre>
     </div>
   )
 }

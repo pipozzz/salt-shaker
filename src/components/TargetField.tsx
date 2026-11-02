@@ -93,7 +93,7 @@ export function TargetField({
                 e.preventDefault()
                 if (!isSaved && tgt.trim()) setNaming(!naming)
               }}
-              className={clsx('absolute top-1.5 right-1.5 rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800', isSaved ? 'text-accent-600 dark:text-accent-400' : 'text-zinc-400')}
+              className={clsx('absolute top-1.5 right-1.5 rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800', isSaved ? 'text-accent-700 dark:text-accent-400' : 'text-zinc-500')}
             >
               {isSaved ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
             </button>
@@ -174,7 +174,7 @@ function TargetPreview({ hint, preview }: { hint: string; preview: Preview | nul
     return (
       <span className="flex items-center gap-2">
         <span className="font-mono">{hint}</span>
-        <Loader2 className="size-3 animate-spin text-zinc-400" />
+        <Loader2 className="size-3 animate-spin text-zinc-500 dark:text-zinc-400" />
       </span>
     )
   }
@@ -182,7 +182,7 @@ function TargetPreview({ hint, preview }: { hint: string; preview: Preview | nul
   const { minions } = preview
   if (minions.length === 0) {
     return (
-      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+      <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
         <TriangleAlert className="size-3.5" /> Matches no known minions
       </span>
     )
@@ -190,7 +190,7 @@ function TargetPreview({ hint, preview }: { hint: string; preview: Preview | nul
   const shown = expanded ? minions : minions.slice(0, 6)
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      <Crosshair className="size-3.5 text-accent-600 dark:text-accent-400" />
+      <Crosshair className="size-3.5 text-accent-700 dark:text-accent-400" />
       <span className="font-medium text-zinc-700 dark:text-zinc-300">
         {minions.length} {minions.length === 1 ? 'minion' : 'minions'}:
       </span>
@@ -200,7 +200,7 @@ function TargetPreview({ hint, preview }: { hint: string; preview: Preview | nul
         </span>
       ))}
       {minions.length > shown.length && (
-        <button type="button" onClick={() => setExpanded(true)} className="text-accent-600 hover:underline dark:text-accent-400">
+        <button type="button" onClick={() => setExpanded(true)} className="text-accent-700 hover:underline dark:text-accent-400">
           +{minions.length - shown.length} more
         </button>
       )}

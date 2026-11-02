@@ -116,7 +116,7 @@ function TreeNode({ tree, path, selected, onSelect, depth }: { tree: FileTree; p
                 selected === path + name ? 'bg-accent-50 font-medium text-accent-700 dark:bg-accent-700/20 dark:text-accent-400' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/60',
               )}
             >
-              <FileCode2 className={clsx('size-3.5 shrink-0', name.endsWith('.sls') ? 'text-accent-500' : 'text-zinc-400')} />
+              <FileCode2 className={clsx('size-3.5 shrink-0', name.endsWith('.sls') ? 'text-accent-500' : 'text-zinc-500 dark:text-zinc-400')} />
               <span className="truncate">{name}</span>
             </button>
           </li>
@@ -134,7 +134,7 @@ function Dir({ name, node, path, selected, onSelect, depth }: { name: string; no
   return (
     <li>
       <button onClick={() => setOpen(!open)} style={{ paddingLeft: depth * 14 + 6 }} className="flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/60">
-        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90')} />
+        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90')} />
         <Icon className="size-3.5 shrink-0 text-amber-500" />
         <span className="truncate">{name}</span>
       </button>

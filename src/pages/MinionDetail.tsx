@@ -30,7 +30,7 @@ export function MinionDetailPage() {
 
   return (
     <>
-      <Link to="/" className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
+      <Link to="/" className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 dark:text-zinc-400">
         <ArrowLeft className="size-4" /> Minions
       </Link>
 
@@ -39,7 +39,7 @@ export function MinionDetailPage() {
           <StatusDot up={grains.data?.up} />
           <div>
             <h1 className="font-mono text-xl font-semibold tracking-tight">{id}</h1>
-            <p className="text-sm text-zinc-500">{g?.fqdn as string | undefined}</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{g?.fqdn as string | undefined}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -58,16 +58,16 @@ export function MinionDetailPage() {
       {grains.error && <ErrorBox error={grains.error} onRetry={grains.reload} />}
       {grains.loading && !grains.data && <Spinner />}
       {grains.data && !g && (
-        <Card className="mb-6 p-4 text-sm text-zinc-500">This minion did not return grains — it is probably offline. Its key is still accepted.</Card>
+        <Card className="mb-6 p-4 text-sm text-zinc-500 dark:text-zinc-400">This minion did not return grains — it is probably offline. Its key is still accepted.</Card>
       )}
 
       {g && (
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Fact icon={<OsIcon os={g.os} />} label="Operating system" value={`${g.os} ${g.osrelease}`} sub={`${g.kernel} ${g.kernelrelease}`} />
-          <Fact icon={<Cpu className="size-4 text-zinc-400" />} label="Hardware" value={`${g.num_cpus} vCPU · ${fmtMem(g.mem_total)}`} sub={`${g.cpu_model ?? ''}`} />
-          <Fact icon={<Network className="size-4 text-zinc-400" />} label="Addresses" value={g.ipv4?.filter((ip) => ip !== '127.0.0.1').join(', ') || '—'} sub={`virtual: ${g.virtual ?? '—'}`} />
+          <Fact icon={<Cpu className="size-4 text-zinc-500 dark:text-zinc-400" />} label="Hardware" value={`${g.num_cpus} vCPU · ${fmtMem(g.mem_total)}`} sub={`${g.cpu_model ?? ''}`} />
+          <Fact icon={<Network className="size-4 text-zinc-500 dark:text-zinc-400" />} label="Addresses" value={g.ipv4?.filter((ip) => ip !== '127.0.0.1').join(', ') || '—'} sub={`virtual: ${g.virtual ?? '—'}`} />
           <Fact
-            icon={<HardDrive className="size-4 text-zinc-400" />}
+            icon={<HardDrive className="size-4 text-zinc-500 dark:text-zinc-400" />}
             label="Salt"
             value={g.saltversion ?? '—'}
             sub={
@@ -95,7 +95,7 @@ export function MinionDetailPage() {
           }
           actions={
             <div className="relative">
-              <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+              <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
               <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter keys…" className="w-56 pl-9" />
             </div>
           }
@@ -118,14 +118,14 @@ export function MinionDetailPage() {
 function Fact({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: React.ReactNode }) {
   return (
     <Card className="p-4">
-      <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+      <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
         {icon}
         {label}
       </div>
       <p className="mt-2 truncate font-medium" title={value}>
         {value}
       </p>
-      {sub && <div className="mt-0.5 truncate text-xs text-zinc-500">{sub}</div>}
+      {sub && <div className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{sub}</div>}
     </Card>
   )
 }

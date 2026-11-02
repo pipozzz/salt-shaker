@@ -32,7 +32,7 @@ function untilTime(d: Date) {
 
 function Summary({ s }: { s: Schedule }) {
   const sum = s.lastSummary
-  if (!sum) return <span className="text-xs text-zinc-400">{s.lastRunAt ? 'collecting results…' : 'never ran'}</span>
+  if (!sum) return <span className="text-xs text-zinc-500 dark:text-zinc-400">{s.lastRunAt ? 'collecting results…' : 'never ran'}</span>
   if (typeof sum.error === 'string') return <span className="text-xs text-red-600 dark:text-red-400">{sum.error}</span>
   if (s.kind === 'compliance') {
     const c = sum as { ok: number; drift: number; error: number; noreturn: number }
@@ -82,7 +82,7 @@ export function SchedulesPage() {
         description={
           <>
             Compliance checks, patch scans or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
-            <Link to="/notifications" className="text-accent-600 hover:underline dark:text-accent-400">
+            <Link to="/notifications" className="text-accent-700 hover:underline dark:text-accent-400">
               Notifications
             </Link>
             .
@@ -121,7 +121,7 @@ export function SchedulesPage() {
                     <span className="font-medium">{s.name}</span>
                     <Badge tone={KIND_TONE[s.kind]}>{KIND_LABEL[s.kind]}</Badge>
                   </p>
-                  <p className="mt-0.5 font-mono text-xs text-zinc-500">
+                  <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
                     {s.kind === 'function' && `${s.fun} ${formatArgs([...(s.args?.arg ?? []), ...(s.args?.kwarg && Object.keys(s.args.kwarg).length ? [{ __kwarg__: true, ...s.args.kwarg }] : [])])} → `}
                     {s.targetType !== 'glob' && `${s.targetType}:`}
                     {s.target}
@@ -129,14 +129,14 @@ export function SchedulesPage() {
                 </div>
                 <div className="w-44 text-xs">
                   <p className="font-medium text-zinc-700 dark:text-zinc-300">{presetLabel(s.cron) ?? <span className="font-mono">{s.cron}</span>}</p>
-                  <p className="text-zinc-500">
+                  <p className="text-zinc-500 dark:text-zinc-400">
                     {s.cronError ? <span className="text-red-600">{s.cronError}</span> : s.nextRunAt ? `next ${untilTime(new Date(s.nextRunAt))}` : 'paused'}
                   </p>
                 </div>
                 <div className="w-52 space-y-1 text-xs">
                   <Summary s={s} />
                   {s.lastRunAt && (
-                    <p className="text-zinc-500">
+                    <p className="text-zinc-500 dark:text-zinc-400">
                       {relTime(new Date(s.lastRunAt))}
                       {s.lastJid && (
                         <>
@@ -150,7 +150,7 @@ export function SchedulesPage() {
                   )}
                   {started[s.id] && (
                     <p>
-                      <Link to={`/jobs/${started[s.id]}`} className="text-accent-600 hover:underline dark:text-accent-400">
+                      <Link to={`/jobs/${started[s.id]}`} className="text-accent-700 hover:underline dark:text-accent-400">
                         Started just now →
                       </Link>
                     </p>

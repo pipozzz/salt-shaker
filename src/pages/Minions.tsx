@@ -10,7 +10,7 @@ import { useSalt } from '../lib/session'
 import { fmtMem } from '../lib/format'
 
 export function OsIcon({ os }: { os?: string }) {
-  const color: Record<string, string> = { Ubuntu: 'bg-orange-500', Debian: 'bg-rose-600', Rocky: 'bg-emerald-600', CentOS: 'bg-violet-600', RedHat: 'bg-red-600', Windows: 'bg-sky-600', MacOS: 'bg-zinc-600' }
+  const color: Record<string, string> = { Ubuntu: 'bg-orange-500', Debian: 'bg-rose-600', Rocky: 'bg-emerald-700', CentOS: 'bg-violet-600', RedHat: 'bg-red-600', Windows: 'bg-sky-600', MacOS: 'bg-zinc-600' }
   return <span className={clsx('inline-flex size-5 items-center justify-center rounded text-[10px] font-bold text-white', color[os ?? ''] ?? 'bg-zinc-400')}>{os?.[0] ?? '?'}</span>
 }
 
@@ -95,7 +95,7 @@ export function MinionsPage() {
             </button>
           )}
           <div className="relative min-w-48 flex-1">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by id, OS, IP or role…" className="pl-9" />
           </div>
           <Tabs
@@ -117,14 +117,14 @@ export function MinionsPage() {
         {!data && loading && <Spinner label="Asking minions for grains…" />}
         {data && rows.length === 0 && (
           <Empty icon={<Server />} title={data.keys.minions.length ? 'No minions match' : 'No accepted minions yet'}>
-            {data.keys.minions.length ? 'Try a different filter.' : <Link className="text-accent-600 hover:underline" to="/keys">Enroll your first minion →</Link>}
+            {data.keys.minions.length ? 'Try a different filter.' : <Link className="text-accent-700 hover:underline" to="/keys">Enroll your first minion →</Link>}
           </Empty>
         )}
         {rows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs font-medium text-zinc-500 dark:border-zinc-800">
+                <tr className="border-b border-zinc-200 text-left text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">Minion</th>
                   <th className="px-3 py-2.5 font-medium">OS</th>
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">IP</th>
@@ -149,7 +149,7 @@ export function MinionsPage() {
                           {g.os} {g.osrelease}
                         </span>
                       ) : (
-                        <span className="text-zinc-400">{up ? '—' : 'offline'}</span>
+                        <span className="text-zinc-500 dark:text-zinc-400">{up ? '—' : 'offline'}</span>
                       )}
                     </td>
                     <td className="hidden px-3 py-2.5 font-mono text-xs text-zinc-600 md:table-cell dark:text-zinc-400">{g.ipv4?.find((ip) => ip !== '127.0.0.1') ?? '—'}</td>
@@ -161,7 +161,7 @@ export function MinionsPage() {
                         ))}
                       </div>
                     </td>
-                    <td className="hidden px-3 py-2.5 pr-4 font-mono text-xs text-zinc-500 xl:table-cell">{g.saltversion ?? '—'}</td>
+                    <td className="hidden px-3 py-2.5 pr-4 font-mono text-xs text-zinc-500 xl:table-cell dark:text-zinc-400">{g.saltversion ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -170,7 +170,7 @@ export function MinionsPage() {
         )}
         {rows.length > visible.length && (
           <div className="flex items-center justify-center gap-3 border-t border-zinc-100 p-3 text-sm dark:border-zinc-800">
-            <span className="text-zinc-500">
+            <span className="text-zinc-500 dark:text-zinc-400">
               Showing {visible.length} of {rows.length}
             </span>
             <Button size="sm" onClick={() => setPaging({ key: filterKey, count: visibleCount + PAGE })}>
@@ -262,8 +262,8 @@ function Breakdown({
   const shown = rows.slice(0, 6)
   return (
     <Card className="p-4">
-      <p className="text-xs font-medium text-zinc-500">{title}</p>
-      {subtitle && <div className="mt-0.5 text-xs text-zinc-500">{subtitle}</div>}
+      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{title}</p>
+      {subtitle && <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{subtitle}</div>}
       <ul className="mt-3 space-y-1">
         {shown.map(([value, count]) => {
           const isActive = active?.kind === kind && active.value === value
@@ -292,7 +292,7 @@ function Breakdown({
           )
         })}
       </ul>
-      {rows.length > shown.length && <p className="mt-2 px-2 text-xs text-zinc-500">+{rows.length - shown.length} more</p>}
+      {rows.length > shown.length && <p className="mt-2 px-2 text-xs text-zinc-500 dark:text-zinc-400">+{rows.length - shown.length} more</p>}
     </Card>
   )
 }

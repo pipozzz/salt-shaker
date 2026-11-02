@@ -40,7 +40,7 @@ export function ResultView({ results, expected }: { results: Record<string, unkn
       {paged.visible.map((id) => (
         <MinionResult key={id} id={id} returned={id in results} ret={results[id]} defaultOpen={ids.length <= 3} />
       ))}
-      {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500">None</p>}
+      {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">None</p>}
       <ShowMore paged={paged} />
     </div>
   )
@@ -56,9 +56,9 @@ function MinionResult({ id, ret, returned, defaultOpen }: { id: string; ret: unk
         onClick={() => returned && setOpen(!open)}
         className="flex w-full items-center gap-3 bg-zinc-50/80 px-3 py-2 text-left hover:bg-zinc-100/80 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
       >
-        <ChevronRight className={clsx('size-4 text-zinc-400 transition-transform', open && 'rotate-90', !returned && 'invisible')} />
+        <ChevronRight className={clsx('size-4 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90', !returned && 'invisible')} />
         {!returned ? (
-          <Loader2 className="size-4 animate-spin text-zinc-400" />
+          <Loader2 className="size-4 animate-spin text-zinc-500 dark:text-zinc-400" />
         ) : failed ? (
           <XCircle className="size-4 text-red-500" />
         ) : (
@@ -66,14 +66,14 @@ function MinionResult({ id, ret, returned, defaultOpen }: { id: string; ret: unk
         )}
         <span className="font-mono text-sm font-medium">{id}</span>
         <span className="ml-auto flex items-center gap-1.5">
-          {!returned && <span className="text-xs text-zinc-500">waiting…</span>}
+          {!returned && <span className="text-xs text-zinc-500 dark:text-zinc-400">waiting…</span>}
           {sum && (
             <>
               {sum.ok > 0 && <Badge tone="green">{sum.ok} ok</Badge>}
               {sum.changed > 0 && <Badge tone="blue">{sum.changed} changed</Badge>}
               {sum.pending > 0 && <Badge tone="amber">{sum.pending} would change</Badge>}
               {sum.failed > 0 && <Badge tone="red">{sum.failed} failed</Badge>}
-              <span className="hidden text-xs text-zinc-500 tabular-nums sm:inline">{(sum.duration / 1000).toFixed(2)}s</span>
+              <span className="hidden text-xs text-zinc-500 tabular-nums sm:inline dark:text-zinc-400">{(sum.duration / 1000).toFixed(2)}s</span>
             </>
           )}
           {returned && !sum && <InlinePreview ret={ret} />}
@@ -90,7 +90,7 @@ function MinionResult({ id, ret, returned, defaultOpen }: { id: string; ret: unk
 
 function InlinePreview({ ret }: { ret: unknown }) {
   if (typeof ret === 'boolean') return <Badge tone={ret ? 'green' : 'red'}>{String(ret)}</Badge>
-  if (typeof ret === 'string' && !ret.includes('\n') && ret.length < 40) return <span className="font-mono text-xs text-zinc-500">{ret}</span>
+  if (typeof ret === 'string' && !ret.includes('\n') && ret.length < 40) return <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{ret}</span>
   return null
 }
 
@@ -106,7 +106,7 @@ export function StateList({ ret, interesting = false }: { ret: unknown; interest
   const shown = onlyInteresting ? states.filter(([, s]) => s.result !== true || (s.changes && Object.keys(s.changes).length)) : states
   return (
     <div className="space-y-1.5">
-      <label className="mb-2 flex items-center gap-2 text-xs text-zinc-500">
+      <label className="mb-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
         <input type="checkbox" checked={onlyInteresting} onChange={(e) => setOnly(e.target.checked)} className="accent-accent-600" />
         Only show changes and failures
       </label>
@@ -124,12 +124,12 @@ export function StateList({ ret, interesting = false }: { ret: unknown; interest
             <div className="flex flex-wrap items-center gap-x-2 text-sm">
               {s.result === false ? <XCircle className="size-3.5 text-red-500" /> : s.result === null ? <CircleDashed className="size-3.5 text-amber-500" /> : <CheckCircle2 className={clsx('size-3.5', changed ? 'text-sky-500' : 'text-emerald-500')} />}
               <span className="font-medium">{s.__id__}</span>
-              <span className="font-mono text-xs text-zinc-500">
+              <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                 {mod}.{fun}
               </span>
-              {s.__sls__ && <span className="text-xs text-zinc-400">· {s.__sls__}</span>}
+              {s.__sls__ && <span className="text-xs text-zinc-500 dark:text-zinc-400">· {s.__sls__}</span>}
               {s.duration !== undefined && (
-                <span className="ml-auto flex items-center gap-1 text-xs text-zinc-400 tabular-nums">
+                <span className="ml-auto flex items-center gap-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
                   <Clock className="size-3" />
                   {s.duration.toFixed(0)} ms
                 </span>
@@ -153,7 +153,7 @@ function Changes({ changes }: { changes: Record<string, unknown> }) {
     return (
       <pre className="overflow-x-auto rounded bg-zinc-50 p-2 font-mono text-xs leading-5 dark:bg-zinc-900">
         {(changes.diff as string).split('\n').map((l, i) => (
-          <div key={i} className={clsx(l.startsWith('+') && !l.startsWith('+++') && 'text-emerald-600 dark:text-emerald-400', l.startsWith('-') && !l.startsWith('---') && 'text-red-600 dark:text-red-400', l.startsWith('@@') && 'text-sky-600')}>
+          <div key={i} className={clsx(l.startsWith('+') && !l.startsWith('+++') && 'text-emerald-700 dark:text-emerald-400', l.startsWith('-') && !l.startsWith('---') && 'text-red-600 dark:text-red-400', l.startsWith('@@') && 'text-sky-600')}>
             {l || ' '}
           </div>
         ))}

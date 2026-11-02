@@ -118,7 +118,7 @@ export function PatchesPage() {
             <Button type="submit" variant="primary" icon={<Search className="size-4" />} loading={scanning} disabled={!canScan}>
               {scanning ? `Scanning… ${Object.keys(run.results).length}/${run.minions.length}` : 'Scan for updates'}
             </Button>
-            <label className="flex items-center gap-2 text-xs text-zinc-500">
+            <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
               <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} className="accent-accent-600" />
               Refresh package index first
             </label>
@@ -130,7 +130,7 @@ export function PatchesPage() {
           </PermNote>
         )}
         {run && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             <span>
               {run.done ? 'Scanned' : 'Started'} {relTime(new Date(run.started))}
             </span>
@@ -200,7 +200,7 @@ export function PatchesPage() {
                 ]}
               />
               <div className="relative min-w-48 flex-1">
-                <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+                <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter packages or minions…" className="pl-9" />
               </div>
               {needing > 0 && run.done && canUpgradeAll && (
@@ -223,7 +223,7 @@ export function PatchesPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                       <th className="py-2.5 pr-3 pl-4 font-medium">Package</th>
                       <th className="px-3 py-2.5 font-medium">Available</th>
                       <th className="px-3 py-2.5 font-medium">Minions</th>
@@ -243,7 +243,7 @@ export function PatchesPage() {
                                 {m}
                               </span>
                             ))}
-                            {p.minions.length > 5 && <span className="text-xs text-zinc-500">+{p.minions.length - 5}</span>}
+                            {p.minions.length > 5 && <span className="text-xs text-zinc-500 dark:text-zinc-400">+{p.minions.length - 5}</span>}
                           </div>
                         </td>
                         <td className="px-3 py-2.5 pr-4 text-right">
@@ -267,10 +267,10 @@ export function PatchesPage() {
             )}
 
             {run.done && (failed.length > 0 || noReturn.length > 0) && (
-              <div className="border-t border-zinc-100 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800">
+              <div className="border-t border-zinc-100 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 {failed.length > 0 && (
                   <p>
-                    Could not list upgrades on <span className="font-mono">{failed.join(', ')}</span> — <Link className="text-accent-600 hover:underline" to={`/jobs/${run.jid}`}>see the job</Link>.
+                    Could not list upgrades on <span className="font-mono">{failed.join(', ')}</span> — <Link className="text-accent-700 hover:underline" to={`/jobs/${run.jid}`}>see the job</Link>.
                   </p>
                 )}
                 {noReturn.length > 0 && (
@@ -305,7 +305,7 @@ export function PatchesPage() {
                 </span>
               ))}
             </div>
-            <p className="text-xs text-amber-600 dark:text-amber-400">Services may restart while packages upgrade.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">Services may restart while packages upgrade.</p>
             <div className="flex justify-end gap-2">
               <Button onClick={() => setPlan(null)}>Cancel</Button>
               <Button variant="success" icon={<Play className="size-4" />} onClick={runPlan}>
@@ -343,7 +343,7 @@ function MinionRow({ id, ups, disabled, onUpgrade }: { id: string; ups: Upgrades
     <li>
       <div className="flex items-center gap-3 px-4 py-2.5">
         <button onClick={() => names.length && setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <ChevronRight className={clsx('size-4 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90', !names.length && 'invisible')} />
+          <ChevronRight className={clsx('size-4 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90', !names.length && 'invisible')} />
           <span className="font-mono text-sm font-medium">{id}</span>
           {names.length ? <Badge tone="amber">{names.length} pending</Badge> : <Badge tone="green">up to date</Badge>}
         </button>
@@ -360,11 +360,11 @@ function MinionRow({ id, ups, disabled, onUpgrade }: { id: string; ups: Upgrades
               {names.map((n) => (
                 <tr key={n}>
                   <td className="py-1 pr-6 font-mono">{n}</td>
-                  <td className="py-1 pr-2 font-mono text-xs text-zinc-500">{current ? current[n] || '?' : '…'}</td>
+                  <td className="py-1 pr-2 font-mono text-xs text-zinc-500 dark:text-zinc-400">{current ? current[n] || '?' : '…'}</td>
                   <td className="py-1 pr-2">
-                    <ArrowRight className="size-3 text-zinc-400" />
+                    <ArrowRight className="size-3 text-zinc-500 dark:text-zinc-400" />
                   </td>
-                  <td className="py-1 font-mono text-xs text-emerald-600 dark:text-emerald-400">{ups[n]}</td>
+                  <td className="py-1 font-mono text-xs text-emerald-700 dark:text-emerald-400">{ups[n]}</td>
                 </tr>
               ))}
             </tbody>

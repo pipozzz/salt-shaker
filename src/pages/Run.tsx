@@ -148,7 +148,7 @@ export function RunPage() {
               </div>
               {!allowed && <PermNote>Your eauth permissions don't allow running {fun.trim()}.</PermNote>}
               {isWrite && allowed && (
-                <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
                   <TriangleAlert className="size-3.5" /> This will change the targeted minions. Add <code className="font-mono">test=True</code> for a dry run.
                 </p>
               )}
@@ -171,7 +171,7 @@ export function RunPage() {
                 }
                 subtitle={<span className="font-mono">jid {run.jid}</span>}
                 actions={
-                  <Link to={`/jobs/${run.jid}`} className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
+                  <Link to={`/jobs/${run.jid}`} className="inline-flex items-center gap-1 text-xs font-medium text-accent-700 hover:underline dark:text-accent-400">
                     Open job <ExternalLink className="size-3" />
                   </Link>
                 }
@@ -189,7 +189,7 @@ export function RunPage() {
         </div>
 
         <Card className="h-fit">
-          <CardHeader title={<span className="flex items-center gap-2"><History className="size-4 text-zinc-400" /> Recent</span>} />
+          <CardHeader title={<span className="flex items-center gap-2"><History className="size-4 text-zinc-500 dark:text-zinc-400" /> Recent</span>} />
           {history.length === 0 ? (
             <p className="p-4 text-sm text-zinc-500">Commands you run appear here.</p>
           ) : (
@@ -208,7 +208,7 @@ export function RunPage() {
                     <p className="truncate font-mono text-xs font-medium">
                       {h.fun} {h.args}
                     </p>
-                    <p className="truncate font-mono text-[11px] text-zinc-500">
+                    <p className="truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
                       {h.tgt_type !== 'glob' && `${h.tgt_type}:`}
                       {h.tgt}
                     </p>

@@ -41,7 +41,7 @@ export function JobHistoryPage() {
         description={
           <>
             Recorded from the master's event bus and kept for {first.data?.retentionDays ?? '…'} days.{' '}
-            <Link to="/jobs?source=master" className="text-accent-600 hover:underline dark:text-accent-400">
+            <Link to="/jobs?source=master" className="text-accent-700 hover:underline dark:text-accent-400">
               Master's job cache
             </Link>
           </>
@@ -68,7 +68,7 @@ export function JobHistoryPage() {
           className="flex gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Function, target, user or jid…" className="pl-9" />
           </div>
           <Button type="submit">Search</Button>
@@ -88,7 +88,7 @@ export function JobHistoryPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">Function</th>
                   <th className="px-3 py-2.5 font-medium">Target</th>
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">By</th>
@@ -108,18 +108,18 @@ export function JobHistoryPage() {
                             {j.fun}
                           </Badge>
                           {j.dryRun && <Badge tone="amber">dry run</Badge>}
-                          <span className="max-w-64 truncate font-mono text-xs text-zinc-500">{formatArgs(parseStoredArgs(j.args)).replace(/\s*test=True/, '')}</span>
+                          <span className="max-w-64 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{formatArgs(parseStoredArgs(j.args)).replace(/\s*test=True/, '')}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs">
-                        {j.targetType && j.targetType !== 'glob' && <span className="text-zinc-400">{j.targetType}:</span>}
+                        {j.targetType && j.targetType !== 'glob' && <span className="text-zinc-500 dark:text-zinc-400">{j.targetType}:</span>}
                         {j.target ?? '—'}
                       </td>
                       <td className="hidden px-3 py-2.5 md:table-cell">
                         {j.shakerUser ? (
                           <span className="font-medium">{j.shakerUser}</span>
                         ) : (
-                          <span className="text-zinc-500" title="Not started through Salt Shaker (e.g. the salt CLI)">
+                          <span className="text-zinc-500 dark:text-zinc-400" title="Not started through Salt Shaker (e.g. the salt CLI)">
                             {j.saltUser ?? '—'} <span className="text-xs">(salt)</span>
                           </span>
                         )}

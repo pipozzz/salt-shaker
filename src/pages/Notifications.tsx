@@ -73,7 +73,7 @@ export function NotificationsPage() {
                     <span className="font-medium">{ch.name}</span>
                     <Badge>{ch.kind === 'slack' ? 'Slack format' : 'JSON webhook'}</Badge>
                   </p>
-                  <p className="mt-0.5 font-mono text-xs text-zinc-500">{ch.url}</p>
+                  <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">{ch.url}</p>
                 </div>
                 <div className="flex max-w-xs flex-wrap gap-1">
                   {ch.events.map((e) => (
@@ -88,11 +88,11 @@ export function NotificationsPage() {
                       Last attempt failed: {ch.lastError.slice(0, 60)}
                     </p>
                   ) : ch.lastSentAt ? (
-                    <p className="text-zinc-500">Last sent {relTime(new Date(ch.lastSentAt))}</p>
+                    <p className="text-zinc-500 dark:text-zinc-400">Last sent {relTime(new Date(ch.lastSentAt))}</p>
                   ) : (
-                    <p className="text-zinc-400">Nothing sent yet</p>
+                    <p className="text-zinc-500 dark:text-zinc-400">Nothing sent yet</p>
                   )}
-                  {tested[ch.id] && <p className="text-emerald-600">{tested[ch.id]}</p>}
+                  {tested[ch.id] && <p className="text-emerald-700">{tested[ch.id]}</p>}
                 </div>
                 <div className="flex gap-1">
                   <Button

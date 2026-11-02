@@ -91,11 +91,11 @@ export function Layout() {
             setMobileOpen(false)
             setPaletteOpen(true)
           }}
-          className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-400 shadow-xs hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-500 shadow-xs dark:text-zinc-400 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
         >
           <Search className="size-4" />
           Search…
-          <kbd className="ml-auto rounded border border-zinc-200 px-1.5 font-sans text-[10px] dark:border-zinc-700">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+          <kbd className="ml-auto rounded border border-zinc-200 px-1.5 font-sans text-[10px] dark:border-zinc-700" aria-hidden>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
         </button>
       </div>
       <nav className="flex-1 space-y-0.5 px-2 py-2">
@@ -116,7 +116,7 @@ export function Layout() {
           >
             {({ isActive }) => (
               <>
-                <Icon className={clsx('size-4', isActive ? 'text-accent-600 dark:text-accent-400' : 'text-zinc-400 group-hover:text-zinc-500')} />
+                <Icon className={clsx('size-4', isActive ? 'text-accent-700 dark:text-accent-400' : 'text-zinc-500 group-hover:text-zinc-600 dark:text-zinc-400')} />
                 {label}
                 {to === '/keys' && pending > 0 && (
                   <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[11px] leading-5 font-semibold text-white tabular-nums">{pending}</span>
@@ -132,7 +132,7 @@ export function Layout() {
         ))}
       </nav>
       <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="mb-2.5 block px-1 text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="mb-2.5 block px-1 text-[11px] text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-300">
           v{VERSION} · {LICENSE_NAME} · Source code
         </a>
         <div className="flex items-center gap-2.5">
@@ -150,10 +150,10 @@ export function Layout() {
               </span>
             </span>
           </button>
-          <button onClick={() => setTheme(nextTheme)} title={`Theme: ${theme}`} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800">
+          <button onClick={() => setTheme(nextTheme)} title={`Theme: ${theme}`} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 dark:text-zinc-400">
             <ThemeIcon className="size-4" />
           </button>
-          <button onClick={logout} title="Log out" className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800">
+          <button onClick={logout} title="Log out" className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 dark:text-zinc-400">
             <LogOut className="size-4" />
           </button>
         </div>
@@ -180,7 +180,7 @@ export function Layout() {
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-zinc-950/40" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-64 bg-zinc-50 shadow-xl dark:bg-zinc-900">
-            <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-3 rounded-md p-1 text-zinc-500" aria-label="Close menu">
+            <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-3 rounded-md p-1 text-zinc-500 dark:text-zinc-400" aria-label="Close menu">
               <X className="size-4" />
             </button>
             {sidebar}

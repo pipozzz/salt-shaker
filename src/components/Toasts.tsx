@@ -48,14 +48,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             {t.tone === 'error' ? <XCircle className="mt-0.5 size-4 shrink-0 text-red-500" /> : <KeyRound className="mt-0.5 size-4 shrink-0 text-amber-500" />}
             <div className="min-w-0 flex-1 text-sm">
               <p className="font-medium">{t.title}</p>
-              {t.body && <p className="mt-0.5 truncate font-mono text-xs text-zinc-500">{t.body}</p>}
+              {t.body && <p className="mt-0.5 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{t.body}</p>}
               {t.link && (
-                <Link to={t.link.to} onClick={() => dismiss(t.key)} className={clsx('mt-1 inline-block text-xs font-medium hover:underline', t.tone === 'error' ? 'text-red-600 dark:text-red-400' : 'text-accent-600 dark:text-accent-400')}>
+                <Link to={t.link.to} onClick={() => dismiss(t.key)} className={clsx('mt-1 inline-block text-xs font-medium hover:underline', t.tone === 'error' ? 'text-red-600 dark:text-red-400' : 'text-accent-700 dark:text-accent-400')}>
                   {t.link.label} →
                 </Link>
               )}
             </div>
-            <button onClick={() => dismiss(t.key)} className="self-start rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" aria-label="Dismiss">
+            <button onClick={() => dismiss(t.key)} className="self-start rounded p-0.5 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 dark:text-zinc-400" aria-label="Dismiss">
               <X className="size-3.5" />
             </button>
           </div>

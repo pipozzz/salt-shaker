@@ -49,7 +49,7 @@ export function EventsPage() {
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800">
           <div className="relative min-w-48 flex-1">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by tag or payload…" className="pl-9 font-mono" />
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -62,7 +62,7 @@ export function EventsPage() {
                   else n.add(c.key)
                   return n
                 })}
-                className={clsx('rounded-full border px-2.5 py-1 text-xs font-medium transition', hidden.has(c.key) ? 'border-zinc-200 text-zinc-400 line-through dark:border-zinc-800' : 'border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300')}
+                className={clsx('rounded-full border px-2.5 py-1 text-xs font-medium transition', hidden.has(c.key) ? 'border-zinc-200 text-zinc-500 line-through dark:border-zinc-800 dark:text-zinc-400' : 'border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300')}
               >
                 {c.label}
               </button>
@@ -95,13 +95,13 @@ function EventRow({ event }: { event: SaltEvent }) {
   return (
     <li>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
-        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90')} />
-        <span className="w-16 shrink-0 font-mono text-xs text-zinc-400 tabular-nums">{stamp && !isNaN(+stamp) ? stamp.toLocaleTimeString() : ''}</span>
+        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90')} />
+        <span className="w-16 shrink-0 font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">{stamp && !isNaN(+stamp) ? stamp.toLocaleTimeString() : ''}</span>
         <Badge tone={cat.tone} className="hidden shrink-0 sm:inline-flex">
           {cat.label}
         </Badge>
         <span className="truncate font-mono text-xs">{event.tag}</span>
-        {'id' in data && <span className="ml-auto shrink-0 font-mono text-xs text-zinc-500">{String(data.id)}</span>}
+        {'id' in data && <span className="ml-auto shrink-0 font-mono text-xs text-zinc-500 dark:text-zinc-400">{String(data.id)}</span>}
       </button>
       {open && (
         <div className="border-t border-zinc-100 bg-zinc-50/60 py-3 pr-4 pl-14 dark:border-zinc-800 dark:bg-zinc-950/40">

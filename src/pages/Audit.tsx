@@ -59,7 +59,7 @@ export function AuditPage() {
           className="flex gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-400" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="User, function, target or jid…" className="pl-9" />
           </div>
           <Button type="submit">Search</Button>
@@ -106,27 +106,27 @@ function Entry({ row }: { row: AuditRow }) {
   return (
     <li>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
-        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90')} />
-        <span className="w-20 shrink-0 text-xs text-zinc-500" title={at.toLocaleString()}>
+        <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90')} />
+        <span className="w-20 shrink-0 text-xs text-zinc-500 dark:text-zinc-400" title={at.toLocaleString()}>
           {relTime(at)}
         </span>
         <span className="w-28 shrink-0 truncate font-mono text-xs font-medium">{row.username}</span>
         <Badge tone={row.outcome === 'ok' ? 'green' : row.outcome === 'denied' ? 'amber' : 'red'}>{row.outcome}</Badge>
         <span className="truncate font-mono text-xs">
           {row.fun}
-          {row.target && <span className="text-zinc-500"> → {row.targetType && row.targetType !== 'glob' ? `${row.targetType}:` : ''}{row.target}</span>}
+          {row.target && <span className="text-zinc-500 dark:text-zinc-400"> → {row.targetType && row.targetType !== 'glob' ? `${row.targetType}:` : ''}{row.target}</span>}
         </span>
-        <span className="ml-auto hidden shrink-0 text-xs text-zinc-400 sm:inline">{row.client}</span>
+        <span className="ml-auto hidden shrink-0 text-xs text-zinc-500 sm:inline dark:text-zinc-400">{row.client}</span>
       </button>
       {open && (
         <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 pl-11 text-xs dark:border-zinc-800 dark:bg-zinc-950/30">
-          <p className="text-zinc-500">
+          <p className="text-zinc-500 dark:text-zinc-400">
             {at.toLocaleString()} · role {row.role ?? '—'} {row.ip && <>· from {row.ip}</>}
             {row.jid && (
               <>
                 {' '}
                 ·{' '}
-                <Link to={`/jobs/${row.jid}`} className="font-mono text-accent-600 hover:underline dark:text-accent-400">
+                <Link to={`/jobs/${row.jid}`} className="font-mono text-accent-700 hover:underline dark:text-accent-400">
                   jid {row.jid}
                 </Link>
               </>

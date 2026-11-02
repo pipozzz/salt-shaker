@@ -170,7 +170,7 @@ export function OrchestratePage() {
               subtitle={orchFiles.length ? 'From orch/ in file_roots' : 'No orch/ directory — showing all SLS'}
               actions={
                 orchFiles.length > 0 && (
-                  <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
                     <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} className="accent-accent-600" />
                     all
                   </label>
@@ -204,9 +204,9 @@ export function OrchestratePage() {
                   <li key={r.jid}>
                     <button onClick={() => openRecent(r)} className="w-full px-4 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                       <p className="truncate font-mono text-xs font-medium">
-                        {r.sls} {r.test && <span className="text-amber-600">test</span>}
+                        {r.sls} {r.test && <span className="text-amber-700">test</span>}
                       </p>
-                      <p className="text-[11px] text-zinc-500">{relTime(new Date(r.at))}</p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{relTime(new Date(r.at))}</p>
                     </button>
                   </li>
                 ))}
@@ -225,7 +225,7 @@ export function OrchestratePage() {
           ) : (
             <Card>
               <CardHeader title={<span className="font-mono">{toSls(selected)}</span>} subtitle={`salt://${selected}`} />
-              <div className="max-h-72 overflow-y-auto border-b border-zinc-100 py-2 dark:border-zinc-800">
+              <div tabIndex={0} role="region" aria-label={`Source of ${toSls(selected)}`} className="max-h-72 overflow-y-auto border-b border-zinc-100 py-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500 dark:border-zinc-800">
                 {source.loading ? <Spinner /> : source.error ? <div className="p-3"><ErrorBox error={source.error} /></div> : <CodeView code={source.data ?? ''} />}
               </div>
               <div className="space-y-3 p-4">
@@ -298,7 +298,7 @@ function OrchResult({ run }: { run: OrchRun }) {
         subtitle={run.jid && <span className="font-mono">jid {run.jid}</span>}
         actions={
           run.jid && (
-            <Link to={`/jobs/${run.jid}`} className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
+            <Link to={`/jobs/${run.jid}`} className="text-xs font-medium text-accent-700 hover:underline dark:text-accent-400">
               Open job
             </Link>
           )
@@ -332,18 +332,18 @@ function StepRow({ index, fn, step }: { index: number; fn: string; step: Step })
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium">{step.__id__}</span>
-            <span className="font-mono text-xs text-zinc-500">salt.{fn}</span>
-            {hasDetail && <span className="text-xs text-zinc-400">· {Object.keys(ret!).length === 1 ? '1 minion' : `${Object.keys(ret!).length} minions`}</span>}
+            <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">salt.{fn}</span>
+            {hasDetail && <span className="text-xs text-zinc-500 dark:text-zinc-400">· {Object.keys(ret!).length === 1 ? '1 minion' : `${Object.keys(ret!).length} minions`}</span>}
           </p>
           {step.comment && <p className="mt-0.5 text-xs whitespace-pre-wrap text-zinc-600 dark:text-zinc-400">{step.comment}</p>}
         </div>
         {step.duration !== undefined && (
-          <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-400 tabular-nums">
+          <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
             <Clock className="size-3" />
             {(step.duration / 1000).toFixed(1)}s
           </span>
         )}
-        <ChevronRight className={clsx('mt-0.5 size-4 shrink-0 text-zinc-400 transition-transform', open && 'rotate-90', !hasDetail && 'invisible')} />
+        <ChevronRight className={clsx('mt-0.5 size-4 shrink-0 text-zinc-500 dark:text-zinc-400 transition-transform', open && 'rotate-90', !hasDetail && 'invisible')} />
       </button>
       {open && ret && (
         <div className="border-t border-zinc-200 bg-zinc-50/50 p-3 dark:border-zinc-800 dark:bg-zinc-950/30">

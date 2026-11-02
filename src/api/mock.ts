@@ -207,7 +207,8 @@ function stateResults(id: string, sls: string[], test: boolean) {
   const out: Record<string, unknown> = {}
   states.forEach(([mod, sid, name, changes], i) => {
     const fail = !test && id === 'web-02' && sid === 'nginx' && mod === 'service'
-    const changed = Object.keys(changes).length > 0 && Math.random() > 0.3
+    // web-01's motd always drifts, so every compliance check has something to remediate; the rest is chance
+    const changed = Object.keys(changes).length > 0 && (id === 'web-01' || Math.random() > 0.3)
     const fun = mod === 'pkg' ? 'installed' : mod === 'service' ? 'running' : mod === 'user' ? 'present' : mod === 'timezone' ? 'system' : 'managed'
     out[`${mod}_|-${sid}_|-${name}_|-${fun}`] = {
       __id__: sid,

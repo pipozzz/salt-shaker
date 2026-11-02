@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { payloadFor } from './notify'
 import { maskUrl } from './routes/automation'
-import { dueAt, lowstateFor, nextRun } from './scheduler'
+import type { Notifier } from './notify'
+import type { SaltService } from './salt'
+import { dueAt, lowstateFor, nextRun, Scheduler } from './scheduler'
+import { openTestDatabase, testDialects } from './testdb'
 import { complianceCounts, complianceMessage, failureSummary, patchSummary } from './summaries'
 
 const sum = (s: object | null) => ({ summary: s ? JSON.stringify(s) : null })
@@ -92,5 +96,45 @@ describe('scheduler', () => {
       fun: 'saltutil.sync_all',
       kwarg: { refresh: true },
     })
+  })
+})
+
+describe.each(testDialects)('scheduler storage (%s)', (dialect) => {
+  let opened: Awaited<ReturnType<typeof openTestDatabase>>
+  beforeAll(async () => {
+    opened = await openTestDatabase(dialect)
+  })
+  afterAll(() => opened.close())
+
+  it('starts a due run on one instance only and summarizes it once the minions return', async () => {
+    const { db, schema } = opened
+    const [s] = await db
+      .insert(schema.schedule)
+      .values({ name: 'nightly', kind: 'compliance', target: '*', targetType: 'glob', cron: '* * * * *', createdAt: new Date(Date.now() - 3600_000) })
+      .returning()
+    const calls: unknown[] = []
+    const salt = { call: async (low: unknown) => (calls.push(low), { jid: 'j1', minions: ['web-01', 'web-02'] }) } as unknown as SaltService
+    const emitted: string[] = []
+    const notifier = { emit: async (event: string) => void emitted.push(event) } as unknown as Notifier
+    const audit = async () => undefined
+    const a = new Scheduler(db, schema, salt, notifier, audit)
+    const b = new Scheduler(db, schema, salt, notifier, audit)
+
+    await Promise.all([a.tick(), b.tick()])
+    expect(calls).toHaveLength(1)
+    const [after] = await db.select().from(schema.schedule).where(eq(schema.schedule.id, s.id))
+    expect(after.lastJid).toBe('j1')
+    expect(after.lastRunAt).not.toBeNull()
+
+    const summary = (x: object) => JSON.stringify({ ok: 1, changed: 0, pending: 0, failed: 0, ...x })
+    await db.insert(schema.jobReturn).values([
+      { jid: 'j1', minion: 'web-01', summary: summary({}), retcode: 0, success: true, returnedAt: new Date() },
+      { jid: 'j1', minion: 'web-02', summary: summary({ pending: 2 }), retcode: 0, success: true, returnedAt: new Date() },
+    ])
+    await Promise.all([a.tick(), b.tick()])
+    const [done] = await db.select().from(schema.schedule).where(eq(schema.schedule.id, s.id))
+    expect(JSON.parse(done.lastSummary!)).toEqual({ ok: 1, drift: 1, error: 0, noreturn: 0 })
+    expect(emitted.sort()).toEqual(['drift', 'schedule'])
+    expect(calls).toHaveLength(1)
   })
 })

@@ -12,7 +12,7 @@ npm run dev             # UI on :5173, proxies /api to the server
 
 | Command | |
 | --- | --- |
-| `npm test` | unit tests (vitest) |
+| `npm test` | unit tests (vitest); the database tests also run on Postgres when `TEST_POSTGRES_URL` is set, as in CI |
 | `npm run lint` / `npm run typecheck` | oxlint / TypeScript |
 | `npm run build` / `npm run build:server` | UI → `dist/`, server bundle → `dist-server/` |
 | `npm run db:generate` | after changing `server/db/schema.*.ts` (keep the SQLite and Postgres schemas in sync), generates migrations for both |

@@ -1,19 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Config } from './config'
-import { openDatabase } from './db'
 import { Leader } from './leader'
-
-let opened: Awaited<ReturnType<typeof openDatabase>>
-
-beforeAll(async () => {
-  // a real in-memory SQLite with all migrations applied
-  opened = await openDatabase({ databaseUrl: 'file::memory:', dialect: 'sqlite' } as Config)
-})
-afterAll(() => opened.close())
+import { openTestDatabase, testDialects } from './testdb'
 
 const noop = { onAcquire: () => undefined, onLose: () => undefined }
 
-describe('Leader', () => {
+describe.each(testDialects)('Leader (%s)', (dialect) => {
+  let opened: Awaited<ReturnType<typeof openTestDatabase>>
+  beforeAll(async () => {
+    opened = await openTestDatabase(dialect)
+  })
+  afterAll(() => opened.close())
+
   it('lets only one instance hold the lease', async () => {
     const a = new Leader(opened.db, opened.schema, 'events', noop, 30_000, 'a')
     const b = new Leader(opened.db, opened.schema, 'events', noop, 30_000, 'b')

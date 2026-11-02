@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import type { Config } from './config'
-import { openDatabase } from './db'
+import { afterEach, describe, expect, it } from 'vitest'
 import { collectMetrics, formatMetrics, keyCounts } from './metrics'
 import type { SaltService } from './salt'
+import { openTestDatabase, testDialects } from './testdb'
 
 describe('formatMetrics', () => {
   it('writes the Prometheus text format with escaped labels', () => {
@@ -26,13 +25,20 @@ describe('keyCounts', () => {
   })
 })
 
-describe('collectMetrics', () => {
+describe.each(testDialects)('collectMetrics (%s)', (dialect) => {
+  let close: (() => Promise<unknown>) | null = null
+  afterEach(async () => {
+    await close?.()
+    close = null
+  })
   const now = new Date('2026-11-02T12:00:00Z')
   const ago = (h: number) => new Date(now.getTime() - h * 3600_000)
   const summary = (s: object) => JSON.stringify({ ok: 0, changed: 0, pending: 0, failed: 0, ...s })
 
   async function setup() {
-    const { db, schema } = await openDatabase({ dialect: 'sqlite', databaseUrl: ':memory:' } as Config)
+    const opened = await openTestDatabase(dialect)
+    close = opened.close
+    const { db, schema } = opened
     await db.insert(schema.job).values([
       { jid: '1', fun: 'state.apply', dryRun: true, minions: '["a","b","c"]', startedAt: ago(2) },
       { jid: '2', fun: 'cmd.run', minions: '["a"]', startedAt: ago(1) },

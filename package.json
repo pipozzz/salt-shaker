@@ -17,7 +17,7 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node24 --external:better-sqlite3 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist-server/index.js && rm -rf dist-server/migrations && cp -r server/db/migrations dist-server/migrations",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node26 --external:better-sqlite3 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist-server/index.js && rm -rf dist-server/migrations && cp -r server/db/migrations dist-server/migrations",
     "start": "node dist-server/index.js",
     "db:generate": "sh -c 'drizzle-kit generate --config drizzle.sqlite.config.ts --name \"${1:-change}\" && drizzle-kit generate --config drizzle.pg.config.ts --name \"${1:-change}\"' --",
     "test:e2e": "playwright test"
@@ -35,7 +35,7 @@
     "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

@@ -6,6 +6,10 @@ updates:
     directory: /
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
+    ignore:
+      # keep the Node typings on the runtime's major; bump them together with the node image and CI
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -32,3 +36,7 @@ updates:
   - package-ecosystem: docker-compose
     directories: [/deploy, /lab]
     schedule: { interval: weekly, day: monday }
+    ignore:
+      # a new Postgres major can't read the old data directory; upgrading needs a dump/restore
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]

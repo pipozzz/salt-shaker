@@ -26,5 +26,5 @@ Every request from a user is checked against their [role](/salt-shaker/reference
 ## Requirements
 
 - **Salt 3006 or newer** on the master, with salt-api (`rest_cherrypy`).
-- Docker, or Node.js 24 to run the server bundle yourself.
+- Docker, or Node.js 26 to run the server bundle yourself.
 - SQLite (built in) or PostgreSQL for the server's database.

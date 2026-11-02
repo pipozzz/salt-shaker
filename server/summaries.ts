@@ -15,15 +15,17 @@ export interface ComplianceCounts {
   noreturn: number
 }
 
-/** Same buckets as the Compliance page: failed or non-state returns are errors. */
+/** One minion's bucket in a compliance check: failed or non-state returns are errors. */
+export function complianceStatus(summary: string | null): 'ok' | 'drift' | 'error' {
+  const s = summary ? (JSON.parse(summary) as { failed: number; pending: number; changed: number }) : null
+  if (!s || s.failed) return 'error'
+  return s.pending + s.changed ? 'drift' : 'ok'
+}
+
+/** Same buckets as the Compliance page. */
 export function complianceCounts(returns: Array<Pick<StoredReturn, 'summary'>>, expectedMinions: number): ComplianceCounts {
   const counts = { ok: 0, drift: 0, error: 0, noreturn: 0 }
-  for (const r of returns) {
-    const s = r.summary ? (JSON.parse(r.summary) as { failed: number; pending: number; changed: number }) : null
-    if (!s || s.failed) counts.error++
-    else if (s.pending + s.changed) counts.drift++
-    else counts.ok++
-  }
+  for (const r of returns) counts[complianceStatus(r.summary)]++
   counts.noreturn = Math.max(0, expectedMinions - returns.length)
   return counts
 }

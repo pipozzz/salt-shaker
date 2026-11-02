@@ -244,6 +244,12 @@ export function minionOutcome(j: Pick<MinionJob, 'returnedAt' | 'retcode' | 'suc
   return 'ok'
 }
 
+export interface MinionCompliance {
+  status: 'ok' | 'drift' | 'error'
+  jid: string
+  checkedAt: string
+}
+
 export const history = {
   jobs: (opts: { q?: string; before?: number; limit?: number } = {}) => {
     const p = new URLSearchParams()
@@ -258,6 +264,8 @@ export const history = {
     p.set('limit', String(opts.limit ?? 50))
     return request<{ rows: MinionJob[]; retentionDays: number }>(`/api/history/minions/${encodeURIComponent(id)}/jobs?${p}`)
   },
+  /** Each minion's result in the latest compliance check it returned from. */
+  minionCompliance: () => request<{ minions: Record<string, MinionCompliance> }>('/api/history/compliance/minions'),
   job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
   compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),
 }

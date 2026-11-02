@@ -3,11 +3,12 @@ import { CircleOff, KeyRound, RefreshCw, Search, Server, TriangleAlert, Wifi, X 
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
+import { history } from '../api/server'
 import type { Grains } from '../api/types'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs } from '../components/ui'
+import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { useSalt } from '../lib/session'
-import { fmtMem } from '../lib/format'
+import { useSalt, useSession } from '../lib/session'
+import { fmtMem, relTime } from '../lib/format'
 
 export function OsIcon({ os }: { os?: string }) {
   const color: Record<string, string> = { Ubuntu: 'bg-orange-500', Debian: 'bg-rose-600', Rocky: 'bg-emerald-700', CentOS: 'bg-violet-600', RedHat: 'bg-red-600', Windows: 'bg-sky-600', MacOS: 'bg-zinc-600' }
@@ -15,6 +16,12 @@ export function OsIcon({ os }: { os?: string }) {
 }
 
 const PAGE = 100
+
+const COMPLIANCE: Record<'ok' | 'drift' | 'error', { tone: Tone; label: string }> = {
+  ok: { tone: 'green', label: 'in compliance' },
+  drift: { tone: 'amber', label: 'drifted' },
+  error: { tone: 'red', label: 'error' },
+}
 
 export function MinionsPage() {
   const salt = useSalt()
@@ -31,6 +38,10 @@ export function MinionsPage() {
     return { grains, keys, masterVersion }
   }, [salt, refreshes])
   const status = useAsync(() => salt.status(), [salt, refreshes])
+  // the latest compliance result per minion is recorded by the server
+  const { session } = useSession()
+  const fromServer = session?.mode === 'server'
+  const compliance = useAsync(() => (fromServer ? history.minionCompliance() : Promise.resolve(null)), [fromServer, refreshes])
   const reload = () => setRefreshes((n) => n + 1)
 
   const rows = useMemo(() => {
@@ -127,6 +138,7 @@ export function MinionsPage() {
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">Minion</th>
                   <th className="px-3 py-2.5 font-medium">OS</th>
+                  {fromServer && <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Compliance</th>}
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">IP</th>
                   <th className="hidden px-3 py-2.5 font-medium lg:table-cell">CPU / RAM</th>
                   <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Roles</th>
@@ -152,6 +164,11 @@ export function MinionsPage() {
                         <span className="text-zinc-500 dark:text-zinc-400">{up ? '—' : 'offline'}</span>
                       )}
                     </td>
+                    {fromServer && (
+                      <td className="hidden px-3 py-2.5 sm:table-cell">
+                        <ComplianceBadge c={compliance.data?.minions[id]} loading={!compliance.data && !compliance.error} />
+                      </td>
+                    )}
                     <td className="hidden px-3 py-2.5 font-mono text-xs text-zinc-600 md:table-cell dark:text-zinc-400">{g.ipv4?.find((ip) => ip !== '127.0.0.1') ?? '—'}</td>
                     <td className="hidden px-3 py-2.5 text-zinc-600 tabular-nums lg:table-cell dark:text-zinc-400">{g.num_cpus ? `${g.num_cpus} vCPU · ${fmtMem(g.mem_total)}` : '—'}</td>
                     <td className="hidden px-3 py-2.5 sm:table-cell">
@@ -181,6 +198,22 @@ export function MinionsPage() {
         {status.error && <p className="border-t border-zinc-100 px-4 py-2 text-xs text-amber-700 dark:border-zinc-800 dark:text-amber-400">Couldn't check which minions respond: {status.error.message}</p>}
       </Card>
     </>
+  )
+}
+
+function ComplianceBadge({ c, loading }: { c?: { status: 'ok' | 'drift' | 'error'; jid: string; checkedAt: string }; loading: boolean }) {
+  if (!c) return <span className="text-xs text-zinc-500 dark:text-zinc-400">{loading ? '' : 'not checked'}</span>
+  const at = new Date(c.checkedAt)
+  const { tone, label } = COMPLIANCE[c.status]
+  return (
+    <Link
+      to={`/jobs/${c.jid}`}
+      onClick={(e) => e.stopPropagation()}
+      title={`Checked ${relTime(at)} (${at.toLocaleString()})`}
+      className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500"
+    >
+      <Badge tone={tone}>{label}</Badge>
+    </Link>
   )
 }
 

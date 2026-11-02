@@ -13,7 +13,8 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { Leader } from './leader'
-import { minionJobs } from './minion-jobs'
+import { latestCompliance, minionJobs } from './minion-jobs'
+import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
 import { automationRoutes } from './routes/automation'
@@ -317,6 +318,12 @@ app.get('/api/history/minions/:id/jobs', async (c) => {
   return c.json({ rows, retentionDays: config.historyDays })
 })
 
+/** Each minion's result in the latest compliance check that it returned from. */
+app.get('/api/history/compliance/minions', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  return c.json({ minions: await latestCompliance(db, schema) })
+})
+
 /** Past compliance checks (dry-run highstates) with per-status minion counts. */
 app.get('/api/history/compliance', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
@@ -331,16 +338,8 @@ app.get('/api/history/compliance', async (c) => {
   const jids = jobs.map((j) => j.jid)
   const rets = jids.length ? await db.select({ jid: schema.jobReturn.jid, summary: schema.jobReturn.summary }).from(schema.jobReturn).where(inArray(schema.jobReturn.jid, jids)) : []
   const runs = jobs.map((j) => {
-    const counts = { ok: 0, drift: 0, error: 0, noreturn: 0 }
     const mine = rets.filter((x) => x.jid === j.jid)
-    for (const x of mine) {
-      const s = x.summary ? (JSON.parse(x.summary) as { failed: number; pending: number; changed: number }) : null
-      if (!s || s.failed) counts.error++
-      else if (s.pending + s.changed) counts.drift++
-      else counts.ok++
-    }
-    const minions = JSON.parse(j.minions ?? '[]') as string[]
-    counts.noreturn = Math.max(0, minions.length - mine.length)
+    const counts = complianceCounts(mine, (JSON.parse(j.minions ?? '[]') as string[]).length)
     return { jid: j.jid, target: j.target, targetType: j.targetType, startedAt: j.startedAt, by: j.shakerUser ?? j.saltUser, args: j.args, counts }
   })
   return c.json({ runs })

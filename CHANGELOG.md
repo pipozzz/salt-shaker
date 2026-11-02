@@ -9,6 +9,7 @@
 
 **Minion history**
 
+- A **Compliance** column on the Minions page shows each minion's result in the latest compliance check it answered, linked to that check.
 - A **Jobs** tab on each minion's page lists the recorded jobs that targeted it, with how each ended on that minion (ok, changed, drift, failed or no return).
 
 **Audit log**

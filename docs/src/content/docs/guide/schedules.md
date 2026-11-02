@@ -33,6 +33,9 @@ With several server instances on one database, each scheduled run still starts e
 | Every scheduled run | any schedule finished, with its summary |
 | Failed jobs | a job failed on any minion; failures of one job are combined into one alert |
 | Pending keys | a new minion is waiting for approval; at most once every 6 hours per minion |
+| Minions down | a minion missed two checks in a row (`manage.status`, every 5 minutes by default), and again once it answers |
+
+Minions that are already down when the server starts are not reported, only the ones that go down while it is watching. Set `PRESENCE_CHECK_MINUTES` to change the interval, or to `0` to turn the check off.
 
 There are two formats:
 

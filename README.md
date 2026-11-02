@@ -105,6 +105,7 @@ For a complete setup with automatic HTTPS (Caddy), use [`deploy/`](deploy): copy
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
 | `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
+| `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert; `0` turns it off |
 | `TZ` | `UTC` in the image | time zone for schedules, e.g. `Europe/Bratislava` |
 
 The database schema is migrated on start, for both SQLite and Postgres.

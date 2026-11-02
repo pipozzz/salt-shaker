@@ -7,6 +7,14 @@
 - "Retry N failed" on run results and job details fills in Run with the minions that failed or never returned, as a list target, with the original function and arguments. You review it and start it.
 - Download a job's results as CSV (one row per minion, with state counts) or JSON.
 
+**Alerts**
+
+- New notification event *Minions down*: the server checks every 5 minutes which minions respond and alerts when one misses two checks in a row, and again when it is back. `PRESENCE_CHECK_MINUTES` sets the interval.
+
+**Fixes**
+
+- The Minions page no longer fails to show who is responding while a minion is down. The timeout for `manage.status` now goes to the runner instead of capping salt-api's request.
+
 **Minion history**
 
 - A **Compliance** column on the Minions page shows each minion's result in the latest compliance check it answered, linked to that check.

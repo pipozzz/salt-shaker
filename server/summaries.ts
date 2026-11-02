@@ -111,3 +111,21 @@ export function jobFailedMessage(fun: string, failedMinions: string[], by: strin
 export function pendingKeyMessage(id: string): Message {
   return { title: `New minion waiting for approval: ${id}`, lines: ['Check its key fingerprint before accepting it.'], severity: 'warning', path: '/keys' }
 }
+
+export function minionsDownMessage(ids: string[]): Message {
+  return {
+    title: ids.length === 1 ? `Minion stopped responding: ${ids[0]}` : `${minions(ids.length)} stopped responding`,
+    lines: [...(ids.length > 1 ? [`Minions: ${list(ids)}`] : []), 'It did not answer the last two checks (manage.status).'],
+    severity: 'error',
+    path: ids.length === 1 ? `/minions/${encodeURIComponent(ids[0])}` : '/',
+  }
+}
+
+export function minionsUpMessage(ids: string[]): Message {
+  return {
+    title: ids.length === 1 ? `Minion is responding again: ${ids[0]}` : `${minions(ids.length)} are responding again`,
+    lines: ids.length > 1 ? [`Minions: ${list(ids)}`] : [],
+    severity: 'info',
+    path: ids.length === 1 ? `/minions/${encodeURIComponent(ids[0])}` : '/',
+  }
+}

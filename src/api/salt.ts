@@ -87,7 +87,9 @@ export class SaltApi {
 
   // ---- minions ----
   status() {
-    return this.runner<{ up: string[]; down: string[] }>('manage.status', { timeout: 3 })
+    // as kwarg: a top-level `timeout` is salt-api's own limit for the runner, which then answers
+    // 504 whenever a minion is down instead of waiting for manage.status to give up on it
+    return this.runner<{ up: string[]; down: string[] }>('manage.status', { kwarg: { timeout: 3, gather_job_timeout: 3 } })
   }
   grains(tgt = '*', tgt_type: TargetType = 'glob') {
     return this.local<Grains>(tgt, 'grains.items', [], {}, tgt_type)

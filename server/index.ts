@@ -17,6 +17,7 @@ import { latestCompliance, minionJobs } from './minion-jobs'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
+import { PresenceWatcher } from './presence'
 import { automationRoutes } from './routes/automation'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
@@ -53,9 +54,19 @@ const history = new HistoryRecorder(db, schema, salt, config.historyDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
-// with several instances on one database, only the lease holder follows the event bus, so jobs
-// are recorded once and event alerts aren't duplicated
-const eventsLeader = new Leader(db, schema, 'events', { onAcquire: () => history.start(), onLose: () => history.stop() })
+const presence = new PresenceWatcher(salt, notifier, config.presenceMinutes * 60_000)
+// with several instances on one database, only the lease holder follows the event bus and watches
+// for minions going down, so jobs are recorded once and alerts aren't duplicated
+const eventsLeader = new Leader(db, schema, 'events', {
+  onAcquire: () => {
+    history.start()
+    presence.start()
+  },
+  onLose: () => {
+    history.stop()
+    presence.stop()
+  },
+})
 eventsLeader.start()
 
 const app = new Hono<Env>()

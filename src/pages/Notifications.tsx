@@ -11,6 +11,7 @@ const EVENT_SHORT: Record<NotifyEvent, string> = {
   schedule: 'Every scheduled run',
   job_failed: 'Failed jobs',
   pending_key: 'Pending keys',
+  minion_down: 'Minions down',
 }
 
 export function NotificationsPage() {
@@ -149,7 +150,7 @@ function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel 
   const [name, setName] = useState(channel?.name ?? '')
   const [kind, setKind] = useState<Channel['kind']>(channel?.kind ?? 'slack')
   const [url, setUrl] = useState('')
-  const [chosen, setChosen] = useState<Set<NotifyEvent>>(new Set(channel?.events ?? ['drift', 'job_failed', 'pending_key']))
+  const [chosen, setChosen] = useState<Set<NotifyEvent>>(new Set(channel?.events ?? ['drift', 'job_failed', 'pending_key', 'minion_down']))
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 

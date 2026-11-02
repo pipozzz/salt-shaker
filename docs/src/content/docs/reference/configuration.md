@@ -18,6 +18,7 @@ The server is configured with environment variables.
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
 | `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
+| `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert; `0` turns it off |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/), e.g. `Europe/Bratislava` |
 | `PASSWORD_LOGIN` | `all` | `admins` allows passwords for admins only, as a break-glass next to [SSO](/salt-shaker/deploy/sso/) |
 | `METRICS_TOKEN` | off | bearer token for the Prometheus endpoint `/metrics`, see [Monitoring](/salt-shaker/deploy/monitoring/) |

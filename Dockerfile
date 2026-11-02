@@ -1,5 +1,5 @@
 # Production image: the Salt Shaker server (Hono on Node) serving the built UI and the API.
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 # toolchain in case better-sqlite3 has no prebuilt binary for this platform
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
@@ -10,7 +10,7 @@ RUN npm run build && npm run build:server
 # the server is bundled into one file; only the native SQLite driver stays external
 RUN mkdir -p /runtime/node_modules && cp -r node_modules/better-sqlite3 /runtime/node_modules/
 
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 DATA_DIR=/data STATIC_DIR=/app/dist
 COPY --from=build /runtime/node_modules ./node_modules

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.1.0
+
+**Faster with large fleets**
+
+- The Minions page reads grains from the master's minion data cache instead of running `grains.items` on every minion. It shows up at once, puts no load on the minions, and offline minions keep their last known OS and IPs. With one minion offline in the lab: 15.1 s before, 0.19 s now.
+- The server sends only the grains the overview uses, cached for 15 seconds and shared by all users.
+- Up/down status fills in when `manage.status` answers, instead of holding up the page. The table shows 100 minions at a time.
+- `?demo=large` opens the demo with 606 minions.
+
+**Images and runtime**
+
+- Docker images for `linux/amd64` and `linux/arm64` (Apple Silicon, Graviton, Raspberry Pi).
+- Node 26 in the image and in CI.
+
+**Deploying**
+
+- Documentation site at https://pipozzz.github.io/salt-shaker/, covering setup, single sign-on, schedules, roles and configuration.
+- Compose setups in `deploy/` for Postgres and for SQLite, both behind Caddy with automatic HTTPS.
+- `sharedsecret` is the recommended eauth for the service account and the Compose default.
+
+**Quality**
+
+- Browser tests (Playwright) run in CI before an image is published.
+- Lint fails on any warning, and all of them are fixed.
+- Dependabot keeps npm packages, GitHub Actions and images up to date. It leaves Postgres major versions, which need a dump/restore, to you.
+
 ## 1.0.0
 
 The first release.

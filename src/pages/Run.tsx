@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
-import { ResultView } from '../components/ResultView'
+import { ResultActions, ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, Modal, PageHeader, PermNote } from '../components/ui'
 import { confirmLevel } from '../lib/risk'
@@ -43,6 +43,8 @@ export function RunPage() {
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [matched, setMatched] = useState<string[] | null>(null)
+  // what the current results came from, so "Retry failed" repeats that even if the form changed since
+  const [ranWith, setRanWith] = useState<{ fun: string; args: string; tgt: string; tgtType: TargetType } | null>(null)
 
   const loadFunctions = async () => {
     if (functions.length) return
@@ -80,6 +82,7 @@ export function RunPage() {
     try {
       const { arg, kwarg } = parseArgs(args)
       await start(tgt, tgtType, fun.trim(), arg, kwarg)
+      setRanWith({ fun: fun.trim(), args, tgt, tgtType })
       setHistory((h) => [{ tgt, tgt_type: tgtType, fun, args, at: Date.now() }, ...h.filter((x) => !(x.tgt === tgt && x.fun === fun && x.args === args && x.tgt_type === tgtType))].slice(0, 12))
     } catch (err) {
       setError(err as Error)
@@ -89,6 +92,17 @@ export function RunPage() {
   }
 
   const returned = run ? Object.keys(run.results).length : 0
+
+  // fills the form in for another run on just these minions; the user reviews and starts it
+  const retry = (minions: string[]) => {
+    if (ranWith) {
+      setFun(ranWith.fun)
+      setArgs(ranWith.args)
+    }
+    setTgt(minions.join(','))
+    setTgtType('list')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <>
@@ -171,9 +185,19 @@ export function RunPage() {
                 }
                 subtitle={<span className="font-mono">jid {run.jid}</span>}
                 actions={
-                  <Link to={`/jobs/${run.jid}`} className="inline-flex items-center gap-1 text-xs font-medium text-accent-700 hover:underline dark:text-accent-400">
-                    Open job <ExternalLink className="size-3" />
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {run.done && (
+                      <ResultActions
+                        job={{ jid: run.jid, fun: run.fun, target: ranWith?.tgt, targetType: ranWith?.tgtType }}
+                        results={run.results}
+                        expected={run.minions}
+                        onRetry={retry}
+                      />
+                    )}
+                    <Link to={`/jobs/${run.jid}`} className="inline-flex items-center gap-1 text-xs font-medium text-accent-700 hover:underline dark:text-accent-400">
+                      Open job <ExternalLink className="size-3" />
+                    </Link>
+                  </div>
                 }
               />
               <div className="p-3">

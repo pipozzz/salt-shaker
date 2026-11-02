@@ -1,7 +1,7 @@
 import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
-import { ResultView } from '../components/ResultView'
+import { ResultActions, ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { history, parseStoredArgs } from '../api/server'
@@ -43,11 +43,14 @@ export function JobDetailPage() {
   const missing = (data?.Minions ?? []).filter((m) => !(m in results))
   const target = Array.isArray(data?.Target) ? data.Target.join(',') : data?.Target
 
-  const rerun = () => {
+  const rerun = (minions?: string[]) => {
     if (!data) return
     const args = formatArgs(data.Arguments)
-    navigate(`/run?tgt=${encodeURIComponent(target ?? '*')}&tgt_type=${data['Target-type']}&fun=${encodeURIComponent(data.Function)}&args=${encodeURIComponent(args)}`)
+    const tgt = minions ? minions.join(',') : (target ?? '*')
+    const tgtType = minions ? 'list' : data['Target-type']
+    navigate(`/run?tgt=${encodeURIComponent(tgt)}&tgt_type=${tgtType}&fun=${encodeURIComponent(data.Function)}&args=${encodeURIComponent(args)}`)
   }
+  const canRerun = !!data && !/^(wheel|runner)\./.test(data.Function) && can('local', data.Function)
 
   return (
     <>
@@ -68,8 +71,8 @@ export function JobDetailPage() {
               </div>
               <p className="mt-2 font-mono text-xs text-zinc-500">jid {jid}</p>
             </div>
-            {!/^(wheel|runner)\./.test(data.Function) && can('local', data.Function) && (
-              <Button icon={<RotateCcw className="size-4" />} onClick={rerun}>
+            {canRerun && (
+              <Button icon={<RotateCcw className="size-4" />} onClick={() => rerun()}>
                 Run again
               </Button>
             )}
@@ -90,7 +93,22 @@ export function JobDetailPage() {
           </dl>
 
           <Card>
-            <CardHeader title="Results" actions={<Button size="sm" variant="ghost" onClick={reload} loading={loading}>Refresh</Button>} />
+            <CardHeader
+              title="Results"
+              actions={
+                <div className="flex flex-wrap items-center gap-1">
+                  <ResultActions
+                    job={{ jid, fun: data.Function, target, targetType: data['Target-type'] }}
+                    results={results}
+                    expected={data.Minions ?? []}
+                    onRetry={canRerun ? (m) => rerun(m) : undefined}
+                  />
+                  <Button size="sm" variant="ghost" onClick={reload} loading={loading}>
+                    Refresh
+                  </Button>
+                </div>
+              }
+            />
             <div className="p-3">
               {Object.keys(results).length === 0 && missing.length === 0 ? (
                 <p className="p-4 text-sm text-zinc-500">No returns stored for this job.</p>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 /** Opens the demo; ?demo signs in to the mock master directly. */
 async function openDemo(page: Page, path = '/') {
@@ -87,4 +88,24 @@ test('orchestrate selects the first orchestration and dry-runs it', async ({ pag
   await page.getByRole('button', { name: 'Dry-run orchestration' }).click()
   await expect(page.getByText('succeeded')).toBeVisible()
   await expect(page.locator('li', { hasText: 'apply_common' }).getByText('salt.state')).toBeVisible()
+})
+
+test('failed minions can be retried and results downloaded', async ({ page }) => {
+  await openDemo(page, '/run?tgt=web-*&fun=nope.missing')
+  await page.getByRole('button', { name: 'Run on 2' }).click()
+  await expect(page.getByText('2/2 returned')).toBeVisible()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download results as CSV' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^job-\d+\.csv$/)
+  const csv = await readFile(await file.path(), 'utf8')
+  expect(csv).toContain("web-01,failed,,,,,'nope.missing' is not available.")
+
+  // change the form, then retry: it targets the failed minions with the original function
+  await page.getByLabel('Function').fill('test.ping')
+  await page.getByRole('button', { name: 'Retry 2 failed' }).click()
+  await expect(page.getByLabel('Target')).toHaveValue('web-01,web-02')
+  await expect(page.getByLabel('Match by')).toHaveValue('list')
+  await expect(page.getByLabel('Function')).toHaveValue('nope.missing')
 })

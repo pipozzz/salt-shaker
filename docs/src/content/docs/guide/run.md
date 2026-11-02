@@ -12,6 +12,8 @@ sidebar: { order: 5 }
 - Results stream in live. State output is rendered with diffs.
 - Risky commands on many minions need an explicit confirmation.
 - Targets can be saved and reused.
+- When some minions fail or don't return, **Retry failed** fills the form in again with just those minions (a list target) and the same function and arguments. Nothing runs until you start it.
+- Results can be downloaded as CSV (one row per minion, with state counts) or JSON.
 
 ## Orchestrate
 

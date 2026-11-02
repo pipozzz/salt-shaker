@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { CheckCircle2, ChevronRight, CircleDashed, Clock, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronRight, CircleDashed, Clock, Download, Loader2, RotateCcw, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { JsonView } from './JsonView'
 import { asStates, isFailure, stateSummary } from '../lib/states'
+import { download, resultsCsv, resultsJson, retryTargets } from '../lib/export'
 import { usePaged } from '../lib/hooks'
-import { Badge, ShowMore, Tabs } from './ui'
+import { Badge, Button, ShowMore, Tabs } from './ui'
 
 type Show = 'all' | 'failed' | 'waiting'
 
@@ -42,6 +43,40 @@ export function ResultView({ results, expected }: { results: Record<string, unkn
       ))}
       {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">None</p>}
       <ShowMore paged={paged} />
+    </div>
+  )
+}
+
+/**
+ * Follow-ups for a finished job: run it again on the minions that failed or never returned
+ * (when the caller can), and save the results as CSV or JSON.
+ */
+export function ResultActions({
+  job,
+  results,
+  expected,
+  onRetry,
+}: {
+  job: { jid: string; fun: string; target?: string; targetType?: string }
+  results: Record<string, unknown>
+  expected: string[]
+  onRetry?: (minions: string[]) => void
+}) {
+  const retry = useMemo(() => retryTargets(results, expected), [results, expected])
+  const name = `job-${job.jid}`
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {onRetry && retry.length > 0 && (
+        <Button size="sm" icon={<RotateCcw className="size-3.5" />} onClick={() => onRetry(retry)} title={retry.join(', ')}>
+          Retry {retry.length} failed
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />} onClick={() => download(`${name}.csv`, 'text/csv', resultsCsv(results, expected))} aria-label="Download results as CSV">
+        CSV
+      </Button>
+      <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />} onClick={() => download(`${name}.json`, 'application/json', resultsJson(job, results, expected))} aria-label="Download results as JSON">
+        JSON
+      </Button>
     </div>
   )
 }

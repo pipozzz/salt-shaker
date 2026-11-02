@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Job follow-ups**
+
+- "Retry N failed" on run results and job details fills in Run with the minions that failed or never returned, as a list target, with the original function and arguments. You review it and start it.
+- Download a job's results as CSV (one row per minion, with state counts) or JSON.
+
 **Monitoring**
 
 - Prometheus endpoint `/metrics`, enabled with `METRICS_TOKEN`: master reachability, minion keys by status, the latest compliance check, job failures in the last 24 hours and the state of each schedule. See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/) for the metrics and example alerts.

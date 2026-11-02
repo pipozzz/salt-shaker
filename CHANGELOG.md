@@ -1,33 +1,26 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
-**Job follow-ups**
+**Monitoring and alerts**
 
-- "Retry N failed" on run results and job details fills in Run with the minions that failed or never returned, as a list target, with the original function and arguments. You review it and start it.
-- Download a job's results as CSV (one row per minion, with state counts) or JSON.
-
-**Alerts**
-
+- Prometheus endpoint `/metrics`, enabled with `METRICS_TOKEN`: master reachability, minion keys by status, the latest compliance check, job failures in the last 24 hours and the state of each schedule. See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/) for the metrics and example alerts.
 - New notification event *Minions down*: the server checks every 5 minutes which minions respond and alerts when one misses two checks in a row, and again when it is back. `PRESENCE_CHECK_MINUTES` sets the interval.
-
-**Fixes**
-
-- The Minions page no longer fails to show who is responding while a minion is down. The timeout for `manage.status` now goes to the runner instead of capping salt-api's request.
 
 **Minion history**
 
 - A **Compliance** column on the Minions page shows each minion's result in the latest compliance check it answered, linked to that check.
 - A **Jobs** tab on each minion's page lists the recorded jobs that targeted it, with how each ended on that minion (ok, changed, drift, failed or no return).
 
+**Job follow-ups**
+
+- "Retry N failed" on run results and job details fills in Run with the minions that failed or never returned, as a list target, with the original function and arguments. You review it and start it.
+- Download a job's results as CSV (one row per minion, with state counts) or JSON.
+
 **Audit log**
 
 - Filter by outcome and by date (whole days in UTC), alongside the text search.
 - **Export CSV** downloads every entry that matches the filter, for reviews and auditors.
-
-**Monitoring**
-
-- Prometheus endpoint `/metrics`, enabled with `METRICS_TOKEN`: master reachability, minion keys by status, the latest compliance check, job failures in the last 24 hours and the state of each schedule. See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/) for the metrics and example alerts.
 
 **Accessibility**
 
@@ -38,6 +31,14 @@
 **Large fleets**
 
 - Enrollment, run results and the compliance list show long lists in pages, so pages with hundreds of minions stay responsive.
+
+**Fixes**
+
+- The Minions page no longer fails to show who is responding while a minion is down. The timeout for `manage.status` now goes to the runner instead of capping salt-api's request.
+
+**Quality**
+
+- The server's database tests run on Postgres as well as SQLite in CI.
 
 ## 1.1.0
 

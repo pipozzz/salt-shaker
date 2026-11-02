@@ -1,21 +1,23 @@
 import clsx from 'clsx'
-import { ChevronRight, RefreshCw, ScrollText, Search } from 'lucide-react'
+import { ChevronRight, Download, RefreshCw, ScrollText, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { auditLog, type AuditRow } from '../api/server'
+import { auditExportUrl, auditLog, type AuditFilter, type AuditRow } from '../api/server'
 import { JsonView } from '../components/JsonView'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
+import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { relTime } from '../lib/format'
 
 const PAGE = 100
 
 export function AuditPage() {
-  const [query, setQuery] = useState('')
-  const [applied, setApplied] = useState('')
+  const [form, setForm] = useState<AuditFilter>({ q: '', outcome: '', from: '', to: '' })
+  const [applied, setApplied] = useState<AuditFilter>({})
   const [older, setOlder] = useState<AuditRow[]>([])
   const [loadingMore, setLoadingMore] = useState(false)
-  const first = useAsync(() => auditLog({ q: applied, limit: PAGE }), [applied])
+  const first = useAsync(() => auditLog({ ...applied, limit: PAGE }), [applied])
+  const filtered = Object.values(applied).some(Boolean)
+  const set = (k: keyof AuditFilter) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const rows = [...(first.data?.rows ?? []), ...older]
   const canLoadMore = (first.data?.rows.length ?? 0) === PAGE && (older.length === 0 || older.length % PAGE === 0)
@@ -25,7 +27,7 @@ export function AuditPage() {
     if (!last) return
     setLoadingMore(true)
     try {
-      const res = await auditLog({ q: applied, before: last.id, limit: PAGE })
+      const res = await auditLog({ ...applied, before: last.id, limit: PAGE })
       setOlder((o) => [...o, ...res.rows])
     } finally {
       setLoadingMore(false)
@@ -38,15 +40,20 @@ export function AuditPage() {
         title="Audit log"
         description="Every call that could change something, who made it and how it ended — including attempts the user's role did not allow."
         actions={
-          <Button
-            icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
-            onClick={() => {
-              setOlder([])
-              void first.reload()
-            }}
-          >
-            Refresh
-          </Button>
+          <>
+            <ButtonLink href={auditExportUrl(applied)} download icon={<Download className="size-4" />} title={filtered ? 'Every entry matching the filter, as CSV' : 'Every entry, as CSV'}>
+              Export CSV
+            </ButtonLink>
+            <Button
+              icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
+              onClick={() => {
+                setOlder([])
+                void first.reload()
+              }}
+            >
+              Refresh
+            </Button>
+          </>
         }
       />
       <Card>
@@ -54,14 +61,22 @@ export function AuditPage() {
           onSubmit={(e) => {
             e.preventDefault()
             setOlder([])
-            setApplied(query.trim())
+            setApplied({ ...form, q: form.q?.trim() })
           }}
-          className="flex gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
+          className="flex flex-wrap gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >
-          <div className="relative flex-1">
+          <div className="relative w-full sm:w-auto sm:min-w-48 sm:flex-1">
             <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="User, function, target or jid…" className="pl-9" />
+            <Input value={form.q} onChange={set('q')} placeholder="User, function, target or jid…" aria-label="Search" className="pl-9" />
           </div>
+          <Select value={form.outcome} onChange={set('outcome')} aria-label="Outcome" className="sm:w-40">
+            <option value="">Any outcome</option>
+            <option value="ok">ok</option>
+            <option value="denied">denied</option>
+            <option value="error">error</option>
+          </Select>
+          <Input type="date" value={form.from} onChange={set('from')} aria-label="From (UTC)" title="From (UTC)" className="sm:w-40" />
+          <Input type="date" value={form.to} onChange={set('to')} aria-label="To (UTC)" title="To (UTC), inclusive" className="sm:w-40" />
           <Button type="submit">Search</Button>
         </form>
         {first.error && (
@@ -71,7 +86,7 @@ export function AuditPage() {
         )}
         {first.loading && !first.data && <Spinner />}
         {first.data && rows.length === 0 && (
-          <Empty icon={<ScrollText />} title={applied ? 'Nothing matches' : 'No entries yet'}>
+          <Empty icon={<ScrollText />} title={filtered ? 'Nothing matches' : 'No entries yet'}>
             Actions taken through Salt Shaker show up here.
           </Empty>
         )}

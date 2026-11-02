@@ -7,6 +7,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from 'hono'
+import { auditCsv, auditFilter, auditWhere } from './audit'
 import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
@@ -208,21 +209,29 @@ app.get('/api/salt/events', async (c) => {
   }
 })
 
+const canReadAudit = (user: SessionUser | null) => user?.role === 'admin' || user?.role === 'operator'
+
 app.get('/api/audit', async (c) => {
   const user = c.get('user')
   if (!user) return c.json({ error: 'Not signed in' }, 401)
-  if (user.role !== 'admin' && user.role !== 'operator') return c.json({ error: 'Admins and operators only' }, 403)
+  if (!canReadAudit(user)) return c.json({ error: 'Admins and operators only' }, 403)
   const limit = Math.min(Number(c.req.query('limit') ?? 100) || 100, 500)
-  const before = Number(c.req.query('before')) || null
-  const q = c.req.query('q')?.trim()
   const t = schema.auditLog
-  const where = and(
-    before ? lt(t.id, before) : undefined,
-    // lower() on both sides: LIKE is case-insensitive in SQLite but not in Postgres
-    q ? or(...[t.username, t.fun, t.target].map((col) => like(sql`lower(${col})`, `%${q.toLowerCase()}%`)), eq(t.jid, q)) : undefined,
-  )
-  const rows = await db.select().from(t).where(where).orderBy(desc(t.id)).limit(limit)
+  const rows = await db.select().from(t).where(auditWhere(schema, auditFilter((k) => c.req.query(k)))).orderBy(desc(t.id)).limit(limit)
   return c.json({ rows })
+})
+
+const AUDIT_EXPORT_MAX = 100_000
+
+app.get('/api/audit/export', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  if (!canReadAudit(user)) return c.json({ error: 'Admins and operators only' }, 403)
+  const t = schema.auditLog
+  const filter = { ...auditFilter((k) => c.req.query(k)), before: null }
+  const rows = await db.select().from(t).where(auditWhere(schema, filter)).orderBy(desc(t.id)).limit(AUDIT_EXPORT_MAX)
+  const name = `audit-${new Date().toISOString().slice(0, 10)}.csv`
+  return c.body(auditCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
 })
 
 // ---- fleet: grains from the master's minion data cache, trimmed and shared ----

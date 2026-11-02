@@ -1,8 +1,19 @@
 import clsx from 'clsx'
 import { AlertTriangle, Check, Copy, Loader2, Lock, X } from 'lucide-react'
-import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useEffect, useState, type ButtonHTMLAttributes, type AnchorHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
+
+const buttonCls = (variant: Variant = 'secondary', size: 'sm' | 'md' = 'md') =>
+  clsx(
+    'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 disabled:cursor-not-allowed disabled:opacity-50',
+    size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
+    variant === 'primary' && 'bg-accent-700 text-white shadow-sm hover:bg-accent-800',
+    variant === 'secondary' && 'border border-zinc-200 bg-white text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800',
+    variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/70',
+    variant === 'danger' && 'border border-red-200 bg-white text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50',
+    variant === 'success' && 'bg-emerald-700 text-white shadow-sm hover:bg-emerald-800',
+  )
 
 export function Button({
   variant = 'secondary',
@@ -18,20 +29,21 @@ export function Button({
     <button
       {...rest}
       disabled={disabled || loading}
-      className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
-        variant === 'primary' && 'bg-accent-700 text-white shadow-sm hover:bg-accent-800',
-        variant === 'secondary' && 'border border-zinc-200 bg-white text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800',
-        variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/70',
-        variant === 'danger' && 'border border-red-200 bg-white text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50',
-        variant === 'success' && 'bg-emerald-700 text-white shadow-sm hover:bg-emerald-800',
-        className,
-      )}
+      className={clsx(buttonCls(variant, size), className)}
     >
       {loading ? <Loader2 className="size-4 animate-spin" /> : icon}
       {children}
     </button>
+  )
+}
+
+/** A link that looks like a button, e.g. for downloads the browser should handle. */
+export function ButtonLink({ variant, size, icon, className, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: Variant; size?: 'sm' | 'md'; icon?: ReactNode }) {
+  return (
+    <a {...rest} className={clsx(buttonCls(variant, size), className)}>
+      {icon}
+      {children}
+    </a>
   )
 }
 

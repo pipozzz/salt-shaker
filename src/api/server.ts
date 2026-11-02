@@ -154,13 +154,28 @@ export interface AuditRow {
   ip: string | null
 }
 
-export const auditLog = (opts: { q?: string; before?: number; limit?: number } = {}) => {
+export interface AuditFilter {
+  q?: string
+  outcome?: '' | AuditRow['outcome']
+  from?: string
+  to?: string
+}
+
+const auditParams = (f: AuditFilter) => {
   const p = new URLSearchParams()
-  if (opts.q) p.set('q', opts.q)
+  for (const k of ['q', 'outcome', 'from', 'to'] as const) if (f[k]) p.set(k, f[k])
+  return p
+}
+
+export const auditLog = (opts: AuditFilter & { before?: number; limit?: number } = {}) => {
+  const p = auditParams(opts)
   if (opts.before) p.set('before', String(opts.before))
   p.set('limit', String(opts.limit ?? 100))
   return request<{ rows: AuditRow[] }>(`/api/audit?${p}`)
 }
+
+/** Where the browser downloads every entry matching a filter as CSV. */
+export const auditExportUrl = (f: AuditFilter) => `/api/audit/export?${auditParams(f)}`
 
 // ---- history (recorded by the server from the event bus) ----
 

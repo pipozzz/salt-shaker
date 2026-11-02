@@ -1,3 +1,4 @@
+import { toCsv } from './csv'
 import { isFailure, stateSummary } from './states'
 
 /** Minions to run again after a job: those whose return failed, then those that never returned. */
@@ -7,17 +8,10 @@ export function retryTargets(results: Record<string, unknown>, expected: string[
   return [...new Set([...failed, ...missing])]
 }
 
-const cell = (v: unknown) => {
-  const s = v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v)
-  // quote everything that could break a row, and defuse leading formula characters for spreadsheets
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
-  return /[",\n\r]/.test(safe) || safe !== s ? `"${safe.replace(/"/g, '""')}"` : safe
-}
-
 /** One row per minion: status, state counts for state runs, and the raw return otherwise. */
 export function resultsCsv(results: Record<string, unknown>, expected: string[] = []) {
   const ids = [...new Set([...expected, ...Object.keys(results)])].sort()
-  const rows = [['minion', 'status', 'ok', 'changed', 'pending', 'failed', 'return']]
+  const rows: unknown[][] = [['minion', 'status', 'ok', 'changed', 'pending', 'failed', 'return']]
   for (const id of ids) {
     if (!(id in results)) {
       rows.push([id, 'no return', '', '', '', '', ''])
@@ -29,7 +23,7 @@ export function resultsCsv(results: Record<string, unknown>, expected: string[] 
     if (sum) rows.push([id, status, String(sum.ok), String(sum.changed), String(sum.pending), String(sum.failed), ''])
     else rows.push([id, status, '', '', '', '', typeof ret === 'string' ? ret : JSON.stringify(ret)])
   }
-  return rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
+  return toCsv(rows)
 }
 
 /** Everything about a job in one JSON document, with "no return" made explicit. */

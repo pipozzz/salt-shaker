@@ -7,6 +7,10 @@
 - "Retry N failed" on run results and job details fills in Run with the minions that failed or never returned, as a list target, with the original function and arguments. You review it and start it.
 - Download a job's results as CSV (one row per minion, with state counts) or JSON.
 
+**Minion history**
+
+- A **Jobs** tab on each minion's page lists the recorded jobs that targeted it, with how each ended on that minion (ok, changed, drift, failed or no return).
+
 **Audit log**
 
 - Filter by outcome and by date (whole days in UTC), alongside the text search.

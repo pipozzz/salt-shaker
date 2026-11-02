@@ -212,6 +212,38 @@ export interface ComplianceRun {
   counts: { ok: number; drift: number; error: number; noreturn: number }
 }
 
+/** A recorded job seen from one minion: the job plus that minion's return, if it came. */
+export interface MinionJob {
+  jid: string
+  fun: string
+  args: string | null
+  target: string | null
+  targetType: string | null
+  saltUser: string | null
+  shakerUser: string | null
+  dryRun: boolean
+  startedAt: string
+  returnedAt: string | null
+  retcode: number | null
+  success: boolean | null
+  summary: string | null
+}
+
+/** How a job ended on one minion. Dry runs with pending changes count as drift. */
+export function minionOutcome(j: Pick<MinionJob, 'returnedAt' | 'retcode' | 'success' | 'summary' | 'dryRun'>): 'noreturn' | 'failed' | 'drift' | 'changed' | 'ok' {
+  if (!j.returnedAt) return 'noreturn'
+  let sum: { changed?: number; pending?: number; failed?: number } = {}
+  try {
+    sum = j.summary ? JSON.parse(j.summary) : {}
+  } catch {
+    // treat as no summary
+  }
+  if ((j.retcode ?? 0) !== 0 || j.success === false || (sum.failed ?? 0) > 0) return 'failed'
+  if ((sum.pending ?? 0) > 0) return 'drift'
+  if ((sum.changed ?? 0) > 0) return 'changed'
+  return 'ok'
+}
+
 export const history = {
   jobs: (opts: { q?: string; before?: number; limit?: number } = {}) => {
     const p = new URLSearchParams()
@@ -219,6 +251,12 @@ export const history = {
     if (opts.before) p.set('before', String(opts.before))
     p.set('limit', String(opts.limit ?? 100))
     return request<{ rows: HistoryJob[]; retentionDays: number }>(`/api/history/jobs?${p}`)
+  },
+  minionJobs: (id: string, opts: { before?: number; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.before) p.set('before', String(opts.before))
+    p.set('limit', String(opts.limit ?? 50))
+    return request<{ rows: MinionJob[]; retentionDays: number }>(`/api/history/minions/${encodeURIComponent(id)}/jobs?${p}`)
   },
   job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
   compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),

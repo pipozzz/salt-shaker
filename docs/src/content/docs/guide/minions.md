@@ -20,6 +20,8 @@ To try it without a fleet, open the demo with `?demo=large` (606 minions).
 
 Each minion's page shows its grains and compiled pillar. Viewers don't see pillar data, since it often holds secrets.
 
+The **Jobs** tab lists the recorded jobs that targeted the minion, newest first, with how each one ended on that minion: ok, changed, drift (a dry run that would change something), failed or no return. Jobs started from the salt CLI are included. The list covers the job history retention period (`JOB_RETENTION_DAYS`) and is not available in direct mode.
+
 Offline minions are detected the way the Salt CLI does it, with `saltutil.find_job` and a short `gather_job_timeout`.
 
 Press **⌘K** / **Ctrl+K** anywhere to jump to a page, minion, saved target or recent command.

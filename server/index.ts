@@ -13,6 +13,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { Leader } from './leader'
+import { minionJobs } from './minion-jobs'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
 import { automationRoutes } from './routes/automation'
@@ -306,6 +307,14 @@ app.get('/api/history/jobs/:jid', async (c) => {
   if (!jobRow) return c.json({ error: 'Not in history' }, 404)
   const returns = await db.select().from(schema.jobReturn).where(eq(schema.jobReturn.jid, jid))
   return c.json({ job: jobRow, returns: returns.map((x) => ({ ...x, ret: x.ret ? JSON.parse(x.ret) : null })) })
+})
+
+/** Jobs that ran on one minion, with its own result in each. */
+app.get('/api/history/minions/:id/jobs', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const limit = Math.min(Number(c.req.query('limit') ?? 50) || 50, 200)
+  const rows = await minionJobs(db, schema, c.req.param('id'), { before: Number(c.req.query('before')) || null, limit })
+  return c.json({ rows, retentionDays: config.historyDays })
 })
 
 /** Past compliance checks (dry-run highstates) with per-status minion counts. */

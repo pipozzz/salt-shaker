@@ -1,19 +1,22 @@
-import { ArrowLeft, Cpu, HardDrive, Network, Play, Search, Terminal } from 'lucide-react'
+import { ArrowLeft, Cpu, HardDrive, History, Network, Play, Search, Terminal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { formatArgs } from '../api/salt'
+import { history, minionOutcome, parseStoredArgs, type MinionJob } from '../api/server'
 import type { Grains } from '../api/types'
 import { JsonView } from '../components/JsonView'
-import { Badge, Button, Card, CardHeader, ErrorBox, Input, Spinner, StatusDot, Tabs } from '../components/ui'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Spinner, StatusDot, Tabs, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { useSalt } from '../lib/session'
+import { useSalt, useSession } from '../lib/session'
 import { OsIcon } from './Minions'
-import { fmtMem } from '../lib/format'
+import { fmtMem, funTone, relTime } from '../lib/format'
 
 export function MinionDetailPage() {
   const { id = '' } = useParams()
   const salt = useSalt()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'grains' | 'pillar'>('grains')
+  const { session } = useSession()
+  const [tab, setTab] = useState<'grains' | 'pillar' | 'jobs'>('grains')
   const [filter, setFilter] = useState('')
 
   const grains = useAsync(async () => {
@@ -90,17 +93,22 @@ export function MinionDetailPage() {
               items={[
                 { value: 'grains', label: 'Grains' },
                 { value: 'pillar', label: 'Pillar' },
+                // job history is recorded by the server
+                ...(session?.mode === 'server' ? [{ value: 'jobs' as const, label: 'Jobs' }] : []),
               ]}
             />
           }
           actions={
+            tab !== 'jobs' && (
             <div className="relative">
               <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
               <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter keys…" className="w-56 pl-9" />
             </div>
+            )
           }
         />
-        <div className="p-4 pl-8">
+        {tab === 'jobs' && <MinionJobs id={id} />}
+        <div className={tab === 'jobs' ? 'hidden' : 'p-4 pl-8'}>
           {tab === 'grains' && g && <JsonView value={filtered(g)} openDepth={1} />}
           {tab === 'pillar' && (
             <>
@@ -111,6 +119,100 @@ export function MinionDetailPage() {
           )}
         </div>
       </Card>
+    </>
+  )
+}
+
+const OUTCOME: Record<ReturnType<typeof minionOutcome>, { tone: Tone; label: string }> = {
+  ok: { tone: 'green', label: 'ok' },
+  changed: { tone: 'blue', label: 'changed' },
+  drift: { tone: 'amber', label: 'drift' },
+  failed: { tone: 'red', label: 'failed' },
+  noreturn: { tone: 'zinc', label: 'no return' },
+}
+
+const JOBS_PAGE = 50
+
+/** Recorded jobs that ran on this minion, each with how it ended here. */
+function MinionJobs({ id }: { id: string }) {
+  const navigate = useNavigate()
+  const [older, setOlder] = useState<MinionJob[]>([])
+  const [loadingMore, setLoadingMore] = useState(false)
+  const first = useAsync(() => history.minionJobs(id, { limit: JOBS_PAGE }), [id])
+  const rows = [...(first.data?.rows ?? []), ...older]
+  const more = (first.data?.rows.length ?? 0) === JOBS_PAGE && older.length % JOBS_PAGE === 0
+
+  const loadMore = async () => {
+    const last = rows[rows.length - 1]
+    if (!last) return
+    setLoadingMore(true)
+    try {
+      const res = await history.minionJobs(id, { before: Date.parse(last.startedAt), limit: JOBS_PAGE })
+      setOlder((o) => [...o, ...res.rows])
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  if (first.error) return <div className="p-4"><ErrorBox error={first.error} onRetry={first.reload} /></div>
+  if (!first.data) return <Spinner />
+  if (rows.length === 0)
+    return (
+      <Empty icon={<History />} title="No jobs recorded for this minion">
+        Jobs that target it show up here for {first.data.retentionDays} days.
+      </Empty>
+    )
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              <th className="py-2.5 pr-3 pl-4 font-medium">Function</th>
+              <th className="hidden px-3 py-2.5 font-medium md:table-cell">By</th>
+              <th className="px-3 py-2.5 font-medium">Result here</th>
+              <th className="px-3 py-2.5 pr-4 font-medium">Started</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+            {rows.map((j) => {
+              const o = OUTCOME[minionOutcome(j)]
+              const at = new Date(j.startedAt)
+              return (
+                <tr key={j.jid} onClick={() => navigate(`/jobs/${j.jid}`)} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+                  <td className="py-2.5 pr-3 pl-4">
+                    <div className="flex items-center gap-2">
+                      <Link to={`/jobs/${j.jid}`} onClick={(e) => e.stopPropagation()} className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500">
+                        <Badge tone={funTone(j.fun)} className="font-mono">
+                          {j.fun}
+                        </Badge>
+                      </Link>
+                      {j.dryRun && <Badge tone="amber">dry run</Badge>}
+                      <span className="max-w-64 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{formatArgs(parseStoredArgs(j.args)).replace(/\s*test=True/, '')}</span>
+                    </div>
+                  </td>
+                  <td className="hidden px-3 py-2.5 md:table-cell">
+                    {j.shakerUser ? <span className="font-medium">{j.shakerUser}</span> : <span className="text-zinc-500 dark:text-zinc-400">{j.saltUser ?? '—'} <span className="text-xs">(salt)</span></span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Badge tone={o.tone}>{o.label}</Badge>
+                  </td>
+                  <td className="px-3 py-2.5 pr-4 whitespace-nowrap text-zinc-600 dark:text-zinc-400" title={at.toLocaleString()}>
+                    {relTime(at)}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {more && (
+        <div className="border-t border-zinc-100 p-3 text-center dark:border-zinc-800">
+          <Button size="sm" loading={loadingMore} onClick={loadMore}>
+            Load older
+          </Button>
+        </div>
+      )}
     </>
   )
 }

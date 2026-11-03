@@ -12,6 +12,9 @@ export const CLIENT_IP_HEADER = 'x-salt-shaker-client-ip'
 export const OIDC_PROVIDER_ID = 'oidc'
 
 /** Users sign in by username; Better Auth still wants a unique email, so derive one. */
+/** Usernames: 3–32 characters, letters, digits, . _ - (the setup page, the Users page and SSO all follow it). */
+export const USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/i
+
 export const emailFor = (name: string) => `${name.toLowerCase()}@users.salt-shaker.invalid`
 
 export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sqlite' | 'pg') {
@@ -41,7 +44,8 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
     // set by server/index.ts from the socket (or X-Forwarded-For when TRUST_PROXY is on), never by the client
     advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
     plugins: [
-      username(),
+      // Better Auth's own default allows no '-' and only 30 characters
+      username({ usernameValidator: (u) => USERNAME.test(u), maxUsernameLength: 32 }),
       admin({
         roles: { admin: adminAc, operator: userAc, viewer: userAc, none: userAc },
         adminRoles: ['admin'],

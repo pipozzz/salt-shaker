@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+
+- Usernames with a `-`, or of 31–32 characters, could not be created or sign in, although the setup and Users pages accept them. Setup failed with a server error.
+
 ## 1.3.0
 
 **Minions**

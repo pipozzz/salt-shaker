@@ -70,3 +70,34 @@ export async function latestCompliance(db: Db, schema: Schema, checks = 50) {
   }
   return out
 }
+
+export interface MinionUpdates {
+  /** packages with an upgrade available */
+  packages: number
+  jid: string
+  checkedAt: Date
+}
+
+/**
+ * Each minion's pending upgrades from the latest patch scan (`pkg.list_upgrades`) it answered,
+ * looking back over the most recent `scans` scans. Failed scans don't count, so an older good one
+ * still shows; minions never scanned are left out.
+ */
+export async function latestUpdates(db: Db, schema: Schema, scans = 20) {
+  const t = schema.job
+  const r = schema.jobReturn
+  const jobs = await db.select({ jid: t.jid, startedAt: t.startedAt }).from(t).where(eq(t.fun, 'pkg.list_upgrades')).orderBy(desc(t.startedAt)).limit(scans)
+  if (!jobs.length) return {}
+  const startedAt = new Map(jobs.map((j) => [j.jid, j.startedAt]))
+  const rets = await db.select({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode }).from(r).where(inArray(r.jid, [...startedAt.keys()]))
+  const out: Record<string, MinionUpdates> = {}
+  for (const x of rets) {
+    const at = startedAt.get(x.jid)!
+    if (out[x.minion] && out[x.minion].checkedAt >= at) continue
+    const ups = x.ret && !x.retcode ? (JSON.parse(x.ret) as unknown) : null
+    // a scan that failed returns an error string instead of {package: version}
+    if (!ups || typeof ups !== 'object' || Array.isArray(ups)) continue
+    out[x.minion] = { packages: Object.keys(ups).length, jid: x.jid, checkedAt: at }
+  }
+  return out
+}

@@ -8,7 +8,7 @@ sidebar: { order: 1 }
 
 The **Minions** page shows status, OS, IPs, CPU/RAM and roles of every minion. A fleet breakdown flags minions running an older Salt than the master.
 
-With the server, a **Compliance** column shows each minion's result in the latest compliance check it answered: in compliance, drifted or error. It links to that check's job, and the tooltip says when it ran. Minions that no recent check reached show *not checked*. Both checks from the Compliance page and dry-run highstates started elsewhere count. The **Drifted** filter shows only the minions that drifted or failed in their latest check.
+With the server, a **Compliance** column shows each minion's result in the latest compliance check it answered: in compliance, drifted or error. It links to that check's job, and the tooltip says when it ran. Minions that no recent check reached show *not checked*. Both checks from the Compliance page and dry-run highstates started elsewhere count. An **Updates** column shows how many package upgrades each minion had in the latest patch scan it answered (`pkg.list_upgrades`, from the Patches page or a schedule), linked to that scan. A scan that failed on a minion doesn't count, so its last good result stays. The **Drifted** filter shows only the minions that drifted or failed in their latest check.
 
 The search, the status filter and the fleet breakdown pick are kept in the page's address, so they're still there when you come back from a minion, and you can bookmark or share a filtered list, e.g. `/?status=drifted&facet=role:web`.
 

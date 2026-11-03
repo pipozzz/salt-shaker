@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Minions**
+
+- An **Updates** column on the Minions page (with the server) shows how many package upgrades each minion had in its latest patch scan, linked to that scan.
+
 **Searches you can share**
 
 - The Jobs history and the Audit log keep their search in the address, like the Minions page. Going back from a job returns to the same results, and a search can be bookmarked or sent, e.g. every denied attempt since a given day.

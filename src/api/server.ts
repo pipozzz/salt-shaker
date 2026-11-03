@@ -250,6 +250,12 @@ export interface MinionCompliance {
   checkedAt: string
 }
 
+export interface MinionUpdates {
+  packages: number
+  jid: string
+  checkedAt: string
+}
+
 export const history = {
   jobs: (opts: { q?: string; before?: number; limit?: number } = {}) => {
     const p = new URLSearchParams()
@@ -266,6 +272,7 @@ export const history = {
   },
   /** Each minion's result in the latest compliance check it returned from. */
   minionCompliance: () => request<{ minions: Record<string, MinionCompliance> }>('/api/history/compliance/minions'),
+  minionUpdates: () => request<{ minions: Record<string, MinionUpdates> }>('/api/history/updates/minions'),
   job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
   compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),
 }

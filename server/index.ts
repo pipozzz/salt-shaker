@@ -13,7 +13,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { Leader } from './leader'
-import { latestCompliance, minionJobs } from './minion-jobs'
+import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
@@ -333,6 +333,12 @@ app.get('/api/history/minions/:id/jobs', async (c) => {
 app.get('/api/history/compliance/minions', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   return c.json({ minions: await latestCompliance(db, schema) })
+})
+
+/** Each minion's pending upgrades from the latest patch scan that it answered. */
+app.get('/api/history/updates/minions', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  return c.json({ minions: await latestUpdates(db, schema) })
 })
 
 /** Past compliance checks (dry-run highstates) with per-status minion counts. */

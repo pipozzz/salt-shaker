@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { latestCompliance, minionJobs } from './minion-jobs'
+import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
 import { openTestDatabase, testDialects } from './testdb'
 
 describe.each(testDialects)('minionJobs (%s)', (dialect) => {
@@ -88,5 +88,42 @@ describe.each(testDialects)('latestCompliance (%s)', (dialect) => {
     })
     // only the newest check is looked at
     expect(Object.keys(await latestCompliance(db, schema, 1))).toEqual(['a'])
+  })
+})
+
+describe.each(testDialects)('latestUpdates (%s)', (dialect) => {
+  let close: (() => Promise<unknown>) | null = null
+  afterEach(async () => {
+    await close?.()
+    close = null
+  })
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 2, 12, m))
+
+  it("keeps each minion's newest successful scan", async () => {
+    const opened = await openTestDatabase(dialect)
+    close = opened.close
+    const { db, schema } = opened
+    expect(await latestUpdates(db, schema)).toEqual({})
+    await db.insert(schema.job).values([
+      { jid: '1', fun: 'pkg.list_upgrades', minions: '["a","b","c"]', startedAt: at(1) },
+      { jid: '2', fun: 'pkg.list_upgrades', minions: '["a","b"]', startedAt: at(2) },
+      // not a scan
+      { jid: '3', fun: 'pkg.upgrade', minions: '["a"]', startedAt: at(3) },
+    ])
+    await db.insert(schema.jobReturn).values([
+      { jid: '1', minion: 'a', ret: '{"curl":"8.5","openssl":"3.0.13"}', retcode: 0, returnedAt: at(1) },
+      { jid: '1', minion: 'b', ret: '{"curl":"8.5"}', retcode: 0, returnedAt: at(1) },
+      { jid: '1', minion: 'c', ret: '"Error: apt is locked"', retcode: 1, returnedAt: at(1) },
+      { jid: '2', minion: 'a', ret: '{}', retcode: 0, returnedAt: at(2) },
+      // b's newer scan failed, so the older one stays
+      { jid: '2', minion: 'b', ret: '"Error: no network"', retcode: 1, returnedAt: at(2) },
+      { jid: '3', minion: 'a', ret: '{"curl":{"old":"8.4","new":"8.5"}}', retcode: 0, returnedAt: at(3) },
+    ])
+    expect(await latestUpdates(db, schema)).toEqual({
+      a: { packages: 0, jid: '2', checkedAt: at(2) },
+      b: { packages: 1, jid: '1', checkedAt: at(1) },
+    })
+    // only the newest scan is looked at
+    expect(Object.keys(await latestUpdates(db, schema, 1))).toEqual(['a'])
   })
 })

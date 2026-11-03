@@ -3,7 +3,7 @@ import { CircleOff, KeyRound, RefreshCw, Search, Server, TriangleAlert, Wifi, X 
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
-import { history } from '../api/server'
+import { history, type MinionUpdates } from '../api/server'
 import type { Grains } from '../api/types'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
@@ -60,6 +60,8 @@ export function MinionsPage() {
   const status = useAsync(() => salt.status(), [salt, refreshes])
   // the latest compliance result per minion is recorded by the server
   const compliance = useAsync(() => (fromServer ? history.minionCompliance() : Promise.resolve(null)), [fromServer, refreshes])
+  // and so is the latest patch scan
+  const updates = useAsync(() => (fromServer ? history.minionUpdates() : Promise.resolve(null)), [fromServer, refreshes])
   const reload = () => setRefreshes((n) => n + 1)
 
   const rows = useMemo(() => {
@@ -171,6 +173,7 @@ export function MinionsPage() {
                   <th className="py-2.5 pr-3 pl-4 font-medium">Minion</th>
                   <th className="px-3 py-2.5 font-medium">OS</th>
                   {fromServer && <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Compliance</th>}
+                  {fromServer && <th className="hidden px-3 py-2.5 font-medium md:table-cell">Updates</th>}
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">IP</th>
                   <th className="hidden px-3 py-2.5 font-medium lg:table-cell">CPU / RAM</th>
                   <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Roles</th>
@@ -199,6 +202,11 @@ export function MinionsPage() {
                     {fromServer && (
                       <td className="hidden px-3 py-2.5 sm:table-cell">
                         <ComplianceBadge c={compliance.data?.minions[id]} loading={!compliance.data && !compliance.error} />
+                      </td>
+                    )}
+                    {fromServer && (
+                      <td className="hidden px-3 py-2.5 md:table-cell">
+                        <UpdatesBadge u={updates.data?.minions[id]} loading={!updates.data && !updates.error} />
                       </td>
                     )}
                     <td className="hidden px-3 py-2.5 font-mono text-xs text-zinc-600 md:table-cell dark:text-zinc-400">{g.ipv4?.find((ip) => ip !== '127.0.0.1') ?? '—'}</td>
@@ -245,6 +253,21 @@ function ComplianceBadge({ c, loading }: { c?: { status: 'ok' | 'drift' | 'error
       className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500"
     >
       <Badge tone={tone}>{label}</Badge>
+    </Link>
+  )
+}
+
+function UpdatesBadge({ u, loading }: { u?: MinionUpdates; loading: boolean }) {
+  if (!u) return <span className="text-xs text-zinc-500 dark:text-zinc-400">{loading ? '' : 'not scanned'}</span>
+  const at = new Date(u.checkedAt)
+  return (
+    <Link
+      to={`/jobs/${u.jid}`}
+      onClick={(e) => e.stopPropagation()}
+      title={`Scanned ${relTime(at)} (${at.toLocaleString()})`}
+      className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500"
+    >
+      {u.packages ? <Badge tone="amber">{u.packages === 1 ? '1 package' : `${u.packages} packages`}</Badge> : <Badge tone="green">up to date</Badge>}
     </Link>
   )
 }

@@ -6,6 +6,8 @@
 
 - The Jobs history and the Audit log keep their search in the address, like the Minions page. Going back from a job returns to the same results, and a search can be bookmarked or sent, e.g. every denied attempt since a given day.
 
+## 1.3.1
+
 **Fixes**
 
 - Usernames with a `-`, or of 31–32 characters, could not be created or sign in, although the setup and Users pages accept them. Setup failed with a server error.

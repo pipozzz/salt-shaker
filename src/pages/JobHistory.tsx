@@ -5,19 +5,26 @@ import { Link, useNavigate } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
 import { history, parseStoredArgs, type HistoryJob } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
-import { useAsync } from '../lib/hooks'
+import { useAsync, useUrlSearch } from '../lib/hooks'
 import { funTone, relTime } from '../lib/format'
 
 const PAGE = 100
+const FIELDS = ['q'] as const
 
 /** Jobs from the server's database: longer history than the master's cache, with who ran them. */
 export function JobHistoryPage() {
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
-  const [applied, setApplied] = useState('')
-  const [older, setOlder] = useState<HistoryJob[]>([])
+  const search = useUrlSearch(FIELDS)
+  const applied = search.applied.q
+  // older pages belong to the search they were loaded for
+  const [olderPages, setOlderPages] = useState<{ key: string; rows: HistoryJob[] }>({ key: '', rows: [] })
+  const older = olderPages.key === search.key ? olderPages.rows : []
   const [loadingMore, setLoadingMore] = useState(false)
   const first = useAsync(() => history.jobs({ q: applied, limit: PAGE }), [applied])
+  const refresh = () => {
+    setOlderPages({ key: '', rows: [] })
+    void first.reload()
+  }
 
   const rows = [...(first.data?.rows ?? []), ...older]
   const more = (first.data?.rows.length ?? 0) === PAGE && older.length % PAGE === 0
@@ -28,7 +35,7 @@ export function JobHistoryPage() {
     setLoadingMore(true)
     try {
       const res = await history.jobs({ q: applied, before: Date.parse(last.startedAt), limit: PAGE })
-      setOlder((o) => [...o, ...res.rows])
+      setOlderPages({ key: search.key, rows: [...older, ...res.rows] })
     } finally {
       setLoadingMore(false)
     }
@@ -49,10 +56,7 @@ export function JobHistoryPage() {
         actions={
           <Button
             icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
-            onClick={() => {
-              setOlder([])
-              void first.reload()
-            }}
+            onClick={refresh}
           >
             Refresh
           </Button>
@@ -62,14 +66,13 @@ export function JobHistoryPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            setOlder([])
-            setApplied(query.trim())
+            if (!search.apply()) refresh()
           }}
           className="flex gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Function, target, user or jid…" className="pl-9" />
+            <Input value={search.form.q} onChange={(e) => search.set('q', e.target.value)} aria-label="Search" placeholder="Function, target, user or jid…" className="pl-9" />
           </div>
           <Button type="submit">Search</Button>
         </form>

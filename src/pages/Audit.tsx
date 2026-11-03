@@ -5,19 +5,30 @@ import { Link } from 'react-router-dom'
 import { auditExportUrl, auditLog, type AuditFilter, type AuditRow } from '../api/server'
 import { JsonView } from '../components/JsonView'
 import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
-import { useAsync } from '../lib/hooks'
+import { useAsync, useUrlSearch } from '../lib/hooks'
 import { relTime } from '../lib/format'
 
 const PAGE = 100
+const FIELDS = ['q', 'outcome', 'from', 'to'] as const
+const OUTCOMES = ['ok', 'denied', 'error'] as const
 
 export function AuditPage() {
-  const [form, setForm] = useState<AuditFilter>({ q: '', outcome: '', from: '', to: '' })
-  const [applied, setApplied] = useState<AuditFilter>({})
-  const [older, setOlder] = useState<AuditRow[]>([])
+  const search = useUrlSearch(FIELDS)
+  const { form } = search
+  // the URL may say anything; an unknown outcome means any
+  const applied: AuditFilter = { ...search.applied, outcome: OUTCOMES.find((o) => o === search.applied.outcome) ?? '' }
+  // older pages belong to the search they were loaded for
+  const [olderPages, setOlderPages] = useState<{ key: string; rows: AuditRow[] }>({ key: '', rows: [] })
+  const older = olderPages.key === search.key ? olderPages.rows : []
   const [loadingMore, setLoadingMore] = useState(false)
-  const first = useAsync(() => auditLog({ ...applied, limit: PAGE }), [applied])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const first = useAsync(() => auditLog({ ...applied, limit: PAGE }), [search.key])
   const filtered = Object.values(applied).some(Boolean)
-  const set = (k: keyof AuditFilter) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const set = (k: (typeof FIELDS)[number]) => (e: { target: { value: string } }) => search.set(k, e.target.value)
+  const refresh = () => {
+    setOlderPages({ key: '', rows: [] })
+    void first.reload()
+  }
 
   const rows = [...(first.data?.rows ?? []), ...older]
   const canLoadMore = (first.data?.rows.length ?? 0) === PAGE && (older.length === 0 || older.length % PAGE === 0)
@@ -28,7 +39,7 @@ export function AuditPage() {
     setLoadingMore(true)
     try {
       const res = await auditLog({ ...applied, before: last.id, limit: PAGE })
-      setOlder((o) => [...o, ...res.rows])
+      setOlderPages({ key: search.key, rows: [...older, ...res.rows] })
     } finally {
       setLoadingMore(false)
     }
@@ -46,10 +57,7 @@ export function AuditPage() {
             </ButtonLink>
             <Button
               icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
-              onClick={() => {
-                setOlder([])
-                void first.reload()
-              }}
+              onClick={refresh}
             >
               Refresh
             </Button>
@@ -60,8 +68,7 @@ export function AuditPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            setOlder([])
-            setApplied({ ...form, q: form.q?.trim() })
+            if (!search.apply()) refresh()
           }}
           className="flex flex-wrap gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >

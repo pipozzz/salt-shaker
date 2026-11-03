@@ -109,3 +109,14 @@ test('failed minions can be retried and results downloaded', async ({ page }) =>
   await expect(page.getByLabel('Match by')).toHaveValue('list')
   await expect(page.getByLabel('Function')).toHaveValue('nope.missing')
 })
+
+test('running jobs are listed and can be stopped', async ({ page }) => {
+  await openDemo(page, '/run?tgt=web-*&fun=test.sleep&args=120')
+  await page.getByRole('button', { name: 'Run on 2' }).click()
+  await page.getByRole('link', { name: 'Jobs' }).click()
+  const running = page.getByRole('listitem').filter({ hasText: 'still running on web-01, web-02' })
+  await expect(running).toBeVisible()
+  await running.getByRole('button', { name: 'Stop' }).click()
+  await page.getByRole('button', { name: 'Stop on 2' }).click()
+  await expect(page.getByText('No jobs are running.')).toBeVisible()
+})

@@ -1,6 +1,7 @@
 import { trimFleet } from '../lib/fleet'
 import {
   SaltError,
+  type ActiveJob,
   type FileTree,
   type Grains,
   type JobDetail,
@@ -157,6 +158,15 @@ export class SaltApi {
   async listJobs() {
     await this.learnOffset()
     return this.runner<Record<string, JobSummary>>('jobs.list_jobs')
+  }
+  /** Jobs that minions are still running. Asks every minion, so it takes a few seconds. */
+  async activeJobs() {
+    await this.learnOffset()
+    return this.runner<Record<string, ActiveJob>>('jobs.active')
+  }
+  /** Kills a job's process on the given minions; they never return for it. */
+  killJob(jid: string, minions: string[]) {
+    return this.local<string>(minions.join(','), 'saltutil.kill_job', [jid], {}, 'list')
   }
   async job(jid: string) {
     await this.learnOffset()

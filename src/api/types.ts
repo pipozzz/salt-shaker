@@ -68,6 +68,12 @@ export interface JobSummary {
   StartTime: string
 }
 
+/** A job some minions are still running (runner jobs.active); Running lists {minion: pid}. */
+export interface ActiveJob extends JobSummary {
+  Running: Array<Record<string, number>>
+  Returned?: string[]
+}
+
 export interface JobDetail extends JobSummary {
   jid: string
   Minions?: string[]

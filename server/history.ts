@@ -9,7 +9,7 @@ import type { SaltService } from './salt'
  */
 
 // polling and lookups the UI (and manage.status) fire constantly; not worth keeping
-const NOISE = new Set(['saltutil.find_job', 'sys.list_functions', 'grains.items', 'grains.item', 'grains.get', 'grains.ls', 'test.ping', 'test.version', 'pkg.version'])
+const NOISE = new Set(['saltutil.find_job', 'saltutil.running', 'sys.list_functions', 'grains.items', 'grains.item', 'grains.get', 'grains.ls', 'test.ping', 'test.version', 'pkg.version'])
 
 // returns bigger than this are stored as a marker instead (e.g. huge grains or file contents)
 const MAX_RETURN_BYTES = 512 * 1024

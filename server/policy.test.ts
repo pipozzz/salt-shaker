@@ -25,6 +25,12 @@ describe('authorize', () => {
     expect(authorize('admin', 'a', { client: 'wheel', fun: 'key.delete', match: 'x' }).ok).toBe(true)
   })
 
+  it('lets viewers see running jobs but only operators stop them, with an audit entry', () => {
+    expect(authorize('viewer', 'v', { client: 'runner', fun: 'jobs.active' })).toMatchObject({ ok: true, audited: false })
+    expect(authorize('viewer', 'v', { client: 'local', fun: 'saltutil.kill_job', tgt: 'web-01', tgt_type: 'list', arg: ['1'] })).toMatchObject({ ok: false, status: 403 })
+    expect(authorize('operator', 'o', { client: 'local', fun: 'saltutil.kill_job', tgt: 'web-01', tgt_type: 'list', arg: ['1'] })).toMatchObject({ ok: true, audited: true })
+  })
+
   it('gives an unknown, missing or "none" role no permissions at all', () => {
     expect(authorize(null, 'x', { client: 'local', fun: 'test.ping' })).toMatchObject({ ok: false, status: 403 })
     expect(authorize('superuser', 'x', { client: 'local', fun: 'test.ping' })).toMatchObject({ ok: false, status: 403 })

@@ -142,7 +142,7 @@ const pillarFor = (id: string): Record<string, unknown> => {
 interface MockJob extends JobSummary {
   jid: string
   minions: string[]
-  results: Record<string, { at: number; ret: unknown }>
+  results: Record<string, { at: number; ret: unknown; pid: number; timer?: ReturnType<typeof setTimeout> }>
 }
 
 const jobs: MockJob[] = []
@@ -287,7 +287,18 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
     case 'saltutil.find_job': {
       const job = jobs.find((j) => j.jid === arg[0])
       const r = job?.results[id]
-      return r && r.at > Date.now() ? { jid: job.jid, fun: job.Function, pid: rand(1000, 9999) } : {}
+      return r && r.at > Date.now() ? { jid: job.jid, fun: job.Function, pid: r.pid } : {}
+    }
+    case 'test.sleep':
+      return true
+    case 'saltutil.kill_job': {
+      // the killed process never returns
+      const job = jobs.find((j) => j.jid === arg[0])
+      const r = job?.results[id]
+      if (!job || !r || r.at <= Date.now()) return `No job ${String(arg[0])} running on ${id}`
+      clearTimeout(r.timer)
+      delete job.results[id]
+      return `Signal 9 sent to job ${job.jid} at pid ${r.pid}`
     }
     case 'saltutil.sync_all':
       return { modules: [], states: [], grains: [], beacons: [] }
@@ -299,8 +310,8 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
 const FUNCTIONS = [
   'cmd.run', 'cmd.script', 'cp.get_file', 'disk.usage', 'file.read', 'file.write', 'grains.get', 'grains.item', 'grains.items', 'grains.setval',
   'network.interfaces', 'network.ip_addrs', 'pillar.get', 'pillar.items', 'pkg.install', 'pkg.list_pkgs', 'pkg.list_upgrades', 'pkg.remove', 'pkg.upgrade',
-  'saltutil.refresh_pillar', 'saltutil.sync_all', 'service.restart', 'service.start', 'service.status', 'service.stop', 'state.apply', 'state.highstate',
-  'state.show_sls', 'state.show_top', 'state.sls', 'status.uptime', 'sys.doc', 'sys.list_functions', 'test.ping', 'test.version', 'user.list_users',
+  'saltutil.kill_job', 'saltutil.refresh_pillar', 'saltutil.sync_all', 'service.restart', 'service.start', 'service.status', 'service.stop', 'state.apply', 'state.highstate',
+  'state.show_sls', 'state.show_top', 'state.sls', 'status.uptime', 'sys.doc', 'sys.list_functions', 'test.ping', 'test.sleep', 'test.version', 'user.list_users',
 ]
 
 // ---------- orchestration ----------
@@ -371,14 +382,14 @@ function startJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwa
   }
   for (const id of matched) {
     if (!minions[id].up) continue
-    const delay = instant ? 0 : fun.startsWith('state.') ? rand(1200, 3500) : rand(150, 900)
-    job.results[id] = { at: when.getTime() + delay, ret: execute(id, fun, arg, kwarg) }
+    const delay = instant ? 0 : fun === 'test.sleep' ? Number(arg[0] ?? 1) * 1000 : fun.startsWith('state.') ? rand(1200, 3500) : rand(150, 900)
+    job.results[id] = { at: when.getTime() + delay, ret: execute(id, fun, arg, kwarg), pid: rand(1000, 9999) }
     if (!instant) {
       const ret = job.results[id].ret
       const failed =
         (typeof ret === 'string' && ret.endsWith('is not available.')) ||
         (!!ret && typeof ret === 'object' && Object.values(ret).some((v) => v && typeof v === 'object' && (v as { result?: unknown }).result === false))
-      setTimeout(() => emit(`salt/job/${jid}/ret/${id}`, { id, jid, fun, return: ret, retcode: failed ? 2 : 0, success: true }), delay)
+      job.results[id].timer = setTimeout(() => emit(`salt/job/${jid}/ret/${id}`, { id, jid, fun, return: ret, retcode: failed ? 2 : 0, success: true }), delay)
     }
   }
   jobs.unshift(job)
@@ -504,6 +515,20 @@ export class MockTransport implements Transport {
           return Object.fromEntries(matchTarget(String(kw.tgt), String(kw.tgt_type ?? 'glob')).map((id) => [id, minions[id].grains]))
         case 'pillar.show_pillar':
           return pillarFor(String(kw.minion))
+        case 'jobs.active': {
+          // like the real runner, this asks every minion what it is running
+          await sleep(600)
+          const now = Date.now()
+          return Object.fromEntries(
+            jobs
+              .map((j) => ({ j, running: Object.entries(j.results).filter(([, r]) => r.at > now) }))
+              .filter(({ running }) => running.length > 0)
+              .map(({ j, running }) => [
+                j.jid,
+                { Function: j.Function, Arguments: j.Arguments, Target: j.Target, 'Target-type': j['Target-type'], User: j.User, StartTime: j.StartTime, Running: running.map(([id, r]) => ({ [id]: r.pid })), Returned: Object.keys(j.results).filter((id) => j.results[id].at <= now) },
+              ]),
+          )
+        }
         case 'jobs.list_jobs':
           return Object.fromEntries(jobs.map(({ jid, Function, Arguments, Target, User, StartTime, ...rest }) => [jid, { Function, Arguments, Target, 'Target-type': rest['Target-type'], User, StartTime }]))
         case 'jobs.lookup_jid': {

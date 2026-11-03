@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { History, RefreshCw, Search } from 'lucide-react'
+import { History, Loader2, RefreshCw, Search, Square } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
+import type { ActiveJob } from '../api/types'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Spinner } from '../components/ui'
 import { useAsync, useStoredState } from '../lib/hooks'
-import { useSalt } from '../lib/session'
+import { useCan, useSalt } from '../lib/session'
 import { funTone, relTime } from '../lib/format'
 
 export function JobsPage() {
@@ -13,14 +14,19 @@ export function JobsPage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [showInternal, setShowInternal] = useStoredState('salt-shaker.jobs.internal', false)
-  const { data, error, loading, reload } = useAsync(() => salt.listJobs(), [salt])
+  const { data, error, loading, reload: reloadJobs } = useAsync(() => salt.listJobs(), [salt])
+  const active = useAsync(() => salt.activeJobs(), [salt])
+  const reload = () => {
+    void reloadJobs()
+    void active.reload()
+  }
 
   const rows = useMemo(() => {
     if (!data) return []
     return Object.entries(data)
       .map(([jid, j]) => ({ jid, ...j, date: salt.jidDate(jid), args: formatArgs(j.Arguments) }))
       // wheel/runner calls (including this UI's own) are noise for most people
-      .filter((j) => showInternal || !(/^(wheel|runner)\./.test(j.Function) || j.Function === 'saltutil.find_job'))
+      .filter((j) => showInternal || !isInternal(j.Function))
       .filter((j) => !query || `${j.jid} ${j.Function} ${j.Target} ${j.User} ${j.args}`.toLowerCase().includes(query.toLowerCase()))
       .sort((a, b) => b.jid.localeCompare(a.jid))
       .slice(0, 300)
@@ -37,6 +43,7 @@ export function JobsPage() {
           </Button>
         }
       />
+      <RunningJobs active={active.data} error={active.error} loading={active.loading} onChanged={active.reload} />
       <Card>
         <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 p-3 dark:border-zinc-800">
           <div className="relative min-w-48 flex-1">
@@ -95,5 +102,109 @@ export function JobsPage() {
         )}
       </Card>
     </>
+  )
+}
+
+// the runner's own polling shows up as running jobs too
+const isInternal = (fun: string) => fun === 'saltutil.find_job' || fun === 'saltutil.running' || /^(wheel|runner)\./.test(fun)
+
+/** Jobs minions are still running, with a way to stop them. */
+function RunningJobs({ active, error, loading, onChanged }: { active: Record<string, ActiveJob> | null | undefined; error: Error | null; loading: boolean; onChanged: () => unknown }) {
+  const salt = useSalt()
+  const can = useCan()
+  const [stopping, setStopping] = useState<{ jid: string; job: ActiveJob; minions: string[] } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [stopError, setStopError] = useState<Error | null>(null)
+  const canStop = can('local', 'saltutil.kill_job')
+
+  const rows = Object.entries(active ?? {})
+    .filter(([, j]) => !isInternal(j.Function))
+    .map(([jid, j]) => ({ jid, job: j, minions: j.Running.flatMap((r) => Object.keys(r)).sort(), date: salt.jidDate(jid) }))
+    .sort((a, b) => b.jid.localeCompare(a.jid))
+
+  const stop = async () => {
+    if (!stopping) return
+    setBusy(true)
+    setStopError(null)
+    try {
+      await salt.killJob(stopping.jid, stopping.minions)
+      setStopping(null)
+      await onChanged()
+    } catch (e) {
+      setStopError(e instanceof Error ? e : new Error(String(e)))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title={
+          <span className="flex items-center gap-2">
+            Running now
+            {loading && <Loader2 className="size-3.5 animate-spin text-zinc-500 dark:text-zinc-400" aria-label="Checking minions" />}
+          </span>
+        }
+        subtitle="Asks every minion what it is running (jobs.active)."
+      />
+      {error && (
+        <div className="p-4">
+          <ErrorBox error={error} onRetry={onChanged} />
+        </div>
+      )}
+      {active && rows.length === 0 && <p className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">No jobs are running.</p>}
+      {rows.length > 0 && (
+        <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+          {rows.map(({ jid, job, minions, date }) => (
+            <li key={jid} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+              <Link to={`/jobs/${jid}`} className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500">
+                <Badge tone={funTone(job.Function)} className="font-mono">
+                  {job.Function}
+                </Badge>
+              </Link>
+              <span className="max-w-64 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{formatArgs(job.Arguments)}</span>
+              <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                still running on <span className="font-mono">{minions.length > 3 ? `${minions.slice(0, 3).join(', ')} +${minions.length - 3}` : minions.join(', ')}</span>
+              </span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400" title={date?.toLocaleString()}>
+                started {relTime(date)}
+              </span>
+              {canStop && (
+                <Button size="sm" variant="danger" className="ml-auto" icon={<Square className="size-3" />} onClick={() => setStopping({ jid, job, minions })}>
+                  Stop
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {rows.length > 0 && !canStop && <PermNote className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">Your role can't stop jobs.</PermNote>}
+
+      <Modal open={!!stopping} onClose={() => setStopping(null)} title="Stop job">
+        {stopping && (
+          <div className="space-y-4 text-sm">
+            <p>
+              Kill <code className="rounded bg-zinc-100 px-1 font-mono dark:bg-zinc-800">{`${stopping.job.Function} ${formatArgs(stopping.job.Arguments)}`.trim()}</code> on{' '}
+              <strong>
+                {stopping.minions.length} {stopping.minions.length === 1 ? 'minion' : 'minions'}
+              </strong>{' '}
+              (<span className="font-mono">{stopping.minions.join(', ')}</span>)?
+            </p>
+            <p className="text-zinc-600 dark:text-zinc-400">
+              Each minion gets <code className="font-mono">saltutil.kill_job</code>, which ends the job's process at once. Those minions won't return a result, and a state run
+              stopped midway may leave some states applied and others not.
+            </p>
+            {stopError && <ErrorBox error={stopError} />}
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setStopping(null)}>Cancel</Button>
+              <Button variant="danger" loading={busy} onClick={stop}>
+                Stop on {stopping.minions.length}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </Card>
   )
 }

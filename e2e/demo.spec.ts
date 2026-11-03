@@ -18,6 +18,21 @@ test('minions overview shows the fleet and flags old Salt versions', async ({ pa
   await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
 })
 
+test('minion filters are kept in the URL and survive going back', async ({ page }) => {
+  await openDemo(page)
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('db')
+  await page.getByRole('button', { name: /3007\.1/ }).click()
+  await expect(page).toHaveURL(/q=db/)
+  await expect(page).toHaveURL(/facet=salt%3A3007\.1/)
+  await page.getByRole('cell', { name: 'db-01' }).click()
+  await expect(page).toHaveURL(/\/minions\/db-01$/)
+  await page.goBack()
+  await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('db')
+  await expect(page.getByText('Salt: 3007.1')).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'db-01' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

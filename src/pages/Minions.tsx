@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { CircleOff, KeyRound, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
 import { history } from '../api/server'
 import type { Grains } from '../api/types'
@@ -26,9 +26,29 @@ const COMPLIANCE: Record<'ok' | 'drift' | 'error', { tone: Tone; label: string }
 export function MinionsPage() {
   const salt = useSalt()
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'up' | 'down' | 'drifted'>('all')
-  const [facet, setFacet] = useState<Facet | null>(null)
+  // filters live in the URL, so they survive opening a minion and coming back, and can be shared
+  const [params, setParams] = useSearchParams()
+  const query = params.get('q') ?? ''
+  const { session } = useSession()
+  const fromServer = session?.mode === 'server'
+  // Drifted needs the server's compliance history
+  const filter = FILTERS.find((f) => f === params.get('status') && (f !== 'drifted' || fromServer)) ?? 'all'
+  const facet = parseFacet(params.get('facet'))
+  const update = (changes: Record<string, string | null>) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        for (const [k, v] of Object.entries(changes)) {
+          if (v) next.set(k, v)
+          else next.delete(k)
+        }
+        return next
+      },
+      { replace: true },
+    )
+  const setQuery = (q: string) => update({ q })
+  const setFilter = (f: Filter) => update({ status: f === 'all' ? null : f })
+  const setFacet = (f: Facet | null) => update({ facet: f && `${f.kind}:${f.value}` })
 
   // grains come from the master's cache and render right away; who answers (manage.status pings
   // every minion and waits for the slow ones) fills in when it's ready
@@ -39,8 +59,6 @@ export function MinionsPage() {
   }, [salt, refreshes])
   const status = useAsync(() => salt.status(), [salt, refreshes])
   // the latest compliance result per minion is recorded by the server
-  const { session } = useSession()
-  const fromServer = session?.mode === 'server'
   const compliance = useAsync(() => (fromServer ? history.minionCompliance() : Promise.resolve(null)), [fromServer, refreshes])
   const reload = () => setRefreshes((n) => n + 1)
 
@@ -237,6 +255,16 @@ interface Facet {
   value: string
 }
 const FACET_LABEL: Record<FacetKind, string> = { os: 'OS', salt: 'Salt', role: 'Role' }
+
+const FILTERS = ['all', 'up', 'down', 'drifted'] as const
+type Filter = (typeof FILTERS)[number]
+
+/** `os:Ubuntu` from the URL; anything else is ignored. */
+function parseFacet(s: string | null): Facet | null {
+  const i = s?.indexOf(':') ?? -1
+  const kind = s?.slice(0, i)
+  return s && i > 0 && kind && kind in FACET_LABEL ? { kind: kind as FacetKind, value: s.slice(i + 1) } : null
+}
 
 function facetValues(kind: FacetKind, g: Grains): string[] {
   if (kind === 'os') return g.os ? [`${g.os} ${g.osrelease ?? ''}`.trim()] : []

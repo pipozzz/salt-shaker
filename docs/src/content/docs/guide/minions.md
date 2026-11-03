@@ -10,6 +10,8 @@ The **Minions** page shows status, OS, IPs, CPU/RAM and roles of every minion. A
 
 With the server, a **Compliance** column shows each minion's result in the latest compliance check it answered: in compliance, drifted or error. It links to that check's job, and the tooltip says when it ran. Minions that no recent check reached show *not checked*. Both checks from the Compliance page and dry-run highstates started elsewhere count. The **Drifted** filter shows only the minions that drifted or failed in their latest check.
 
+The search, the status filter and the fleet breakdown pick are kept in the page's address, so they're still there when you come back from a minion, and you can bookmark or share a filtered list, e.g. `/?status=drifted&facet=role:web`.
+
 ## Large fleets
 
 The list comes from the master's minion data cache (`cache.grains`), so opening it doesn't start a job on the minions. Offline minions keep their last known OS and IPs. Which minions respond (`manage.status`) is filled in once that check finishes. The table shows 100 minions at a time.

@@ -5,6 +5,7 @@
 **Minions**
 
 - A **Drifted** filter on the Minions page (with the server) shows only the minions that drifted or failed in their latest compliance check.
+- The page keeps its search and filters in the address, so they survive opening a minion and going back, and a filtered list can be bookmarked or shared.
 
 **Jobs**
 

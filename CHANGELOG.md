@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Connecting to salt-api**
+
+- When salt-api can't be reached, the server says why instead of "fetch failed": an untrusted or expired TLS certificate, a refused connection, a host name that doesn't resolve, a timeout, or `http://` and `https://` mixed up.
+- [Prepare the master](https://pipozzz.github.io/salt-shaker/deploy/master/) shows how to trust a self-signed or internal-CA certificate with `NODE_EXTRA_CA_CERTS`.
+
 **Minions**
 
 - An **Updates** column on the Minions page (with the server) shows how many package upgrades each minion had in its latest patch scan, linked to that scan.

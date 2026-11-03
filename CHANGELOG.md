@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Minions**
+
+- A **Drifted** filter on the Minions page (with the server) shows only the minions that drifted or failed in their latest compliance check.
+
 **Jobs**
 
 - **Running now** on the Jobs page lists the jobs minions are still running, and **Stop** kills one on those minions (`saltutil.kill_job`) after a confirmation. Viewers can see running jobs but not stop them.

@@ -27,7 +27,7 @@ export function MinionsPage() {
   const salt = useSalt()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'up' | 'down'>('all')
+  const [filter, setFilter] = useState<'all' | 'up' | 'down' | 'drifted'>('all')
   const [facet, setFacet] = useState<Facet | null>(null)
 
   // grains come from the master's cache and render right away; who answers (manage.status pings
@@ -46,10 +46,15 @@ export function MinionsPage() {
 
   const rows = useMemo(() => {
     if (!data) return []
+    // drifted or failed in its latest compliance check
+    const isDrifted = (id: string) => {
+      const c = compliance.data?.minions[id]
+      return !!c && c.status !== 'ok'
+    }
     const up = status.data ? new Set(status.data.up) : null
     return data.keys.minions
       .map((id) => ({ id, up: up ? up.has(id) : undefined, g: (data.grains[id] ?? {}) as Grains }))
-      .filter((r) => (filter === 'all' || r.up === undefined ? true : filter === 'up' ? r.up : !r.up))
+      .filter((r) => (filter === 'drifted' ? isDrifted(r.id) : filter === 'all' || r.up === undefined ? true : filter === 'up' ? r.up : !r.up))
       .filter((r) => !facet || facetValues(facet.kind, r.g).includes(facet.value))
       .filter((r) => {
         if (!query) return true
@@ -57,7 +62,7 @@ export function MinionsPage() {
         return query.toLowerCase().split(/\s+/).every((q) => hay.includes(q))
       })
       .sort((a, b) => Number(b.up ?? 0) - Number(a.up ?? 0) || a.id.localeCompare(b.id))
-  }, [data, status.data, query, filter, facet])
+  }, [data, status.data, compliance.data, query, filter, facet])
 
   // render in pages; any change of filters starts again from the first page
   const filterKey = `${query}|${filter}|${facet?.kind}:${facet?.value}`
@@ -116,6 +121,7 @@ export function MinionsPage() {
               { value: 'all', label: 'All' },
               { value: 'up', label: 'Up' },
               { value: 'down', label: 'Down' },
+              ...(fromServer ? [{ value: 'drifted' as const, label: 'Drifted' }] : []),
             ]}
           />
         </div>
@@ -127,8 +133,16 @@ export function MinionsPage() {
         )}
         {!data && loading && <Spinner label="Asking minions for grains…" />}
         {data && rows.length === 0 && (
-          <Empty icon={<Server />} title={data.keys.minions.length ? 'No minions match' : 'No accepted minions yet'}>
-            {data.keys.minions.length ? 'Try a different filter.' : <Link className="text-accent-700 hover:underline" to="/keys">Enroll your first minion →</Link>}
+          <Empty icon={<Server />} title={!data.keys.minions.length ? 'No accepted minions yet' : filter === 'drifted' && !query && !facet ? 'Nothing drifted' : 'No minions match'}>
+            {!data.keys.minions.length ? (
+              <Link className="text-accent-700 hover:underline" to="/keys">
+                Enroll your first minion →
+              </Link>
+            ) : filter === 'drifted' && !query && !facet ? (
+              'Every minion was in compliance in its latest check.'
+            ) : (
+              'Try a different filter.'
+            )}
           </Empty>
         )}
         {rows.length > 0 && (

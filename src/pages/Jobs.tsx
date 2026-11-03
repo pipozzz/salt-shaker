@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
 import type { ActiveJob } from '../api/types'
-import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Spinner } from '../components/ui'
+import { StopJobModal } from '../components/StopJob'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, PageHeader, PermNote, Spinner } from '../components/ui'
 import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSalt } from '../lib/session'
 import { funTone, relTime } from '../lib/format'
@@ -112,30 +113,13 @@ const isInternal = (fun: string) => fun === 'saltutil.find_job' || fun === 'salt
 function RunningJobs({ active, error, loading, onChanged }: { active: Record<string, ActiveJob> | null | undefined; error: Error | null; loading: boolean; onChanged: () => unknown }) {
   const salt = useSalt()
   const can = useCan()
-  const [stopping, setStopping] = useState<{ jid: string; job: ActiveJob; minions: string[] } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [stopError, setStopError] = useState<Error | null>(null)
+  const [stopping, setStopping] = useState<{ jid: string; fun: string; args: unknown[]; minions: string[] } | null>(null)
   const canStop = can('local', 'saltutil.kill_job')
 
   const rows = Object.entries(active ?? {})
     .filter(([, j]) => !isInternal(j.Function))
     .map(([jid, j]) => ({ jid, job: j, minions: j.Running.flatMap((r) => Object.keys(r)).sort(), date: salt.jidDate(jid) }))
     .sort((a, b) => b.jid.localeCompare(a.jid))
-
-  const stop = async () => {
-    if (!stopping) return
-    setBusy(true)
-    setStopError(null)
-    try {
-      await salt.killJob(stopping.jid, stopping.minions)
-      setStopping(null)
-      await onChanged()
-    } catch (e) {
-      setStopError(e instanceof Error ? e : new Error(String(e)))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <Card className="mb-6">
@@ -171,7 +155,7 @@ function RunningJobs({ active, error, loading, onChanged }: { active: Record<str
                 started {relTime(date)}
               </span>
               {canStop && (
-                <Button size="sm" variant="danger" className="ml-auto" icon={<Square className="size-3" />} onClick={() => setStopping({ jid, job, minions })}>
+                <Button size="sm" variant="danger" className="ml-auto" icon={<Square className="size-3" />} onClick={() => setStopping({ jid, fun: job.Function, args: job.Arguments, minions })}>
                   Stop
                 </Button>
               )}
@@ -181,30 +165,7 @@ function RunningJobs({ active, error, loading, onChanged }: { active: Record<str
       )}
       {rows.length > 0 && !canStop && <PermNote className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">Your role can't stop jobs.</PermNote>}
 
-      <Modal open={!!stopping} onClose={() => setStopping(null)} title="Stop job">
-        {stopping && (
-          <div className="space-y-4 text-sm">
-            <p>
-              Kill <code className="rounded bg-zinc-100 px-1 font-mono dark:bg-zinc-800">{`${stopping.job.Function} ${formatArgs(stopping.job.Arguments)}`.trim()}</code> on{' '}
-              <strong>
-                {stopping.minions.length} {stopping.minions.length === 1 ? 'minion' : 'minions'}
-              </strong>{' '}
-              (<span className="font-mono">{stopping.minions.join(', ')}</span>)?
-            </p>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              Each minion gets <code className="font-mono">saltutil.kill_job</code>, which ends the job's process at once. Those minions won't return a result, and a state run
-              stopped midway may leave some states applied and others not.
-            </p>
-            {stopError && <ErrorBox error={stopError} />}
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setStopping(null)}>Cancel</Button>
-              <Button variant="danger" loading={busy} onClick={stop}>
-                Stop on {stopping.minions.length}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <StopJobModal job={stopping} onClose={() => setStopping(null)} onStopped={onChanged} />
     </Card>
   )
 }

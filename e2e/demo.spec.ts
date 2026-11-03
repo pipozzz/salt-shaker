@@ -120,3 +120,13 @@ test('running jobs are listed and can be stopped', async ({ page }) => {
   await page.getByRole('button', { name: 'Stop on 2' }).click()
   await expect(page.getByText('No jobs are running.')).toBeVisible()
 })
+
+test('a job can be stopped from its page', async ({ page }) => {
+  await openDemo(page, '/run?tgt=web-*&fun=test.sleep&args=120')
+  await page.getByRole('button', { name: 'Run on 2' }).click()
+  await page.getByRole('link', { name: 'Open job' }).click()
+  await expect(page.getByText('Still running on web-01, web-02')).toBeVisible()
+  await page.getByRole('button', { name: 'Stop', exact: true }).click()
+  await page.getByRole('button', { name: 'Stop on 2' }).click()
+  await expect(page.getByText('No return from: web-01, web-02')).toBeVisible()
+})

@@ -10,6 +10,8 @@ sidebar: { order: 6 }
 
 **Running now**, at the top, lists the jobs minions are still working on (`jobs.active`, which asks every minion, so it takes a few seconds). **Stop** ends a job on the minions still running it with `saltutil.kill_job`, after a confirmation. Those minions return no result, and a state run stopped midway may leave some states applied and others not. Viewers see running jobs but can't stop them, and every stop is in the audit log.
 
+A job's own page asks the minions that haven't returned yet whether they're still working on it (`saltutil.find_job`), shows them as *still running* and offers **Stop** there too. The rest are listed as *no return*.
+
 The master keeps jobs for about 24 hours. With the server, jobs are recorded from the event bus and kept for 90 days by default (`JOB_RETENTION_DAYS`). That includes jobs run from the salt CLI, along with who ran them.
 
 ## Events

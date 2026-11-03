@@ -5,6 +5,7 @@
 **Jobs**
 
 - **Running now** on the Jobs page lists the jobs minions are still running, and **Stop** kills one on those minions (`saltutil.kill_job`) after a confirmation. Viewers can see running jobs but not stop them.
+- A job's page tells minions that are still running it apart from those that never returned, and can stop it there too.
 
 ## 1.2.0
 

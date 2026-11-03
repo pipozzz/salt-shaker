@@ -164,6 +164,15 @@ export class SaltApi {
     await this.learnOffset()
     return this.runner<Record<string, ActiveJob>>('jobs.active')
   }
+  /** Which of the given minions are still running a job (saltutil.find_job; offline ones don't answer). */
+  async stillRunning(jid: string, minions: string[]) {
+    if (!minions.length) return []
+    const res = await this.local<Record<string, unknown>>(minions.join(','), 'saltutil.find_job', [jid], {}, 'list')
+    return Object.entries(res ?? {})
+      .filter(([, r]) => !!r && typeof r === 'object' && (r as { jid?: unknown }).jid === jid)
+      .map(([id]) => id)
+      .sort()
+  }
   /** Kills a job's process on the given minions; they never return for it. */
   killJob(jid: string, minions: string[]) {
     return this.local<string>(minions.join(','), 'saltutil.kill_job', [jid], {}, 'list')

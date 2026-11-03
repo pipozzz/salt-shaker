@@ -1,7 +1,9 @@
-import { ArrowLeft, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Loader2, RotateCcw, Square } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
 import { ResultActions, ResultView } from '../components/ResultView'
+import { StopJobModal } from '../components/StopJob'
 import { Badge, Button, Card, CardHeader, ErrorBox, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { history, parseStoredArgs } from '../api/server'
@@ -42,6 +44,16 @@ export function JobDetailPage() {
   const results = Object.fromEntries(Object.entries(data?.Result ?? {}).map(([id, r]) => [id, r.return]))
   const missing = (data?.Minions ?? []).filter((m) => !(m in results))
   const target = Array.isArray(data?.Target) ? data.Target.join(',') : data?.Target
+  // of the minions that haven't returned, which are still working on it
+  const missingKey = missing.join(',')
+  const running = useAsync(() => (missingKey ? salt.stillRunning(jid, missingKey.split(',')) : Promise.resolve([])), [salt, jid, missingKey])
+  const stillRunning = running.data ?? []
+  const noReturn = missing.filter((m) => !stillRunning.includes(m))
+  const [stopping, setStopping] = useState(false)
+  const refresh = () => {
+    void reload()
+    void running.reload()
+  }
 
   const rerun = (minions?: string[]) => {
     if (!data) return
@@ -103,7 +115,7 @@ export function JobDetailPage() {
                     expected={data.Minions ?? []}
                     onRetry={canRerun ? (m) => rerun(m) : undefined}
                   />
-                  <Button size="sm" variant="ghost" onClick={reload} loading={loading}>
+                  <Button size="sm" variant="ghost" onClick={refresh} loading={loading}>
                     Refresh
                   </Button>
                 </div>
@@ -115,13 +127,30 @@ export function JobDetailPage() {
               ) : (
                 <ResultView results={results} />
               )}
-              {missing.length > 0 && (
+              {stillRunning.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-3 px-1 text-sm">
+                  <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+                    <Loader2 className="size-3.5 animate-spin" /> Still running on <span className="font-mono">{stillRunning.join(', ')}</span>
+                  </span>
+                  {can('local', 'saltutil.kill_job') && (
+                    <Button size="sm" variant="danger" icon={<Square className="size-3" />} onClick={() => setStopping(true)}>
+                      Stop
+                    </Button>
+                  )}
+                </div>
+              )}
+              {noReturn.length > 0 && (
                 <p className="mt-3 px-1 text-sm text-zinc-500">
-                  No return from: <span className="font-mono">{missing.join(', ')}</span>
+                  No return from: <span className="font-mono">{noReturn.join(', ')}</span>
                 </p>
               )}
             </div>
           </Card>
+          <StopJobModal
+            job={stopping ? { jid, fun: data.Function, args: data.Arguments, minions: stillRunning } : null}
+            onClose={() => setStopping(false)}
+            onStopped={refresh}
+          />
         </>
       )}
     </>

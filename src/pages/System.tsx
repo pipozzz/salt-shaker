@@ -149,6 +149,8 @@ function EventBus({ s }: { s: SystemStatus }) {
   )
 }
 
+const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
+
 function Database({ s }: { s: SystemStatus }) {
   const d = s.database
   return (
@@ -156,7 +158,8 @@ function Database({ s }: { s: SystemStatus }) {
       <Row k="Engine">{d.dialect === 'pg' ? 'PostgreSQL' : 'SQLite'}</Row>
       <Row k="Jobs recorded">{d.jobs.toLocaleString()}</Row>
       <Row k="Oldest job">{when(d.oldestJob)}</Row>
-      <Row k="Kept for">{d.retentionDays} days</Row>
+      <Row k="Jobs kept for">{days(d.retentionDays)}</Row>
+      <Row k="Audit log kept">{d.auditRetentionDays > 0 ? `for ${days(d.auditRetentionDays)}` : 'forever (AUDIT_RETENTION_DAYS not set)'}</Row>
     </Section>
   )
 }

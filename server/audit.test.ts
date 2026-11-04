@@ -1,6 +1,6 @@
 import { desc } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
-import { auditCsv, auditFilter, auditWhere, type AuditFilter } from './audit'
+import { auditCsv, auditFilter, auditWhere, pruneAudit, type AuditFilter } from './audit'
 import { openTestDatabase, testDialects } from './testdb'
 
 describe('auditFilter', () => {
@@ -45,6 +45,16 @@ describe.each(testDialects)('audit queries (%s)', (dialect) => {
     expect(await find({ from: '2026-11-01', to: '2026-11-02' })).toEqual(['key.accept', 'state.apply'])
     expect(await find({ from: '2026-11-01', outcome: 'ok' })).toEqual(['test.ping'])
     expect(await find({ to: '2026-10-31' })).toEqual(['cmd.run'])
+  })
+
+  it('prunes entries older than the retention, or none with 0', async () => {
+    const { db, schema, find } = await setup()
+    const now = new Date('2026-11-04T00:00:00Z')
+    expect(await pruneAudit(db, schema, 0, now)).toBe(0)
+    expect(await find({})).toHaveLength(4)
+    // two days back from now is 2026-11-02T00:00Z
+    expect(await pruneAudit(db, schema, 2, now)).toBe(2)
+    expect(await find({})).toEqual(['test.ping', 'key.accept'])
   })
 
   it('writes CSV with ISO times and defused cells', async () => {

@@ -1,6 +1,6 @@
 import { and, eq, gte, like, lt, or, sql } from 'drizzle-orm'
 import { toCsv } from '../src/lib/csv'
-import type { Schema } from './db'
+import type { Db, Schema } from './db'
 
 export interface AuditFilter {
   q?: string
@@ -41,6 +41,15 @@ export function auditWhere(schema: Schema, f: AuditFilter) {
     from ? gte(t.at, from) : undefined,
     to ? lt(t.at, new Date(to.getTime() + 86400_000)) : undefined,
   )
+}
+
+/** Deletes audit entries older than `days`; 0 keeps everything. Returns how many went. */
+export async function pruneAudit(db: Db, schema: Schema, days: number, now = new Date()) {
+  if (days <= 0) return 0
+  const t = schema.auditLog
+  const cutoff = new Date(now.getTime() - days * 86400_000)
+  const gone = await db.delete(t).where(lt(t.at, cutoff)).returning({ id: t.id })
+  return gone.length
 }
 
 type Row = Schema['auditLog']['$inferSelect']

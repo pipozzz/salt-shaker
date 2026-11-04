@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { stateSummary } from '../src/lib/states'
+import { pruneAudit } from './audit'
 import type { Db, Schema } from './db'
 import type { SaltService } from './salt'
 
@@ -124,6 +125,7 @@ export class HistoryRecorder {
   private schema: Schema
   private salt: SaltService
   private retentionDays: number
+  private auditDays: number
   private ctrl: AbortController | null = null
   private timers: ReturnType<typeof setInterval>[] = []
   private eventListeners: Array<(tag: string, data: Record<string, unknown>) => void> = []
@@ -131,11 +133,12 @@ export class HistoryRecorder {
   /** How following the event bus is going, for the System page. */
   stream: StreamStatus = { state: 'stopped', since: null, lastEventAt: null, lastError: null }
 
-  constructor(db: Db, schema: Schema, salt: SaltService, retentionDays: number) {
+  constructor(db: Db, schema: Schema, salt: SaltService, retentionDays: number, auditDays = 0) {
     this.db = db
     this.schema = schema
     this.salt = salt
     this.retentionDays = retentionDays
+    this.auditDays = auditDays
   }
 
   /** Called for every master event, before filtering. */
@@ -224,7 +227,14 @@ export class HistoryRecorder {
     for (const l of this.returnListeners) l(r)
   }
 
+  /** Old jobs, and old audit entries when AUDIT_RETENTION_DAYS is set. Runs on the leader only. */
   async prune() {
+    try {
+      const audit = await pruneAudit(this.db, this.schema, this.auditDays)
+      if (audit) console.log(`audit: pruned ${audit} entries older than ${this.auditDays} day${this.auditDays === 1 ? '' : 's'}`)
+    } catch (err) {
+      console.warn('audit: prune failed', err)
+    }
     try {
       const cutoff = new Date(Date.now() - this.retentionDays * 86400_000)
       const { job, jobReturn } = this.schema

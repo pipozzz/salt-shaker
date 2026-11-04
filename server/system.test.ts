@@ -10,6 +10,7 @@ const config = {
   dialect: 'sqlite',
   saltApi: { url: 'https://master:8000', username: 'salt-shaker', password: 'top-secret', eauth: 'sharedsecret' },
   historyDays: 90,
+  auditDays: 0,
   presenceMinutes: 5,
   trustProxy: false,
   passwordLogin: 'admins',
@@ -67,7 +68,7 @@ describe.each(testDialects)('systemStatus (%s)', (dialect) => {
     expect(s.events.leader).toBe('me')
     expect(s.events.stream?.state).toBe('connected')
     expect(s.saltApi).toMatchObject({ url: 'https://master:8000', username: 'salt-shaker', eauth: 'sharedsecret', ok: true, error: null, keys: { accepted: 2, pending: 1, rejected: 0, denied: 0 } })
-    expect(s.database).toEqual({ dialect: 'sqlite', jobs: 2, oldestJob: new Date(Date.UTC(2026, 10, 1)), retentionDays: 90 })
+    expect(s.database).toEqual({ dialect: 'sqlite', jobs: 2, oldestJob: new Date(Date.UTC(2026, 10, 1)), retentionDays: 90, auditRetentionDays: 0 })
     expect(s.notifications).toEqual({ channels: 2, enabled: 1, failing: [{ name: 'pager', error: 'HTTP 500' }] })
     expect(s.schedules).toEqual({ total: 0, enabled: 0 })
     expect(s.settings).toEqual({ publicUrl: 'https://salt.example.com', trustedOrigins: [], sso: { name: 'Keycloak', active: false }, passwordLogin: 'admins', presenceMinutes: 5, metrics: true, trustProxy: false })

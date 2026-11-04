@@ -9,7 +9,7 @@ export interface SystemDeps {
   db: Db
   schema: Schema
   salt: Pick<SaltService, 'call'>
-  config: Pick<Config, 'publicUrl' | 'trustedOrigins' | 'dialect' | 'saltApi' | 'historyDays' | 'presenceMinutes' | 'trustProxy' | 'passwordLogin' | 'oidc' | 'metricsToken'>
+  config: Pick<Config, 'publicUrl' | 'trustedOrigins' | 'dialect' | 'saltApi' | 'historyDays' | 'auditDays' | 'presenceMinutes' | 'trustProxy' | 'passwordLogin' | 'oidc' | 'metricsToken'>
   version: string
   instance: string
   startedAt: Date
@@ -58,7 +58,7 @@ export async function systemStatus(d: SystemDeps) {
       // only the leader follows the stream, so only it knows how that's going
       stream: d.leader.isLeader ? d.stream : null,
     },
-    database: { dialect: config.dialect, jobs: jobs?.n ?? 0, oldestJob: oldest?.at ?? null, retentionDays: config.historyDays },
+    database: { dialect: config.dialect, jobs: jobs?.n ?? 0, oldestJob: oldest?.at ?? null, retentionDays: config.historyDays, auditRetentionDays: config.auditDays },
     notifications: {
       channels: channels.length,
       enabled: channels.filter((c) => c.enabled).length,

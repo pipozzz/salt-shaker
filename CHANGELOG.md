@@ -19,6 +19,10 @@
 
 - The Users page shows when each user last signed in, with a password or through SSO, to spot accounts nobody uses. Sign-ins are recorded from this version on.
 
+**Audit log**
+
+- `AUDIT_RETENTION_DAYS` deletes audit entries older than that many days, e.g. `365`. Without it entries are kept forever, as before. The System page shows the setting.
+
 **Notifications**
 
 - Alerts can go to **Microsoft Teams**: a new channel format sends an Adaptive Card with a link back, for the *Post to a channel when a webhook request is received* workflow. See [Schedules & notifications](https://pipozzz.github.io/salt-shaker/guide/schedules/#notifications).

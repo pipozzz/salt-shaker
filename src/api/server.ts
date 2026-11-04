@@ -369,7 +369,7 @@ export interface SystemStatus {
     thisInstance: boolean
     stream: { state: 'stopped' | 'connecting' | 'connected'; since: string | null; lastEventAt: string | null; lastError: string | null } | null
   }
-  database: { dialect: 'sqlite' | 'pg'; jobs: number; oldestJob: string | null; retentionDays: number }
+  database: { dialect: 'sqlite' | 'pg'; jobs: number; oldestJob: string | null; retentionDays: number; auditRetentionDays: number }
   notifications: { channels: number; enabled: number; failing: Array<{ name: string; error: string }> }
   schedules: { total: number; enabled: number }
   settings: { publicUrl: string; trustedOrigins: string[]; sso: { name: string; active: boolean } | null; passwordLogin: 'all' | 'admins'; presenceMinutes: number; metrics: boolean; trustProxy: boolean }

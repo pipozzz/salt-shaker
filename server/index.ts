@@ -55,7 +55,7 @@ if (config.oidc) {
   }
 }
 const salt = new SaltService(config.saltApi)
-const history = new HistoryRecorder(db, schema, salt, config.historyDays)
+const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))

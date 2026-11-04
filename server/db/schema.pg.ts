@@ -16,6 +16,8 @@ export const user = pgTable('user', {
   banned: boolean('banned').default(false),
   banReason: text('ban_reason'),
   banExpires: timestamp('ban_expires', { withTimezone: true }),
+  /** set by Salt Shaker on every successful sign-in, for access reviews */
+  lastSignInAt: timestamp('last_sign_in_at', { withTimezone: true }),
 })
 
 export const session = pgTable('session', {

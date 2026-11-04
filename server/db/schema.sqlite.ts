@@ -15,6 +15,8 @@ export const user = sqliteTable('user', {
   banned: integer('banned', { mode: 'boolean' }).default(false),
   banReason: text('ban_reason'),
   banExpires: integer('ban_expires', { mode: 'timestamp_ms' }),
+  /** set by Salt Shaker on every successful sign-in, for access reviews */
+  lastSignInAt: integer('last_sign_in_at', { mode: 'timestamp_ms' }),
 })
 
 export const session = sqliteTable('session', {

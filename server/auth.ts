@@ -40,6 +40,8 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
     // accounts are created by admins, the first-run setup, or SSO, never by self sign-up
     emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 10 },
     session: { expiresIn: 60 * 60 * 12, updateAge: 60 * 60 },
+    // read-only for clients; returned by the admin user list
+    user: { additionalFields: { lastSignInAt: { type: 'date', required: false, input: false } } },
     rateLimit: { enabled: true, window: 60, max: 30 },
     // set by server/index.ts from the socket (or X-Forwarded-For when TRUST_PROXY is on), never by the client
     advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
@@ -97,6 +99,10 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
             // with PASSWORD_LOGIN=admins, only admins may get a session without going through SSO
             if (!sso && oidc && config.passwordLogin === 'admins' && role !== 'admin') return false
             return { data: session }
+          },
+          // the session exists, so the sign-in went through
+          after: async (session) => {
+            await db.update(schema.user).set({ lastSignInAt: new Date() }).where(eq(schema.user.id, session.userId))
           },
         },
       },

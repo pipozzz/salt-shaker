@@ -88,7 +88,8 @@ export function UsersPage() {
                 <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">User</th>
                   <th className="px-3 py-2.5 font-medium">Role</th>
-                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Created</th>
+                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Last sign-in</th>
+                  <th className="hidden px-3 py-2.5 font-medium md:table-cell">Created</th>
                   <th className="px-3 py-2.5 pr-4" />
                 </tr>
               </thead>
@@ -121,7 +122,10 @@ export function UsersPage() {
                           {u.banned && <Badge tone="red">disabled</Badge>}
                         </div>
                       </td>
-                      <td className="hidden px-3 py-2.5 text-zinc-500 sm:table-cell dark:text-zinc-400">{relTime(new Date(u.createdAt))}</td>
+                      <td className="hidden px-3 py-2.5 text-zinc-500 sm:table-cell dark:text-zinc-400">
+                        {u.lastSignInAt ? <span title={new Date(u.lastSignInAt).toLocaleString()}>{relTime(new Date(u.lastSignInAt))}</span> : 'never'}
+                      </td>
+                      <td className="hidden px-3 py-2.5 text-zinc-500 md:table-cell dark:text-zinc-400">{relTime(new Date(u.createdAt))}</td>
                       <td className="px-3 py-2.5 pr-4">
                         {!isMe && (
                           <div className="flex justify-end gap-1">

@@ -1,0 +1,1 @@
+ALTER TABLE `user` ADD `last_sign_in_at` integer;

@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createAuth, emailFor } from './auth'
 import type { Config } from './config'
@@ -21,5 +22,30 @@ describe.each(testDialects)('usernames (%s)', (dialect) => {
     await auth.api.createUser({ body: { email: emailFor(username), password, name: username, role: 'viewer', data: { username } } })
     const res = await auth.api.signInUsername({ body: { username, password } })
     expect(res?.user).toMatchObject({ username })
+  })
+})
+
+describe.each(testDialects)('last sign-in (%s)', (dialect) => {
+  it('is empty until the user signs in, then shows in the admin user list', async () => {
+    const { db, schema, close } = await openTestDatabase(dialect)
+    try {
+      const auth = createAuth(config, db, schema, dialect === 'pg' ? 'pg' : 'sqlite')
+      const password = 'correct-horse-battery'
+      const { user } = await auth.api.createUser({ body: { email: emailFor('otto'), password, name: 'otto', role: 'viewer', data: { username: 'otto' } } })
+      expect(user).toMatchObject({ lastSignInAt: null })
+      const before = Date.now()
+      const signIn = await auth.api.signInUsername({ body: { username: 'otto', password }, asResponse: true })
+      const at = async () => (await db.select({ at: schema.user.lastSignInAt }).from(schema.user).where(eq(schema.user.id, user.id)))[0]?.at
+      expect((await at())?.getTime()).toBeGreaterThanOrEqual(before)
+      // users can't backdate it themselves
+      const cookie = signIn.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ')
+      const res = await auth.handler(
+        new Request('http://localhost:8080/api/auth/update-user', { method: 'POST', headers: { cookie, origin: 'http://localhost:8080', 'content-type': 'application/json' }, body: JSON.stringify({ lastSignInAt: '2000-01-01T00:00:00Z' }) }),
+      )
+      expect(res.status).not.toBe(200)
+      expect((await at())?.getTime()).toBeGreaterThanOrEqual(before)
+    } finally {
+      await close()
+    }
   })
 })

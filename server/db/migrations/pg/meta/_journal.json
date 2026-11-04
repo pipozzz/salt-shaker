@@ -29,6 +29,13 @@
       "when": 1793563957468,
       "tag": "0003_leases",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793799180870,
+      "tag": "0004_last_sign_in",
+      "breakpoints": true
     }
   ]
 }

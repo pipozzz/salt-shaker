@@ -12,6 +12,8 @@ With [single sign-on](/salt-shaker/deploy/sso/), users are created on their firs
 
 To stop someone from signing in, give them the *none* role, disable them, or delete them.
 
+**Last sign-in** shows when each user last signed in, with a password or through SSO, which helps with access reviews. Sign-ins are recorded from version 1.5.0 on, so users who haven't signed in since the upgrade show *never*.
+
 The first admin is created on the first visit to a fresh install.
 
 ## Audit log

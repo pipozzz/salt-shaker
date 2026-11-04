@@ -122,6 +122,7 @@ export interface UserRow {
   role?: string | null
   banned?: boolean | null
   createdAt: string
+  lastSignInAt?: string | null
 }
 
 export const users = {

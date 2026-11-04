@@ -11,6 +11,10 @@
 - A minion's page keeps its tab (Grains, Pillar, Jobs) and key filter in the address, so going back from one of its jobs returns to the Jobs tab, and a link can open the pillar directly.
 - The **Minions** link on a minion's page returns to the list with the search and filters it had.
 
+**Users**
+
+- The Users page shows when each user last signed in, with a password or through SSO, to spot accounts nobody uses. Sign-ins are recorded from this version on.
+
 **Notifications**
 
 - Alerts can go to **Microsoft Teams**: a new channel format sends an Adaptive Card with a link back, for the *Post to a channel when a webhook request is received* workflow. See [Schedules & notifications](https://pipozzz.github.io/salt-shaker/guide/schedules/#notifications).

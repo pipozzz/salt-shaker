@@ -11,6 +11,10 @@
 - A minion's page keeps its tab (Grains, Pillar, Jobs) and key filter in the address, so going back from one of its jobs returns to the Jobs tab, and a link can open the pillar directly.
 - The **Minions** link on a minion's page returns to the list with the search and filters it had.
 
+**Notifications**
+
+- Alerts can go to **Microsoft Teams**: a new channel format sends an Adaptive Card with a link back, for the *Post to a channel when a webhook request is received* workflow. See [Schedules & notifications](https://pipozzz.github.io/salt-shaker/guide/schedules/#notifications).
+
 ## 1.4.0
 
 **Connecting to salt-api**

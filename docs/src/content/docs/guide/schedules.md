@@ -1,6 +1,6 @@
 ---
 title: Schedules & Notifications
-description: Run checks on a schedule and send alerts to Slack or a webhook.
+description: Run checks on a schedule and send alerts to Slack, Microsoft Teams or a webhook.
 sidebar: { order: 7 }
 ---
 
@@ -37,9 +37,10 @@ With several server instances on one database, each scheduled run still starts e
 
 Minions that are already down when the server starts are not reported, only the ones that go down while it is watching. Set `PRESENCE_CHECK_MINUTES` to change the interval, or to `0` to turn the check off.
 
-There are two formats:
+There are three formats:
 
 - **Slack-compatible**, for Slack incoming webhooks. Mattermost and Rocket.Chat accept it too, and so does Discord if you append `/slack` to its webhook URL.
+- **Microsoft Teams**, an Adaptive Card with a link back. In Teams, add the *Post to a channel when a webhook request is received* workflow to the channel (channel **⋯ → Workflows**) and paste the URL it gives you. The older Office 365 connectors are retired and are not supported.
 - **Generic JSON webhook**, for anything else:
 
 ```json

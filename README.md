@@ -23,7 +23,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
 - **Single sign-on:** OIDC with Keycloak, Entra ID, Google, Authentik, Okta and others. Roles can come from IdP groups and are refreshed on every sign-in.
 - **Schedules:** nightly compliance checks, weekly patch scans or any function, on a cron schedule.
-- **Notifications:** Slack-format or JSON webhooks for drift, available upgrades, failed jobs and minions waiting for approval.
+- **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
 - **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
 - **Demo mode:** a simulated master in the browser, for trying it out.

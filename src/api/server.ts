@@ -323,7 +323,7 @@ export interface ScheduleInput {
 export interface Channel {
   id: number
   name: string
-  kind: 'slack' | 'webhook'
+  kind: 'slack' | 'teams' | 'webhook'
   url: string
   events: NotifyEvent[]
   enabled: boolean

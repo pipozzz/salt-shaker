@@ -56,6 +56,17 @@ describe('notification payloads', () => {
     })
   })
 
+  it('sends an Adaptive Card to Microsoft Teams workflows', () => {
+    const body = payloadFor('teams', 'job_failed', msg, 'https://salt.example.com') as { type: string; attachments: { contentType: string; content: { body: unknown[]; actions: unknown[] } }[] }
+    expect(body.type).toBe('message')
+    expect(body.attachments[0]!.contentType).toBe('application/vnd.microsoft.card.adaptive')
+    expect(body.attachments[0]!.content.body).toEqual([
+      { type: 'TextBlock', text: 'cmd.run failed on 2 minions', wrap: true, weight: 'Bolder', size: 'Medium', color: 'Attention' },
+      { type: 'TextBlock', text: 'Minions: a, b', wrap: true, spacing: 'Small' },
+    ])
+    expect(body.attachments[0]!.content.actions).toEqual([{ type: 'Action.OpenUrl', title: 'Open in Salt Shaker', url: 'https://salt.example.com/jobs/1' }])
+  })
+
   it('sends structured JSON to generic webhooks', () => {
     expect(payloadFor('webhook', 'job_failed', msg, 'https://salt.example.com')).toMatchObject({
       source: 'salt-shaker',

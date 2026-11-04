@@ -14,16 +14,40 @@ export const EVENTS = {
 export type NotifyEvent = keyof typeof EVENTS
 export const isEvent = (e: unknown): e is NotifyEvent => typeof e === 'string' && e in EVENTS
 
-export const CHANNEL_KINDS = ['slack', 'webhook'] as const
+export const CHANNEL_KINDS = ['slack', 'teams', 'webhook'] as const
 export type ChannelKind = (typeof CHANNEL_KINDS)[number]
 
 const ICON = { info: 'ℹ️', warning: '⚠️', error: '🔴' }
+const CARD_COLOR = { info: 'Default', warning: 'Warning', error: 'Attention' }
 
-/** The HTTP body for a channel: Slack's incoming-webhook format, or plain JSON for anything else. */
+/**
+ * The HTTP body for a channel: Slack's incoming-webhook format, an Adaptive Card for a Microsoft Teams
+ * workflow ("When a Teams webhook request is received"), or plain JSON for anything else.
+ */
 export function payloadFor(kind: string, event: NotifyEvent, msg: Message, publicUrl: string) {
   const url = msg.path ? `${publicUrl}${msg.path}` : publicUrl
   if (kind === 'slack') {
     return { text: `${ICON[msg.severity]} *${msg.title}*\n${msg.lines.join('\n')}\n<${url}|Open in Salt Shaker>` }
+  }
+  if (kind === 'teams') {
+    const text = (t: string, more: Record<string, unknown> = {}) => ({ type: 'TextBlock', text: t, wrap: true, ...more })
+    return {
+      type: 'message',
+      attachments: [
+        {
+          contentType: 'application/vnd.microsoft.card.adaptive',
+          contentUrl: null,
+          content: {
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            type: 'AdaptiveCard',
+            version: '1.4',
+            msteams: { width: 'Full' },
+            body: [text(msg.title, { weight: 'Bolder', size: 'Medium', color: CARD_COLOR[msg.severity] }), ...msg.lines.map((l) => text(l, { spacing: 'Small' }))],
+            actions: [{ type: 'Action.OpenUrl', title: 'Open in Salt Shaker', url }],
+          },
+        },
+      ],
+    }
   }
   return { source: 'salt-shaker', event, severity: msg.severity, title: msg.title, lines: msg.lines, url, at: new Date().toISOString() }
 }

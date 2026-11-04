@@ -5,6 +5,12 @@ import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, 
 import { useAsync } from '../lib/hooks'
 import { relTime } from '../lib/format'
 
+const FORMAT: Record<Channel['kind'], { label: string; placeholder: string }> = {
+  slack: { label: 'Slack format', placeholder: 'https://hooks.slack.com/services/…' },
+  teams: { label: 'Microsoft Teams', placeholder: 'https://….logic.azure.com/workflows/…' },
+  webhook: { label: 'JSON webhook', placeholder: 'https://alerts.example.com/salt' },
+}
+
 const EVENT_SHORT: Record<NotifyEvent, string> = {
   drift: 'Drift',
   patches: 'Patches',
@@ -72,7 +78,7 @@ export function NotificationsPage() {
                 <div className="min-w-48 flex-1">
                   <p className="flex items-center gap-2">
                     <span className="font-medium">{ch.name}</span>
-                    <Badge>{ch.kind === 'slack' ? 'Slack format' : 'JSON webhook'}</Badge>
+                    <Badge>{FORMAT[ch.kind]?.label ?? ch.kind}</Badge>
                   </p>
                   <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">{ch.url}</p>
                 </div>
@@ -180,12 +186,13 @@ function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel 
           <Field label="Format">
             <Select value={kind} onChange={(e) => setKind(e.target.value as Channel['kind'])} disabled={!!channel}>
               <option value="slack">Slack-compatible</option>
+              <option value="teams">Microsoft Teams</option>
               <option value="webhook">Generic JSON webhook</option>
             </Select>
           </Field>
         </div>
         <Field label="Webhook URL" hint={channel ? `Currently ${channel.url}. Leave empty to keep it.` : 'Stored on the server and never shown in full again.'}>
-          <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" required={!channel} className="font-mono" />
+          <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={FORMAT[kind].placeholder} required={!channel} className="font-mono" />
         </Field>
         <fieldset className="space-y-2">
           <legend className="mb-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">Send when</legend>

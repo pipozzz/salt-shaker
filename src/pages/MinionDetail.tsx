@@ -1,6 +1,6 @@
 import { ArrowLeft, Cpu, HardDrive, History, Network, Play, Search, Terminal } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
 import { history, minionOutcome, parseStoredArgs, type MinionJob } from '../api/server'
 import type { Grains } from '../api/types'
@@ -11,13 +11,28 @@ import { useSalt, useSession } from '../lib/session'
 import { OsIcon } from './Minions'
 import { fmtMem, funTone, relTime } from '../lib/format'
 
+const TABS = ['grains', 'pillar', 'jobs'] as const
+
 export function MinionDetailPage() {
   const { id = '' } = useParams()
   const salt = useSalt()
   const navigate = useNavigate()
   const { session } = useSession()
-  const [tab, setTab] = useState<'grains' | 'pillar' | 'jobs'>('grains')
-  const [filter, setFilter] = useState('')
+  const location = useLocation()
+  // the tab and the filter live in the address, so going back from a job returns to the Jobs tab
+  const [params, setParams] = useSearchParams()
+  const tab = TABS.find((t) => t === params.get('tab') && (t !== 'jobs' || session?.mode === 'server')) ?? 'grains'
+  const filter = params.get('q') ?? ''
+  const update = (k: 'tab' | 'q', value: string) =>
+  {
+    // from the address bar, not the last render: typing right after switching tabs must keep the tab
+    const next = new URLSearchParams(window.location.search)
+    if (value && !(k === 'tab' && value === 'grains')) next.set(k, value)
+    else next.delete(k)
+    setParams(next, { replace: true, state: location.state })
+  }
+  // the Minions list with the filters it had when this minion was opened
+  const back = (location.state as { back?: string } | null)?.back
 
   const grains = useAsync(async () => {
     const [g, status] = await Promise.all([salt.grains(id, 'list'), salt.status()])
@@ -33,7 +48,7 @@ export function MinionDetailPage() {
 
   return (
     <>
-      <Link to="/" className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 dark:text-zinc-400">
+      <Link to={back ? `/?${back}` : '/'} className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 dark:text-zinc-400">
         <ArrowLeft className="size-4" /> Minions
       </Link>
 
@@ -89,7 +104,7 @@ export function MinionDetailPage() {
           title={
             <Tabs
               value={tab}
-              onChange={setTab}
+              onChange={(t) => update('tab', t)}
               items={[
                 { value: 'grains', label: 'Grains' },
                 { value: 'pillar', label: 'Pillar' },
@@ -102,7 +117,7 @@ export function MinionDetailPage() {
             tab !== 'jobs' && (
             <div className="relative">
               <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter keys…" className="w-56 pl-9" />
+              <Input value={filter} onChange={(e) => update('q', e.target.value)} placeholder="Filter keys…" className="w-56 pl-9" />
             </div>
             )
           }

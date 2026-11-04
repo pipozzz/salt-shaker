@@ -33,6 +33,22 @@ test('minion filters are kept in the URL and survive going back', async ({ page 
   await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
 })
 
+test('a minion page keeps its tab and filter in the URL and links back to the filtered list', async ({ page }) => {
+  await openDemo(page)
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('db')
+  await page.getByRole('cell', { name: 'db-01' }).click()
+  await page.getByRole('button', { name: 'Pillar', exact: true }).click()
+  await expect(page).toHaveURL(/tab=pillar/)
+  await page.getByPlaceholder('Filter keys…').fill('postgres')
+  await expect(page).toHaveURL(/\/minions\/db-01\?tab=pillar&q=postgres$/)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Pillar', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByPlaceholder('Filter keys…')).toHaveValue('postgres')
+  await page.getByRole('main').getByRole('link', { name: 'Minions' }).click()
+  await expect(page).toHaveURL(/:\d+\/\?(demo=&)?q=db$/)
+  await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

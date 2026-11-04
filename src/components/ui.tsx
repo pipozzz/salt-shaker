@@ -218,6 +218,7 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
         <button
           key={it.value}
           onClick={() => onChange(it.value)}
+          aria-pressed={value === it.value}
           className={clsx(
             'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
             value === it.value ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-950 dark:text-zinc-100' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200',

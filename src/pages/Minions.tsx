@@ -182,7 +182,7 @@ export function MinionsPage() {
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
                 {visible.map(({ id, up, g }) => (
-                  <tr key={id} onClick={() => navigate(`/minions/${encodeURIComponent(id)}`)} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+                  <tr key={id} onClick={() => navigate(`/minions/${encodeURIComponent(id)}`, { state: { back: params.toString() } })} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
                     <td className="py-2.5 pr-3 pl-4">
                       <div className="flex items-center gap-2.5">
                         <StatusDot up={up} />

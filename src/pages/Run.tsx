@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
+import { CalendarClock, CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { parseArgs } from '../api/salt'
 import type { TargetType } from '../api/types'
 import { ResultActions, ResultView } from '../components/ResultView'
@@ -9,7 +9,7 @@ import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, Modal, PageHeader, PermNote } from '../components/ui'
 import { confirmLevel } from '../lib/risk'
 import { useStoredState } from '../lib/hooks'
-import { useCan, useSalt } from '../lib/session'
+import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 
 const PRESETS: Array<{ label: string; fun: string; args?: string; danger?: boolean }> = [
@@ -57,6 +57,11 @@ export function RunPage() {
   }
 
   const can = useCan()
+  const navigate = useNavigate()
+  // schedules are kept by the server and managed by admins
+  const { session } = useSession()
+  const canSchedule = session?.mode === 'server' && session.eauth === 'admin'
+  const schedule = () => navigate(`/schedules?${new URLSearchParams({ fun: fun.trim(), args: args.trim(), tgt: tgt.trim(), tgt_type: tgtType })}`)
   const allowed = !fun.trim() || can('local', fun.trim())
   const isWrite = /^state\.(apply|highstate|sls)$/.test(fun) && !/test=(True|true)/.test(args)
   const isCmd = fun.startsWith('cmd.')
@@ -154,7 +159,12 @@ export function RunPage() {
                     {p.label}
                   </button>
                 ))}
-                <Button type="submit" variant={isWrite ? 'success' : 'primary'} className="ml-auto" icon={<Play className="size-4" />} loading={submitting} disabled={!allowed}>
+                {canSchedule && (
+                  <Button type="button" className="ml-auto" icon={<CalendarClock className="size-4" />} onClick={schedule} disabled={!fun.trim() || !tgt.trim()}>
+                    Schedule…
+                  </Button>
+                )}
+                <Button type="submit" variant={isWrite ? 'success' : 'primary'} className={canSchedule ? undefined : 'ml-auto'} icon={<Play className="size-4" />} loading={submitting} disabled={!allowed}>
                   {isWrite ? 'Apply' : 'Run'}
                   {matched?.length ? ` on ${matched.length}` : ''}
                   <CornerDownLeft className="size-3.5 opacity-60" />

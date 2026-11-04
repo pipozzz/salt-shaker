@@ -14,6 +14,7 @@ sidebar: { order: 5 }
 - Targets can be saved and reused.
 - When some minions fail or don't return, **Retry failed** fills the form in again with just those minions (a list target) and the same function and arguments. Nothing runs until you start it.
 - Results can be downloaded as CSV (one row per minion, with state counts) or JSON.
+- Admins can turn what's in the form into a [schedule](/salt-shaker/guide/schedules/) with **Schedule…**: it opens a new schedule with the function, arguments and target filled in.
 
 ## Orchestrate
 

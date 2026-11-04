@@ -1,6 +1,6 @@
 import { CalendarClock, ExternalLink, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { formatArgs, parseArgs } from '../api/salt'
 import { automation, type Schedule, type ScheduleInput, type ScheduleKind } from '../api/server'
 import type { TargetType } from '../api/types'
@@ -56,7 +56,14 @@ function Summary({ s }: { s: Schedule }) {
 export function SchedulesPage() {
   const list = useAsync(() => automation.schedules(), [])
   const meta = useAsync(() => automation.meta(), [])
-  const [editing, setEditing] = useState<Schedule | 'new' | null>(null)
+  // "Schedule…" on the Run page opens a new schedule for that function and target
+  const [params, setParams] = useSearchParams()
+  const fromRun = params.get('fun') ? { fun: params.get('fun')!, args: params.get('args') ?? '', tgt: params.get('tgt') ?? '*', tgtType: (params.get('tgt_type') as TargetType | null) ?? 'glob' } : null
+  const [editing, setEditing] = useState<Schedule | 'new' | null>(fromRun ? 'new' : null)
+  const closeEditor = () => {
+    setEditing(null)
+    if (fromRun) setParams({}, { replace: true })
+  }
   const [removing, setRemoving] = useState<Schedule | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -182,7 +189,7 @@ export function SchedulesPage() {
         )}
       </Card>
 
-      {editing && <ScheduleModal schedule={editing === 'new' ? null : editing} kinds={meta.data?.kinds} onClose={() => setEditing(null)} onSaved={list.reload} />}
+      {editing && <ScheduleModal schedule={editing === 'new' ? null : editing} draft={editing === 'new' ? fromRun : null} kinds={meta.data?.kinds} onClose={closeEditor} onSaved={list.reload} />}
 
       <Modal open={!!removing} onClose={() => setRemoving(null)} title="Delete schedule?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -207,14 +214,21 @@ export function SchedulesPage() {
   )
 }
 
-function ScheduleModal({ schedule, kinds, onClose, onSaved }: { schedule: Schedule | null; kinds?: Record<ScheduleKind, string>; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(schedule?.name ?? '')
-  const [kind, setKind] = useState<ScheduleKind>(schedule?.kind ?? 'compliance')
-  const [tgt, setTgt] = useState(schedule?.target ?? '*')
-  const [tgtType, setTgtType] = useState<TargetType>((schedule?.targetType as TargetType) ?? 'glob')
-  const [fun, setFun] = useState(schedule?.fun ?? '')
+interface Draft {
+  fun: string
+  args: string
+  tgt: string
+  tgtType: TargetType
+}
+
+function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule: Schedule | null; draft?: Draft | null; kinds?: Record<ScheduleKind, string>; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(schedule?.name ?? (draft ? `${draft.fun} on ${draft.tgt}` : ''))
+  const [kind, setKind] = useState<ScheduleKind>(schedule?.kind ?? (draft ? 'function' : 'compliance'))
+  const [tgt, setTgt] = useState(schedule?.target ?? draft?.tgt ?? '*')
+  const [tgtType, setTgtType] = useState<TargetType>((schedule?.targetType as TargetType) ?? draft?.tgtType ?? 'glob')
+  const [fun, setFun] = useState(schedule?.fun ?? draft?.fun ?? '')
   const [args, setArgs] = useState(
-    schedule?.args ? formatArgs([...(schedule.args.arg ?? []), ...(schedule.args.kwarg && Object.keys(schedule.args.kwarg).length ? [{ __kwarg__: true, ...schedule.args.kwarg }] : [])]) : '',
+    schedule?.args ? formatArgs([...(schedule.args.arg ?? []), ...(schedule.args.kwarg && Object.keys(schedule.args.kwarg).length ? [{ __kwarg__: true, ...schedule.args.kwarg }] : [])]) : (draft?.args ?? ''),
   )
   const initialCron = schedule?.cron ?? '0 2 * * *'
   const [preset, setPreset] = useState(presetLabel(initialCron) ? initialCron : 'custom')

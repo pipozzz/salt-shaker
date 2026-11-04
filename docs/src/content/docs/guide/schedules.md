@@ -12,7 +12,7 @@ Both pages are for admins and need the server.
 
 - **Compliance check**: `state.apply test=True`, the same as the [Compliance](/salt-shaker/guide/compliance/) page.
 - **Patch scan**: `pkg.list_upgrades`, the same as [Patches](/salt-shaker/guide/patches/).
-- **Any function**, with arguments, for example `saltutil.sync_all`.
+- **Any function**, with arguments, for example `saltutil.sync_all`. **Schedule…** on the [Run](/salt-shaker/guide/run/) page starts one from the function and target you're about to run.
 
 You can pick a preset such as *Every day at 02:00* or *Weekdays at 06:00*, or write your own cron expression. Times use the server's time zone; in the container, set it with `TZ`.
 

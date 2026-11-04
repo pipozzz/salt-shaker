@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, BellRing, CalendarClock, FolderTree, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, CalendarClock, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -68,6 +68,7 @@ export function Layout() {
           { to: '/schedules', label: 'Schedules', icon: CalendarClock },
           { to: '/notifications', label: 'Notifications', icon: BellRing },
           { to: '/users', label: 'Users', icon: Users },
+          { to: '/system', label: 'System', icon: Gauge },
         ]
       : []),
   ]

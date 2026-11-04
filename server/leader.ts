@@ -34,6 +34,18 @@ export class Leader {
     return this.leading
   }
 
+  /**
+   * Who holds the lease now (any instance), or null when nobody does. A live holder renews every
+   * ttl/3, so a renewal much older than that means it has stopped and the lease runs out at expiresAt.
+   */
+  async holderNow(now = new Date()) {
+    const t = this.schema.lease
+    const [row] = await this.db.select().from(t).where(eq(t.name, this.name))
+    if (!row || row.expiresAt <= now) return null
+    const renewedAt = new Date(row.expiresAt.getTime() - this.ttlMs)
+    return { holder: row.holder, expiresAt: row.expiresAt, renewedAt, stale: now.getTime() - renewedAt.getTime() > this.ttlMs / 2 }
+  }
+
   start() {
     void this.tick()
     this.timer = setInterval(() => void this.tick(), this.ttlMs / 3)

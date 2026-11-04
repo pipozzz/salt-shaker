@@ -112,6 +112,13 @@ export function takeSseData(buf: string): { payloads: string[]; rest: string } {
   return { payloads, rest: buf }
 }
 
+export interface StreamStatus {
+  state: 'stopped' | 'connecting' | 'connected'
+  since: Date | null
+  lastEventAt: Date | null
+  lastError: string | null
+}
+
 export class HistoryRecorder {
   private db: Db
   private schema: Schema
@@ -121,6 +128,8 @@ export class HistoryRecorder {
   private timers: ReturnType<typeof setInterval>[] = []
   private eventListeners: Array<(tag: string, data: Record<string, unknown>) => void> = []
   private returnListeners: Array<(r: JobRet) => void> = []
+  /** How following the event bus is going, for the System page. */
+  stream: StreamStatus = { state: 'stopped', since: null, lastEventAt: null, lastError: null }
 
   constructor(db: Db, schema: Schema, salt: SaltService, retentionDays: number) {
     this.db = db
@@ -144,6 +153,7 @@ export class HistoryRecorder {
     if (this.ctrl) return
     const ctrl = new AbortController()
     this.ctrl = ctrl
+    this.stream = { ...this.stream, state: 'connecting', since: new Date() }
     void this.listen(ctrl.signal)
     void this.prune()
     this.timers.push(setInterval(() => void this.prune(), 6 * 3600_000))
@@ -152,6 +162,7 @@ export class HistoryRecorder {
   stop() {
     this.ctrl?.abort()
     this.ctrl = null
+    this.stream = { ...this.stream, state: 'stopped', since: new Date() }
     this.timers.forEach(clearInterval)
     this.timers = []
   }
@@ -160,6 +171,7 @@ export class HistoryRecorder {
     while (!signal.aborted) {
       try {
         const body = await this.salt.events(signal)
+        this.stream = { ...this.stream, state: 'connected', since: new Date(), lastError: null }
         const reader = body.pipeThrough(new TextDecoderStream()).getReader()
         let buf = ''
         for (;;) {
@@ -167,6 +179,7 @@ export class HistoryRecorder {
           if (done) break
           const { payloads, rest } = takeSseData(buf + value)
           buf = rest
+          if (payloads.length) this.stream.lastEventAt = new Date()
           for (const p of payloads) {
             try {
               const e = JSON.parse(p) as { tag: string; data: Record<string, unknown> }
@@ -176,9 +189,12 @@ export class HistoryRecorder {
             }
           }
         }
+        if (!signal.aborted) this.stream = { ...this.stream, state: 'connecting', since: new Date(), lastError: 'salt-api closed the event stream' }
       } catch (err) {
         if (signal.aborted) return
-        console.warn('history: event stream lost, retrying', err instanceof Error ? err.message : err)
+        const message = err instanceof Error ? err.message : String(err)
+        this.stream = { ...this.stream, state: 'connecting', since: new Date(), lastError: message }
+        console.warn('history: event stream lost, retrying', message)
       }
       await new Promise((r) => setTimeout(r, 5000))
     }

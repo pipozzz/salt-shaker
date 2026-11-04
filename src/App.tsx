@@ -20,6 +20,7 @@ import { RunPage } from './pages/Run'
 import { AuditPage } from './pages/Audit'
 import { UsersPage } from './pages/Users'
 import { NotificationsPage } from './pages/Notifications'
+import { SystemPage } from './pages/System'
 import { SchedulesPage } from './pages/Schedules'
 
 function Gate() {
@@ -54,6 +55,7 @@ function Gate() {
         {session.mode === 'server' && session.eauth === 'admin' && <Route path="users" element={<UsersPage />} />}
         {session.mode === 'server' && session.eauth === 'admin' && <Route path="schedules" element={<SchedulesPage />} />}
         {session.mode === 'server' && session.eauth === 'admin' && <Route path="notifications" element={<NotificationsPage />} />}
+        {session.mode === 'server' && session.eauth === 'admin' && <Route path="system" element={<SystemPage />} />}
         {session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator') && <Route path="audit" element={<AuditPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

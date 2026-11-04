@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**System page**
+
+- A **System** page for admins shows whether this install works: whether salt-api answers the service account (and why not), which instance follows the event bus and when it last got an event, the database, schedules, notification channels whose last delivery failed, and the settings the server picked up (public URL, SSO, time zone, metrics). It also tells when the instance holding the event bus crashed and when another takes over.
+
 ## 1.4.0
 
 **Connecting to salt-api**

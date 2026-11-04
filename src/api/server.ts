@@ -352,3 +352,26 @@ export const automation = {
   deleteChannel: (id: number) => send('DELETE', `/api/notifications/${id}`),
   testChannel: (id: number) => send('POST', `/api/notifications/${id}/test`, {}),
 }
+
+/** GET /api/system (admins): whether this install works, without secrets. */
+export interface SystemStatus {
+  version: string
+  instance: string
+  startedAt: string
+  timeZone: string
+  saltApi: { url: string; username: string; eauth: string; ok: boolean; ms: number; error: string | null; keys: Record<'accepted' | 'pending' | 'rejected' | 'denied', number> | null }
+  events: {
+    /** the instance holding the events lease, if any */
+    leader: string | null
+    /** stale: the holder stopped renewing (crashed or killed); another instance takes over when the lease expires */
+    leaderStale: { stale: boolean; renewedAt: string; expiresInSeconds: number } | null
+    thisInstance: boolean
+    stream: { state: 'stopped' | 'connecting' | 'connected'; since: string | null; lastEventAt: string | null; lastError: string | null } | null
+  }
+  database: { dialect: 'sqlite' | 'pg'; jobs: number; oldestJob: string | null; retentionDays: number }
+  notifications: { channels: number; enabled: number; failing: Array<{ name: string; error: string }> }
+  schedules: { total: number; enabled: number }
+  settings: { publicUrl: string; trustedOrigins: string[]; sso: { name: string; active: boolean } | null; passwordLogin: 'all' | 'admins'; presenceMinutes: number; metrics: boolean; trustProxy: boolean }
+}
+
+export const system = () => request<SystemStatus>('/api/system')

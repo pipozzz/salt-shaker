@@ -74,7 +74,7 @@ docker compose up -d
 
 ### Then
 
-Open `https://salt.example.com` and create the admin account.
+Open `https://salt.example.com` and create the admin account. Then open **System** in the menu: it shows whether salt-api answers the service account, whether the event bus is followed, and the settings the server picked up.
 
 If you already run a reverse proxy, drop the `caddy` service, publish `127.0.0.1:8080:8080` on `salt-shaker` and see [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
 
@@ -97,5 +97,8 @@ The auth secret is generated into `/data` on first start. When running on Postgr
 Several instances can share one Postgres database. Sessions, history and the audit log are shared, and each scheduled run starts exactly once. One instance, elected through a lease in the database, follows the event bus to record jobs and send event alerts. If it stops, another one takes over within about 30 seconds.
 
 ## Health check
+
+**System** (admins only) checks salt-api with the service account, shows which instance follows the event bus and when it last heard from it, and lists notification channels whose last delivery failed. If the instance holding the event bus lease crashed, it says so and when another one takes over.
+
 
 The container serves `GET /healthz`, which answers `ok`. For Prometheus metrics, see [Monitoring](/salt-shaker/deploy/monitoring/).

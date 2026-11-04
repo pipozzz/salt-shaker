@@ -12,12 +12,13 @@ import { CLIENT_IP_HEADER, createAuth, emailFor, USERNAME } from './auth'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
-import { Leader } from './leader'
+import { INSTANCE_ID, Leader } from './leader'
 import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
 import { PresenceWatcher } from './presence'
+import { systemStatus } from './system'
 import { automationRoutes } from './routes/automation'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
@@ -30,6 +31,8 @@ import type { AuditRow, Env, SessionUser } from './types'
 const config = loadConfig()
 const { db, schema, provider } = await openDatabase(config)
 let auth = createAuth(config, db, schema, provider)
+let ssoActive = !!config.oidc
+const startedAt = new Date()
 
 // Better Auth reads the OIDC discovery document once, when it is created, and drops the provider if
 // that fails. If the IdP isn't reachable at start-up, keep checking and rebuild auth once it is.
@@ -40,11 +43,13 @@ if (config.oidc) {
       .then((r) => r.ok)
       .catch(() => false)
   if (!(await reachable())) {
+    ssoActive = false
     console.warn(`sso: ${discoveryUrl} is not reachable yet; SSO stays off until it is`)
     const retry = setInterval(async () => {
       if (!(await reachable())) return
       clearInterval(retry)
       auth = createAuth(config, db, schema, provider)
+      ssoActive = true
       console.log('sso: identity provider reachable, SSO enabled')
     }, 10_000)
   }
@@ -333,6 +338,14 @@ app.get('/api/history/minions/:id/jobs', async (c) => {
 app.get('/api/history/compliance/minions', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   return c.json({ minions: await latestCompliance(db, schema) })
+})
+
+/** For admins: whether salt-api, the event bus, the database and notifications work. */
+app.get('/api/system', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  if (user.role !== 'admin') return c.json({ error: 'Admins only' }, 403)
+  return c.json(await systemStatus({ db, schema, salt, config, version: pkg.version, instance: INSTANCE_ID, startedAt, leader: eventsLeader, stream: history.stream, ssoActive }))
 })
 
 /** Each minion's pending upgrades from the latest patch scan that it answered. */

@@ -350,6 +350,21 @@ export interface AutomationMeta {
 
 const send = <T>(method: string, path: string, body?: unknown) => request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
 
+export interface SharedTarget {
+  id: number
+  name: string
+  target: string
+  targetType: string
+  createdBy: string | null
+}
+
+/** Named targets shared by the team (any signed-in user reads; operators and admins save). */
+export const targets = {
+  list: () => request<{ targets: SharedTarget[] }>('/api/targets'),
+  save: (t: { name: string; target: string; targetType: string }) => send<{ target: SharedTarget }>('POST', '/api/targets', t),
+  remove: (id: number) => send('DELETE', `/api/targets/${id}`),
+}
+
 export const automation = {
   meta: () => request<AutomationMeta>('/api/automation/meta'),
   schedules: () => request<{ schedules: Schedule[] }>('/api/schedules'),

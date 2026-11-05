@@ -117,6 +117,21 @@ test('command palette jumps to a minion', async ({ page }) => {
   await expect(page.getByPlaceholder(/Jump to a page or minion/)).toHaveValue('')
 })
 
+test('a saved target is offered on Run and in the command palette', async ({ page }) => {
+  await openDemo(page, '/run?tgt=web-*')
+  await page.getByTitle('Save this target').click()
+  await page.getByPlaceholder('Name, e.g. webservers').fill('webservers')
+  await page.getByRole('button', { name: 'Save target' }).click()
+  await page.reload()
+  await page.getByLabel('Target').fill('db-01')
+  await page.getByRole('button', { name: 'webservers', exact: true }).click()
+  await expect(page.getByLabel('Target')).toHaveValue('web-*')
+  await page.keyboard.press('ControlOrMeta+k')
+  await page.getByPlaceholder(/Jump to a page or minion/).fill('webservers')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/tgt=web-\*/)
+})
+
 test('enroll dialog starts clean every time it opens', async ({ page }) => {
   await openDemo(page, '/keys')
   await page.getByRole('button', { name: 'Enroll minion' }).click()

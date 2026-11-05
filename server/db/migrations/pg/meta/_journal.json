@@ -36,6 +36,13 @@
       "when": 1793799180870,
       "tag": "0004_last_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793884318503,
+      "tag": "0005_saved_targets",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ import { Notifier } from './notify'
 import { PresenceWatcher } from './presence'
 import { systemStatus } from './system'
 import { automationRoutes } from './routes/automation'
+import { targetRoutes } from './routes/targets'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
@@ -350,6 +351,8 @@ app.get('/api/history/compliance', async (c) => {
 
 const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...row, role: 'system' }))
 scheduler.start()
+// before automation: its admin-only middleware covers /api/* from where it's mounted
+app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))

@@ -6,7 +6,7 @@ import { recentScheduleRuns } from '../schedule-runs'
 import { dueAt, nextRun, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
 import type { AuditRow, Env } from '../types'
 
-const TARGET_TYPES = ['glob', 'list', 'grain', 'compound', 'pcre', 'pillar', 'nodegroup']
+export const TARGET_TYPES = ['glob', 'list', 'grain', 'compound', 'pcre', 'pillar', 'nodegroup']
 
 class BadRequest extends Error {}
 

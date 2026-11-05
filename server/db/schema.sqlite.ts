@@ -154,3 +154,13 @@ export const lease = sqliteTable('lease', {
   holder: text('holder').notNull(),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** Named targets the whole team picks from in Run, Schedules and the command palette. */
+export const savedTarget = sqliteTable('saved_target', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { storage } from '../lib/storage'
 import { useSalt } from '../lib/session'
+import { useSavedTargets } from '../lib/targets'
 
 interface Item {
   id: string
@@ -38,6 +39,8 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
       .catch(() => undefined)
   }, [open, salt])
 
+  const savedTargets = useSavedTargets().targets
+
   const items = useMemo(() => {
     const go = (to: string) => () => {
       navigate(to)
@@ -49,8 +52,7 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
 
     for (const p of pages) if (fuzzy(`${p.label} page`)) out.push({ id: `page:${p.to}`, group: 'Pages', label: p.label, icon: p.icon, run: go(p.to) })
 
-    const saved = storage.get<Array<{ name: string; tgt: string; tgtType: string }>>('salt-shaker.targets') ?? []
-    for (const s of saved) {
+    for (const s of savedTargets) {
       if (fuzzy(`${s.name} ${s.tgt}`)) {
         out.push({ id: `target:${s.name}`, group: 'Saved targets', label: s.name, hint: `${s.tgtType}: ${s.tgt}`, icon: Bookmark, run: go(`/run?tgt=${encodeURIComponent(s.tgt)}&tgt_type=${s.tgtType}`) })
       }
@@ -82,7 +84,7 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
     }
     if (q && /\.sls$|^\w+\//.test(q)) out.push({ id: 'file', group: 'Actions', label: `Browse states for “${query.trim()}”`, icon: FileCode2, run: go('/files') })
     return out
-  }, [query, minions, pages, navigate, onClose])
+  }, [query, minions, pages, navigate, onClose, savedTargets])
 
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })

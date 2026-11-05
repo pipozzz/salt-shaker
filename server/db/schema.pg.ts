@@ -155,3 +155,13 @@ export const lease = pgTable('lease', {
   holder: text('holder').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 })
+
+/** Named targets the whole team picks from in Run, Schedules and the command palette. */
+export const savedTarget = pgTable('saved_target', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})

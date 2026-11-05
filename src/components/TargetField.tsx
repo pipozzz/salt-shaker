@@ -1,9 +1,9 @@
 import clsx from 'clsx'
-import { Bookmark, BookmarkCheck, Crosshair, Loader2, TriangleAlert, X } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Crosshair, Loader2, Share2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { TargetType } from '../api/types'
-import { useStoredState } from '../lib/hooks'
 import { useSalt } from '../lib/session'
+import { useSavedTargets } from '../lib/targets'
 import { Button, Field, Input, Select } from './ui'
 
 const TARGET_HINTS: Record<TargetType, string> = {
@@ -16,12 +16,6 @@ const TARGET_HINTS: Record<TargetType, string> = {
   nodegroup: 'webservers',
 }
 
-interface SavedTarget {
-  name: string
-  tgt: string
-  tgtType: TargetType
-}
-
 interface Preview {
   key: string
   minions?: string[]
@@ -30,7 +24,7 @@ interface Preview {
 
 /**
  * Target + match type inputs with a live preview of matched minions (from the master's
- * cache, so nothing runs) and named, saved targets shared by every page that targets.
+ * cache, so nothing runs) and named, saved targets (shared with the team when there's a server).
  */
 export function TargetField({
   tgt,
@@ -44,8 +38,9 @@ export function TargetField({
   onMatched?: (minions: string[] | null) => void
 }) {
   const salt = useSalt()
-  const [saved, setSaved] = useStoredState<SavedTarget[]>('salt-shaker.targets', [])
+  const { targets: saved, save: saveTarget, remove, canRemove, unshared, shareLocal } = useSavedTargets()
   const [naming, setNaming] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
 
@@ -73,11 +68,16 @@ export function TargetField({
   }, [current])
 
   const isSaved = saved.find((s) => s.tgt === tgt.trim() && s.tgtType === tgtType)
+  const run = (p: Promise<unknown>, done?: () => void) => {
+    setSaveError(null)
+    p.then(done, (e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)))
+  }
   const save = () => {
     if (!name.trim()) return
-    setSaved((list) => [...list.filter((s) => s.name !== name.trim()), { name: name.trim(), tgt: tgt.trim(), tgtType }])
-    setNaming(false)
-    setName('')
+    run(saveTarget(name.trim(), tgt.trim(), tgtType), () => {
+      setNaming(false)
+      setName('')
+    })
   }
 
   return (
@@ -135,33 +135,45 @@ export function TargetField({
         </div>
       )}
 
+      {saveError && <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>}
+
       {saved.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-zinc-500">Saved:</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">Saved:</span>
           {saved.map((s) => {
             const active = s.tgt === tgt.trim() && s.tgtType === tgtType
+            const where = s.shared ? `shared${s.shared.createdBy ? ` by ${s.shared.createdBy}` : ''}` : unshared ? 'only in this browser' : null
             return (
               <span
                 key={s.name}
                 className={clsx(
                   'group inline-flex items-center rounded-full border text-xs font-medium',
+                  // dashed: kept only in this browser while the team has a shared list
+                  unshared > 0 && !s.shared && 'border-dashed',
                   active ? 'border-accent-500 bg-accent-50 text-accent-700 dark:bg-accent-700/20 dark:text-accent-400' : 'border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400',
                 )}
               >
-                <button type="button" onClick={() => onChange(s.tgt, s.tgtType)} className="py-0.5 pl-2.5" title={`${s.tgtType}: ${s.tgt}`}>
+                <button type="button" onClick={() => onChange(s.tgt, s.tgtType)} className={clsx('py-0.5 pl-2.5', !canRemove(s) && 'pr-2.5')} title={`${s.tgtType}: ${s.tgt}${where ? ` (${where})` : ''}`}>
                   {s.name}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSaved((list) => list.filter((x) => x.name !== s.name))}
-                  className="rounded-full p-0.5 pr-1.5 opacity-40 group-hover:opacity-100"
-                  aria-label={`Remove ${s.name}`}
-                >
-                  <X className="size-3" />
-                </button>
+                {canRemove(s) && (
+                  <button type="button" onClick={() => run(remove(s))} className="rounded-full p-0.5 pr-1.5 opacity-40 group-hover:opacity-100" aria-label={`Remove ${s.name}`}>
+                    <X className="size-3" />
+                  </button>
+                )}
               </span>
             )
           })}
+          {unshared > 0 && (
+            <button
+              type="button"
+              onClick={() => run(shareLocal())}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-accent-700 hover:bg-accent-50 dark:text-accent-400 dark:hover:bg-accent-700/20"
+              title="Targets saved before they were shared live only in this browser"
+            >
+              <Share2 className="size-3" /> Share {unshared} with the team
+            </button>
+          )}
         </div>
       )}
     </div>

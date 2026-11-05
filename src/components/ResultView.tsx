@@ -1,16 +1,17 @@
 import clsx from 'clsx'
-import { CheckCircle2, ChevronRight, Layers, CircleDashed, Clock, Download, Loader2, RotateCcw, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Layers, Play, CircleDashed, Clock, Download, Loader2, RotateCcw, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { JsonView } from './JsonView'
 import { groupByOutput, type OutputGroup } from '../lib/group'
 import { asStates, isFailure, stateSummary } from '../lib/states'
 import { download, resultsCsv, resultsJson, retryTargets } from '../lib/export'
 import { usePaged } from '../lib/hooks'
-import { Badge, Button, ShowMore, Tabs } from './ui'
+import { Badge, Button, CopyButton, ShowMore, Tabs } from './ui'
 
 type Show = 'all' | 'failed' | 'waiting'
 
-export function ResultView({ results, expected }: { results: Record<string, unknown>; expected?: string[] }) {
+/** `onRunOn` (when the viewer may run the job) opens Run on a group's minions. */
+export function ResultView({ results, expected, onRunOn }: { results: Record<string, unknown>; expected?: string[]; onRunOn?: (minions: string[]) => void }) {
   const ids = useMemo(() => [...new Set([...(expected ?? []), ...Object.keys(results)])].sort(), [expected, results])
   const failed = useMemo(() => ids.filter((id) => id in results && isFailure(results[id])), [ids, results])
   const waiting = ids.filter((id) => !(id in results))
@@ -45,7 +46,7 @@ export function ResultView({ results, expected }: { results: Record<string, unkn
           )}
         </div>
       )}
-      {grouped && groups.map((g) => <GroupResult key={g.key} group={g} defaultOpen={groups.length <= 3} />)}
+      {grouped && groups.map((g) => <GroupResult key={g.key} group={g} defaultOpen={groups.length <= 3} onRunOn={onRunOn} />)}
       {!grouped && many && (
         <div className="flex flex-wrap items-center gap-3 pb-1 text-sm">
           <span className="text-zinc-600 tabular-nums dark:text-zinc-400">
@@ -154,7 +155,7 @@ function MinionResult({ id, ret, returned, defaultOpen }: { id: string; ret: unk
 const GROUP_IDS = 30
 
 /** One output and every minion that returned it. */
-function GroupResult({ group, defaultOpen }: { group: OutputGroup; defaultOpen: boolean }) {
+function GroupResult({ group, defaultOpen, onRunOn }: { group: OutputGroup; defaultOpen: boolean; onRunOn?: (minions: string[]) => void }) {
   const [open, setOpen] = useState(defaultOpen)
   const [allIds, setAllIds] = useState(false)
   const n = group.ids.length
@@ -190,6 +191,14 @@ function GroupResult({ group, defaultOpen }: { group: OutputGroup; defaultOpen: 
               </button>
             )}
           </p>
+          <div className="flex flex-wrap gap-1">
+            {onRunOn && (
+              <Button size="sm" icon={<Play className="size-3.5" />} onClick={() => onRunOn(group.ids)}>
+                Run on these {n}
+              </Button>
+            )}
+            <CopyButton text={group.ids.join(',')} label="Copy IDs" />
+          </div>
           <Raw ret={group.ret} />
         </div>
       )}

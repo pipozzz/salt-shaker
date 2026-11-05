@@ -125,7 +125,7 @@ export function JobDetailPage() {
               {Object.keys(results).length === 0 && missing.length === 0 ? (
                 <p className="p-4 text-sm text-zinc-500">No returns stored for this job.</p>
               ) : (
-                <ResultView results={results} />
+                <ResultView results={results} onRunOn={canRerun ? (m) => rerun(m) : undefined} />
               )}
               {stillRunning.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 px-1 text-sm">

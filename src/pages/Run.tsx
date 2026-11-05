@@ -211,7 +211,7 @@ export function RunPage() {
                 }
               />
               <div className="p-3">
-                <ResultView results={run.results} expected={run.done ? Object.keys(run.results) : run.minions} />
+                <ResultView results={run.results} expected={run.done ? Object.keys(run.results) : run.minions} onRunOn={retry} />
                 {run.timedOut && (
                   <p className="mt-3 text-sm text-zinc-500">
                     Did not return: <span className="font-mono">{run.minions.filter((m) => !(m in run.results)).join(', ')}</span>

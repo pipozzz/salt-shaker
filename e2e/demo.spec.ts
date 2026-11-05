@@ -78,6 +78,10 @@ test('results can be grouped by identical output', async ({ page }) => {
   const biggest = page.getByRole('button', { name: /4 minions/ })
   await expect(biggest).toContainText('3007.1')
   await expect(page.getByRole('button', { name: /1 minion\b/ })).toContainText('mon-01')
+  // the odd one out becomes the next target
+  await page.getByRole('button', { name: 'Run on these 1' }).click()
+  await expect(page.getByLabel('Target')).toHaveValue('mon-01')
+  await expect(page.getByText('1 minion:')).toBeVisible()
 })
 
 test('risky commands on many minions need the count typed', async ({ page }) => {

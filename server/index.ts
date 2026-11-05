@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { and, count, desc, eq, inArray, like, lt, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
 import { timingSafeEqual } from 'node:crypto'
@@ -13,6 +13,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { INSTANCE_ID, Leader } from './leader'
+import { JOB_RESULTS, jobHistory } from './job-history'
 import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
@@ -284,36 +285,8 @@ app.get('/api/history/jobs', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   const limit = Math.min(Number(c.req.query('limit') ?? 100) || 100, 500)
   const before = Number(c.req.query('before')) || null
-  const q = c.req.query('q')?.trim().toLowerCase()
-  const t = schema.job
-  const r = schema.jobReturn
-  const rows = await db
-    .select({
-      jid: t.jid,
-      fun: t.fun,
-      args: t.args,
-      target: t.target,
-      targetType: t.targetType,
-      saltUser: t.saltUser,
-      shakerUser: t.shakerUser,
-      minions: t.minions,
-      dryRun: t.dryRun,
-      startedAt: t.startedAt,
-      returned: count(r.minion),
-      // no bound booleans (SQLite can't bind them); `not coalesce(x, true)` works in both dialects
-      failed: sql<number>`coalesce(sum(case when ${r.retcode} <> 0 or not coalesce(${r.success}, true) then 1 else 0 end), 0)`.mapWith(Number),
-    })
-    .from(t)
-    .leftJoin(r, eq(r.jid, t.jid))
-    .where(
-      and(
-        before ? lt(t.startedAt, new Date(before)) : undefined,
-        q ? or(...[t.fun, t.target, t.shakerUser, t.saltUser].map((col) => like(sql`lower(${col})`, `%${q}%`)), eq(t.jid, q)) : undefined,
-      ),
-    )
-    .groupBy(t.jid)
-    .orderBy(desc(t.startedAt))
-    .limit(limit)
+  const result = JOB_RESULTS.find((x) => x === c.req.query('result')) ?? null
+  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, before, limit })
   return c.json({ rows, retentionDays: config.historyDays })
 })
 

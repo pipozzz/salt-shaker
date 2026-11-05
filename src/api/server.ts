@@ -258,9 +258,10 @@ export interface MinionUpdates {
 }
 
 export const history = {
-  jobs: (opts: { q?: string; before?: number; limit?: number } = {}) => {
+  jobs: (opts: { q?: string; result?: string; before?: number; limit?: number } = {}) => {
     const p = new URLSearchParams()
     if (opts.q) p.set('q', opts.q)
+    if (opts.result) p.set('result', opts.result)
     if (opts.before) p.set('before', String(opts.before))
     p.set('limit', String(opts.limit ?? 100))
     return request<{ rows: HistoryJob[]; retentionDays: number }>(`/api/history/jobs?${p}`)

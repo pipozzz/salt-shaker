@@ -6,9 +6,13 @@
 
 - Tick minions on the Minions page and **Run on selected** opens Run with them as a list target. The header box picks every minion the filter shows, and the selection stays while you search.
 
+**Jobs**
+
+- A **Result** filter in the Jobs history shows only jobs where a minion failed, or only dry runs. It combines with the search and is kept in the address.
+
 **Schedules**
 
-- Each schedule shows its last 10 runs as a strip of bars, colored by how they went and linked to their jobs, with a link to all of its jobs in the history. A schedule that keeps failing now stands out even when its latest run was fine.
+- Each schedule shows its last 10 runs as a strip of bars, colored by how they went and linked to their jobs, with a link to all of its jobs in the history (only the failed ones when some failed). A schedule that keeps failing now stands out even when its latest run was fine.
 
 **Fixes**
 

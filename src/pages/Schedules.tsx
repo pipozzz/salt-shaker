@@ -85,7 +85,7 @@ function RecentRuns({ s }: { s: Schedule }) {
           )
         })}
       </ul>
-      <Link to={`/jobs?q=${encodeURIComponent(`schedule:${s.name}`)}`} className="text-zinc-500 hover:text-accent-600 dark:text-zinc-400">
+      <Link to={`/jobs?q=${encodeURIComponent(`schedule:${s.name}`)}${failed ? '&result=failed' : ''}`} className="text-zinc-500 hover:text-accent-600 dark:text-zinc-400">
         {failed ? `${failed} of ${runs.length} failed` : 'history'}
       </Link>
     </div>

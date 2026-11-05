@@ -4,23 +4,25 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
 import { history, parseStoredArgs, type HistoryJob } from '../api/server'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from '../components/ui'
+import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
 import { useAsync, useUrlSearch } from '../lib/hooks'
 import { funTone, relTime } from '../lib/format'
 
 const PAGE = 100
-const FIELDS = ['q'] as const
+const FIELDS = ['q', 'result'] as const
 
 /** Jobs from the server's database: longer history than the master's cache, with who ran them. */
 export function JobHistoryPage() {
   const navigate = useNavigate()
   const search = useUrlSearch(FIELDS)
   const applied = search.applied.q
+  // the URL may say anything; an unknown result means any
+  const result = ['failed', 'dryrun'].find((r) => r === search.applied.result) ?? ''
   // older pages belong to the search they were loaded for
   const [olderPages, setOlderPages] = useState<{ key: string; rows: HistoryJob[] }>({ key: '', rows: [] })
   const older = olderPages.key === search.key ? olderPages.rows : []
   const [loadingMore, setLoadingMore] = useState(false)
-  const first = useAsync(() => history.jobs({ q: applied, limit: PAGE }), [applied])
+  const first = useAsync(() => history.jobs({ q: applied, result, limit: PAGE }), [applied, result])
   const refresh = () => {
     setOlderPages({ key: '', rows: [] })
     void first.reload()
@@ -34,7 +36,7 @@ export function JobHistoryPage() {
     if (!last) return
     setLoadingMore(true)
     try {
-      const res = await history.jobs({ q: applied, before: Date.parse(last.startedAt), limit: PAGE })
+      const res = await history.jobs({ q: applied, result, before: Date.parse(last.startedAt), limit: PAGE })
       setOlderPages({ key: search.key, rows: [...older, ...res.rows] })
     } finally {
       setLoadingMore(false)
@@ -68,12 +70,17 @@ export function JobHistoryPage() {
             e.preventDefault()
             if (!search.apply()) refresh()
           }}
-          className="flex gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
+          className="flex flex-wrap gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800"
         >
-          <div className="relative flex-1">
+          <div className="relative w-full sm:w-auto sm:min-w-48 sm:flex-1">
             <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
             <Input value={search.form.q} onChange={(e) => search.set('q', e.target.value)} aria-label="Search" placeholder="Function, target, user or jid…" className="pl-9" />
           </div>
+          <Select value={search.form.result} onChange={(e) => search.set('result', e.target.value)} aria-label="Result" className="sm:w-40">
+            <option value="">Any result</option>
+            <option value="failed">Failed</option>
+            <option value="dryrun">Dry runs</option>
+          </Select>
           <Button type="submit">Search</Button>
         </form>
         {first.error && (
@@ -83,8 +90,8 @@ export function JobHistoryPage() {
         )}
         {first.loading && !first.data && <Spinner />}
         {first.data && rows.length === 0 && (
-          <Empty icon={<History />} title={applied ? 'Nothing matches' : 'No jobs recorded yet'}>
-            Jobs show up here as soon as they run, whether started here or from the salt CLI.
+          <Empty icon={<History />} title={applied || result ? 'Nothing matches' : 'No jobs recorded yet'}>
+            {applied || result ? 'Try a different search or result.' : 'Jobs show up here as soon as they run, whether started here or from the salt CLI.'}
           </Empty>
         )}
         {rows.length > 0 && (

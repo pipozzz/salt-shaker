@@ -12,7 +12,7 @@ sidebar: { order: 6 }
 
 A job's own page asks the minions that haven't returned yet whether they're still working on it (`saltutil.find_job`), shows them as *still running* and offers **Stop** there too. The rest are listed as *no return*.
 
-The master keeps jobs for about 24 hours. With the server, jobs are recorded from the event bus and kept for 90 days by default (`JOB_RETENTION_DAYS`). That includes jobs run from the salt CLI, along with who ran them. A search stays in the address (`/jobs?q=state.apply`), so going back from a job returns to the same list.
+The master keeps jobs for about 24 hours. With the server, jobs are recorded from the event bus and kept for 90 days by default (`JOB_RETENTION_DAYS`). That includes jobs run from the salt CLI, along with who ran them. The **Result** filter keeps jobs where at least one minion failed, or only dry runs (compliance checks and other `test=True` runs). A search stays in the address (`/jobs?q=state.apply&result=failed`), so going back from a job returns to the same list.
 
 ## Events
 

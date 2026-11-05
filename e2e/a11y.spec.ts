@@ -10,7 +10,7 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
   }],
   ['minions', async (p) => {
     await p.goto('/?demo')
-    await expect(p.getByRole('cell', { name: 'web-01' })).toBeVisible()
+    await expect(p.getByRole('cell', { name: 'web-01', exact: true })).toBeVisible()
   }],
   ['enrollment', async (p) => {
     await p.goto('/keys')

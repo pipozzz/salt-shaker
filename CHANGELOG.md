@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Minions**
+
+- Tick minions on the Minions page and **Run on selected** opens Run with them as a list target. The header box picks every minion the filter shows, and the selection stays while you search.
+
 **Schedules**
 
 - Each schedule shows its last 10 runs as a strip of bars, colored by how they went and linked to their jobs, with a link to all of its jobs in the history. A schedule that keeps failing now stands out even when its latest run was fine.

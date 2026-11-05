@@ -11,11 +11,11 @@ test('minions overview shows the fleet and flags old Salt versions', async ({ pa
   await openDemo(page)
   await expect(page.getByRole('heading', { name: 'Minions' })).toBeVisible()
   await expect(page.getByText('1 minion is behind the master (3007.1)')).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'web-01' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeVisible()
   // the fleet breakdown filters the table
   await page.getByRole('button', { name: /3006\.9/ }).click()
-  await expect(page.getByRole('cell', { name: 'mon-01' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
+  await expect(page.getByRole('cell', { name: 'mon-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 })
 
 test('minion filters are kept in the URL and survive going back', async ({ page }) => {
@@ -24,19 +24,19 @@ test('minion filters are kept in the URL and survive going back', async ({ page 
   await page.getByRole('button', { name: /3007\.1/ }).click()
   await expect(page).toHaveURL(/q=db/)
   await expect(page).toHaveURL(/facet=salt%3A3007\.1/)
-  await page.getByRole('cell', { name: 'db-01' }).click()
+  await page.getByRole('cell', { name: 'db-01', exact: true }).click()
   await expect(page).toHaveURL(/\/minions\/db-01$/)
   await page.goBack()
   await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('db')
   await expect(page.getByText('Salt: 3007.1')).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'db-01' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
+  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 })
 
 test('a minion page keeps its tab and filter in the URL and links back to the filtered list', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('db')
-  await page.getByRole('cell', { name: 'db-01' }).click()
+  await page.getByRole('cell', { name: 'db-01', exact: true }).click()
   await page.getByRole('button', { name: 'Pillar', exact: true }).click()
   await expect(page).toHaveURL(/tab=pillar/)
   await page.getByPlaceholder('Filter keys…').fill('postgres')
@@ -46,7 +46,21 @@ test('a minion page keeps its tab and filter in the URL and links back to the fi
   await expect(page.getByPlaceholder('Filter keys…')).toHaveValue('postgres')
   await page.getByRole('main').getByRole('link', { name: 'Minions' }).click()
   await expect(page).toHaveURL(/:\d+\/\?(demo=&)?q=db$/)
-  await expect(page.getByRole('cell', { name: 'web-01' })).toBeHidden()
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
+})
+
+test('minions picked on the list open Run with them as a list target', async ({ page }) => {
+  await openDemo(page)
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')
+  await page.getByRole('checkbox', { name: /Select all \d+ shown minions/ }).check()
+  // the selection survives a different filter
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('db-01')
+  await page.getByRole('checkbox', { name: 'Select db-01' }).check()
+  await expect(page.getByText(/^\d+ selected/)).toContainText('(2 not shown by the filter)')
+  await page.getByRole('button', { name: 'Run on selected' }).click()
+  await expect(page).toHaveURL(/\/run\?/)
+  await expect(page.getByLabel('Target')).toHaveValue('db-01,web-01,web-02')
+  await expect(page.getByText('3 minions:')).toBeVisible()
 })
 
 test('run previews the target and shows results', async ({ page }) => {

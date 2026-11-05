@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { CircleOff, KeyRound, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { CircleOff, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
 import { history, type MinionUpdates } from '../api/server'
@@ -90,6 +90,22 @@ export function MinionsPage() {
   const visibleCount = paging.key === filterKey ? paging.count : PAGE
   const visible = rows.slice(0, visibleCount)
 
+  // minions picked to run something on; kept while filtering, so a selection can span searches
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const picked = data ? data.keys.minions.filter((id) => selected.has(id)).sort() : []
+  const hidden = picked.filter((id) => !rows.some((r) => r.id === id)).length
+  const allShown = rows.length > 0 && rows.every((r) => selected.has(r.id))
+  const toggle = (ids: string[], on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  const runOnPicked = () => navigate(`/run?tgt=${encodeURIComponent(picked.join(','))}&tgt_type=list`)
+
   return (
     <>
       <PageHeader
@@ -170,7 +186,15 @@ export function MinionsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                  <th className="py-2.5 pr-3 pl-4 font-medium">Minion</th>
+                  <th className="w-0 py-2.5 pr-1 pl-4">
+                    <Check
+                      label={allShown ? 'Deselect all shown minions' : `Select all ${rows.length} shown minions`}
+                      checked={allShown}
+                      indeterminate={!allShown && rows.some((r) => selected.has(r.id))}
+                      onChange={(on) => toggle(rows.map((r) => r.id), on)}
+                    />
+                  </th>
+                  <th className="py-2.5 pr-3 pl-2 font-medium">Minion</th>
                   <th className="px-3 py-2.5 font-medium">OS</th>
                   {fromServer && <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Compliance</th>}
                   {fromServer && <th className="hidden px-3 py-2.5 font-medium md:table-cell">Updates</th>}
@@ -183,7 +207,10 @@ export function MinionsPage() {
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
                 {visible.map(({ id, up, g }) => (
                   <tr key={id} onClick={() => navigate(`/minions/${encodeURIComponent(id)}`, { state: { back: params.toString() } })} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
-                    <td className="py-2.5 pr-3 pl-4">
+                    <td className="py-2.5 pr-1 pl-4" onClick={(e) => e.stopPropagation()}>
+                      <Check label={`Select ${id}`} checked={selected.has(id)} onChange={(on) => toggle([id], on)} />
+                    </td>
+                    <td className="py-2.5 pr-3 pl-2">
                       <div className="flex items-center gap-2.5">
                         <StatusDot up={up} />
                         <span className="font-mono font-medium">{id}</span>
@@ -235,9 +262,38 @@ export function MinionsPage() {
             </Button>
           </div>
         )}
+        {/* at the bottom, so selecting doesn't push the rows down under the pointer */}
+        {picked.length > 0 && (
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-b-xl border-t border-zinc-200 bg-white/95 px-4 py-2 text-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+            <span className="font-medium">
+              {picked.length} selected
+              {hidden > 0 && <span className="font-normal text-zinc-500 dark:text-zinc-400"> ({hidden} not shown by the filter)</span>}
+            </span>
+            <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} onClick={runOnPicked}>
+              Run on selected
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              Clear
+            </Button>
+          </div>
+        )}
+
         {status.error && <p className="border-t border-zinc-100 px-4 py-2 text-xs text-amber-700 dark:border-zinc-800 dark:text-amber-400">Couldn't check which minions respond: {status.error.message}</p>}
       </Card>
     </>
+  )
+}
+
+/** A row checkbox with a larger click area than the box itself. */
+function Check({ label, checked, indeterminate = false, onChange }: { label: string; checked: boolean; indeterminate?: boolean; onChange: (on: boolean) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate
+  }, [indeterminate])
+  return (
+    <label className="-m-2 flex cursor-pointer p-2">
+      <input ref={ref} type="checkbox" aria-label={label} checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-4 cursor-pointer accent-accent-600" />
+    </label>
   )
 }
 

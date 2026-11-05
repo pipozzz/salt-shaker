@@ -12,6 +12,8 @@ With the server, a **Compliance** column shows each minion's result in the lates
 
 The search, the status filter and the fleet breakdown pick are kept in the page's address, so they're still there when you come back from a minion, and you can bookmark or share a filtered list, e.g. `/?status=drifted&facet=role:web`.
 
+To run something on a handful of minions, tick them in the first column (the header box picks every minion the filter shows) and click **Run on selected**. The selection stays while you change the search, so you can pick from several, and Run opens with them as a list target. The bar at the bottom says how many are picked and how many the current filter hides.
+
 ## Large fleets
 
 The list comes from the master's minion data cache (`cache.grains`), so opening it doesn't start a job on the minions. Offline minions keep their last known OS and IPs. Which minions respond (`manage.status`) is filled in once that check finishes. The table shows 100 minions at a time.

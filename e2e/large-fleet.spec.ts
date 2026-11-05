@@ -20,7 +20,7 @@ test('minions appear before the slow responding check finishes', async ({ page }
   await page.goto('/?demo=large')
   // grains come from the cache right away; manage.status takes longer
   await expect(page.getByText('Pinging minions…')).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'api-ams-001' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'api-ams-001', exact: true })).toBeVisible()
   await expect(page.getByText('Pinging minions…')).toBeHidden()
   const notResponding = page.locator('div', { has: page.getByText('Not responding', { exact: true }) }).last()
   await expect(notResponding).not.toContainText('—')

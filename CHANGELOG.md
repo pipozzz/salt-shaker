@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Results**
+
+- **By output** groups a job's results by identical output, with the minions that returned each one, biggest group first, so the few minions with another package version or kernel stand out. It's on Run, job details and orchestration results; state runs keep their per-minion view.
+
 ## 1.6.0
 
 **Minions**

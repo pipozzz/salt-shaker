@@ -1,7 +1,8 @@
 import clsx from 'clsx'
-import { CheckCircle2, ChevronRight, CircleDashed, Clock, Download, Loader2, RotateCcw, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Layers, CircleDashed, Clock, Download, Loader2, RotateCcw, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { JsonView } from './JsonView'
+import { groupByOutput, type OutputGroup } from '../lib/group'
 import { asStates, isFailure, stateSummary } from '../lib/states'
 import { download, resultsCsv, resultsJson, retryTargets } from '../lib/export'
 import { usePaged } from '../lib/hooks'
@@ -19,10 +20,33 @@ export function ResultView({ results, expected }: { results: Record<string, unkn
   const ordered = useMemo(() => (show === 'all' ? [...failed, ...list.filter((id) => !failed.includes(id))] : list), [show, failed, list])
   const paged = usePaged(ordered, show, 50)
   const many = ids.length > 10
+  // minions that returned the same thing, e.g. one package version across the fleet
+  const groups = useMemo(() => groupByOutput(results), [results])
+  const [byOutput, setByOutput] = useState(false)
+  const grouped = byOutput && groups
 
   return (
     <div className="space-y-2">
-      {many && (
+      {groups && (
+        <div className="flex flex-wrap items-center gap-3 pb-1 text-sm">
+          <Tabs
+            value={grouped ? 'output' : 'minion'}
+            onChange={(v) => setByOutput(v === 'output')}
+            items={[
+              { value: 'minion', label: 'By minion' },
+              { value: 'output', label: `By output (${groups.length})` },
+            ]}
+          />
+          {grouped && (
+            <span className="text-zinc-600 dark:text-zinc-400">
+              {groups.length} different {groups.length === 1 ? 'output' : 'outputs'} from {Object.keys(results).length} minions
+              {waiting.length > 0 && `, ${waiting.length} still waiting`}
+            </span>
+          )}
+        </div>
+      )}
+      {grouped && groups.map((g) => <GroupResult key={g.key} group={g} defaultOpen={groups.length <= 3} />)}
+      {!grouped && many && (
         <div className="flex flex-wrap items-center gap-3 pb-1 text-sm">
           <span className="text-zinc-600 tabular-nums dark:text-zinc-400">
             {ids.length - failed.length - waiting.length} ok · {failed.length} failed · {waiting.length} waiting
@@ -38,11 +62,15 @@ export function ResultView({ results, expected }: { results: Record<string, unkn
           />
         </div>
       )}
-      {paged.visible.map((id) => (
-        <MinionResult key={id} id={id} returned={id in results} ret={results[id]} defaultOpen={ids.length <= 3} />
-      ))}
-      {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">None</p>}
-      <ShowMore paged={paged} />
+      {!grouped && (
+        <>
+          {paged.visible.map((id) => (
+            <MinionResult key={id} id={id} returned={id in results} ret={results[id]} defaultOpen={ids.length <= 3} />
+          ))}
+          {many && list.length === 0 && <p className="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">None</p>}
+          <ShowMore paged={paged} />
+        </>
+      )}
     </div>
   )
 }
@@ -117,6 +145,52 @@ function MinionResult({ id, ret, returned, defaultOpen }: { id: string; ret: unk
       {open && returned && (
         <div className="border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
           {sum ? <StateList ret={ret} /> : <Raw ret={ret} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const GROUP_IDS = 30
+
+/** One output and every minion that returned it. */
+function GroupResult({ group, defaultOpen }: { group: OutputGroup; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [allIds, setAllIds] = useState(false)
+  const n = group.ids.length
+  const ids = allIds ? group.ids : group.ids.slice(0, GROUP_IDS)
+  return (
+    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 bg-zinc-50/80 px-3 py-2 text-left hover:bg-zinc-100/80 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+      >
+        <ChevronRight className={clsx('size-4 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90')} />
+        {group.failed ? <XCircle className="size-4 shrink-0 text-red-500" /> : <Layers className="size-4 shrink-0 text-zinc-500 dark:text-zinc-400" />}
+        <Badge tone={group.failed ? 'red' : 'zinc'}>
+          {n} {n === 1 ? 'minion' : 'minions'}
+        </Badge>
+        <span className="min-w-0 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{group.ids.slice(0, 3).join(', ') + (n > 3 ? ` +${n - 3}` : '')}</span>
+        <span className="ml-auto flex shrink-0 items-center">
+          <InlinePreview ret={group.ret} />
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+          <p className="flex flex-wrap gap-1">
+            {ids.map((id) => (
+              <span key={id} className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
+                {id}
+              </span>
+            ))}
+            {n > ids.length && (
+              <button onClick={() => setAllIds(true)} className="px-1.5 text-xs text-accent-700 hover:underline dark:text-accent-400">
+                +{n - ids.length} more
+              </button>
+            )}
+          </p>
+          <Raw ret={group.ret} />
         </div>
       )}
     </div>

@@ -70,6 +70,16 @@ test('run previews the target and shows results', async ({ page }) => {
   await expect(page.getByText('2/2 returned')).toBeVisible()
 })
 
+test('results can be grouped by identical output', async ({ page }) => {
+  await openDemo(page, '/run?tgt=*&fun=test.version')
+  await page.getByRole('button', { name: 'Run on 6' }).click()
+  await page.getByRole('button', { name: /By output \(2\)/ }).click()
+  await expect(page.getByText(/2 different outputs from 5 minions/)).toBeVisible()
+  const biggest = page.getByRole('button', { name: /4 minions/ })
+  await expect(biggest).toContainText('3007.1')
+  await expect(page.getByRole('button', { name: /1 minion\b/ })).toContainText('mon-01')
+})
+
 test('risky commands on many minions need the count typed', async ({ page }) => {
   await openDemo(page, "/run?tgt=*&fun=cmd.run&args='uptime'")
   await page.getByRole('button', { name: 'Run on 6' }).click()

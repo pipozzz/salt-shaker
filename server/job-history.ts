@@ -1,5 +1,6 @@
 import { and, count, desc, eq, like, lt, or, sql } from 'drizzle-orm'
 import type { Db, Schema } from './db'
+import { toCsv } from '../src/lib/csv'
 
 export const JOB_RESULTS = ['failed', 'dryrun'] as const
 export type JobResult = (typeof JOB_RESULTS)[number]
@@ -43,4 +44,21 @@ export async function jobHistory(db: Db, schema: Schema, opts: { q?: string; res
     .having(opts.result === 'failed' ? sql`${failed} > 0` : undefined)
     .orderBy(desc(t.startedAt))
     .limit(opts.limit ?? 100)
+}
+
+/** Jobs as CSV, one row per job, arguments as JSON and times in ISO 8601 UTC. */
+export function jobsCsv(rows: Awaited<ReturnType<typeof jobHistory>>) {
+  return toCsv([
+    ['jid', 'started_at', 'function', 'arguments', 'target', 'target_type', 'started_by', 'salt_user', 'dry_run', 'minions', 'returned', 'failed'],
+    ...rows.map((r) => {
+      let expected = r.returned
+      try {
+        const list = r.minions ? (JSON.parse(r.minions) as unknown) : null
+        if (Array.isArray(list)) expected = Math.max(list.length, r.returned)
+      } catch {
+        // keep the number of returns
+      }
+      return [r.jid, r.startedAt.toISOString(), r.fun, r.args, r.target, r.targetType, r.shakerUser, r.saltUser, r.dryRun, expected, r.returned, r.failed]
+    }),
+  ])
 }

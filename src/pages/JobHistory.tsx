@@ -1,10 +1,10 @@
 import clsx from 'clsx'
-import { History, RefreshCw, Search } from 'lucide-react'
+import { Download, History, RefreshCw, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
-import { history, parseStoredArgs, type HistoryJob } from '../api/server'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
+import { history, jobsExportUrl, parseStoredArgs, type HistoryJob } from '../api/server'
+import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
 import { useAsync, useUrlSearch } from '../lib/hooks'
 import { funTone, relTime } from '../lib/format'
 
@@ -56,12 +56,17 @@ export function JobHistoryPage() {
           </>
         }
         actions={
-          <Button
-            icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
-            onClick={refresh}
-          >
-            Refresh
-          </Button>
+          <>
+            <ButtonLink href={jobsExportUrl({ q: applied, result })} download icon={<Download className="size-4" />} title={applied || result ? 'Every job matching the search, as CSV' : 'Every recorded job, as CSV'}>
+              Export CSV
+            </ButtonLink>
+            <Button
+              icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
+              onClick={refresh}
+            >
+              Refresh
+            </Button>
+          </>
         }
       />
       <Card>

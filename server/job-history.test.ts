@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { jobHistory } from './job-history'
+import { jobHistory, jobsCsv } from './job-history'
 import { openTestDatabase, testDialects } from './testdb'
 
 describe.each(testDialects)('jobHistory (%s)', (dialect) => {
@@ -47,5 +47,14 @@ describe.each(testDialects)('jobHistory (%s)', (dialect) => {
     expect((await jobHistory(db, schema, { result: 'failed', q: 'alice' })).map((r) => r.jid)).toEqual(['1'])
     expect((await jobHistory(db, schema, { result: 'failed', before: at(3).getTime() })).map((r) => r.jid)).toEqual(['1'])
     expect((await jobHistory(db, schema, { result: 'dryrun' })).map((r) => r.jid)).toEqual(['1'])
+  })
+
+  it('exports jobs as CSV with counts and who started them', async () => {
+    const { db, schema } = await setup()
+    const lines = jobsCsv(await jobHistory(db, schema, { result: 'failed' })).split('\r\n')
+    expect(lines[0]).toBe('jid,started_at,function,arguments,target,target_type,started_by,salt_user,dry_run,minions,returned,failed')
+    expect(lines[1]).toBe('3,2026-11-05T12:03:00.000Z,pkg.upgrade,,*,,,root,false,1,1,1')
+    expect(lines[2]).toBe('1,2026-11-05T12:01:00.000Z,state.apply,,web*,,alice,,true,2,2,1')
+    expect(lines.at(-1)).toBe('')
   })
 })

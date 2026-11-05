@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Jobs**
+
+- **Export CSV** on the Jobs history downloads every job matching the search and result filter, with who started it and how many minions returned and failed.
+
 **Saved targets**
 
 - With the server, saved targets are shared with the whole team instead of living in one browser: operators and admins save them, everyone picks them on Run, Schedules and in ⌘K, and only whoever saved one (or an admin) can replace or remove it. Targets you saved in your browser before show a dashed outline and **Share with the team** moves them over.

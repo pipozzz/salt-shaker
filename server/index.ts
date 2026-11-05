@@ -13,7 +13,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { INSTANCE_ID, Leader } from './leader'
-import { JOB_RESULTS, jobHistory } from './job-history'
+import { JOB_RESULTS, jobHistory, jobsCsv } from './job-history'
 import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
@@ -289,6 +289,16 @@ app.get('/api/history/jobs', async (c) => {
   const result = JOB_RESULTS.find((x) => x === c.req.query('result')) ?? null
   const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, before, limit })
   return c.json({ rows, retentionDays: config.historyDays })
+})
+
+// before /:jid, which would take "export" for a jid
+const JOBS_EXPORT_MAX = 100_000
+app.get('/api/history/jobs/export', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const result = JOB_RESULTS.find((x) => x === c.req.query('result')) ?? null
+  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, limit: JOBS_EXPORT_MAX })
+  const name = `jobs-${new Date().toISOString().slice(0, 10)}.csv`
+  return c.body(jobsCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
 })
 
 app.get('/api/history/jobs/:jid', async (c) => {

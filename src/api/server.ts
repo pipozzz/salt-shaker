@@ -180,6 +180,14 @@ export const auditExportUrl = (f: AuditFilter) => `/api/audit/export?${auditPara
 
 // ---- history (recorded by the server from the event bus) ----
 
+/** CSV of every recorded job matching a search and result filter. */
+export const jobsExportUrl = (f: { q?: string; result?: string }) => {
+  const p = new URLSearchParams()
+  if (f.q) p.set('q', f.q)
+  if (f.result) p.set('result', f.result)
+  return `/api/history/jobs/export?${p}`
+}
+
 export interface HistoryJob {
   jid: string
   fun: string

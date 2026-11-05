@@ -57,7 +57,11 @@ export function parseJobEvent(tag: string, data: Record<string, unknown>): { kin
   const m = tag.match(/^salt\/job\/(\d{20})\/(new|ret\/(.+))$/)
   if (!m) return null
   const fun = typeof data.fun === 'string' ? data.fun : null
-  if (!fun || NOISE.has(fun) || fun.startsWith('runner.') || fun.startsWith('wheel.')) return null
+  const meta = data.metadata && typeof data.metadata === 'object' ? (data.metadata as Record<string, unknown>) : {}
+  // a schedule may run a "noisy" function on purpose; its returns carry the schedule in their
+  // metadata ("new" events don't, so the scheduler records those jobs itself)
+  const scheduled = m[2] !== 'new' && typeof meta.salt_shaker_user === 'string' && meta.salt_shaker_user.startsWith('schedule:')
+  if (!fun || (NOISE.has(fun) && !scheduled) || fun.startsWith('runner.') || fun.startsWith('wheel.')) return null
   const jid = m[1]
   if (m[2] === 'new') {
     const tgt = data.tgt
@@ -76,7 +80,6 @@ export function parseJobEvent(tag: string, data: Record<string, unknown>): { kin
       },
     }
   }
-  const meta = data.metadata && typeof data.metadata === 'object' ? (data.metadata as Record<string, unknown>) : {}
   const summary = stateSummary(data.return)
   return {
     kind: 'ret',

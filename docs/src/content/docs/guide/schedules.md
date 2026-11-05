@@ -16,7 +16,7 @@ Both pages are for admins and need the server.
 
 You can pick a preset such as *Every day at 02:00* or *Weekdays at 06:00*, or write your own cron expression. Times use the server's time zone; in the container, set it with `TZ`.
 
-Each schedule shows when it runs next, a summary of its last run with a link to the job, and a **Run now** button. Scheduled jobs appear in history and in the audit log as `schedule:<name>`.
+Each schedule shows when it runs next, a summary of its last run with a link to the job, and a **Run now** button. Below the summary, a bar for each of its last 10 runs shows how they went: green ok, amber drifted (or updates available), red failed, gray when some minions did not return. Hover a bar for the details or click it to open that job; the link next to them opens all of the schedule's jobs. Scheduled jobs appear in history and in the audit log as `schedule:<name>`, so renaming a schedule starts its list of runs anew.
 
 :::note
 With several server instances on one database, each scheduled run still starts exactly once.

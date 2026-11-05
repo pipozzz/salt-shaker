@@ -2,7 +2,7 @@ import { CalendarClock, ExternalLink, Pencil, Play, Plus, Trash2 } from 'lucide-
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatArgs, parseArgs } from '../api/salt'
-import { automation, type Schedule, type ScheduleInput, type ScheduleKind } from '../api/server'
+import { automation, type Schedule, type ScheduleInput, type ScheduleKind, type ScheduleRun } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch, type Tone } from '../components/ui'
@@ -40,7 +40,7 @@ function Summary({ s }: { s: Schedule }) {
       <span className="flex flex-wrap gap-1">
         <Badge tone="green">{c.ok} ok</Badge>
         {c.drift > 0 && <Badge tone="amber">{c.drift} drifted</Badge>}
-        {c.error > 0 && <Badge tone="red">{c.error} errors</Badge>}
+        {c.error > 0 && <Badge tone="red">{c.error} {c.error === 1 ? 'error' : 'errors'}</Badge>}
         {c.noreturn > 0 && <Badge>{c.noreturn} no return</Badge>}
       </span>
     )
@@ -51,6 +51,45 @@ function Summary({ s }: { s: Schedule }) {
   }
   const f = sum as { returned: number; failed: number }
   return f.failed ? <Badge tone="red">{f.failed} failed</Badge> : <Badge tone="green">{f.returned} ok</Badge>
+}
+
+const RUN_BAR: Record<ScheduleRun['status'], string> = {
+  ok: 'bg-emerald-500',
+  changed: 'bg-amber-400',
+  failed: 'bg-red-500',
+  noreturn: 'bg-zinc-400 dark:bg-zinc-500',
+  running: 'animate-pulse bg-zinc-300 dark:bg-zinc-600',
+}
+
+function runLabel(kind: ScheduleKind, status: ScheduleRun['status']) {
+  if (status === 'changed') return kind === 'patches' ? 'updates available' : 'drifted'
+  return { ok: 'ok', failed: 'failed', noreturn: 'some minions did not return', running: 'running' }[status]
+}
+
+/** The latest runs as a strip of bars, oldest left, each linked to its job. */
+function RecentRuns({ s }: { s: Schedule }) {
+  const runs = s.recentRuns
+  if (runs.length < 2) return null
+  const failed = runs.filter((r) => r.status === 'failed').length
+  return (
+    <div className="flex items-center gap-2">
+      <ul className="flex items-end gap-0.5" aria-label={`Last ${runs.length} runs`}>
+        {runs.map((r) => {
+          const text = `${relTime(new Date(r.startedAt))}: ${runLabel(s.kind, r.status)} (${r.detail})`
+          return (
+            <li key={r.jid}>
+              <Link to={`/jobs/${r.jid}`} aria-label={text} title={text} className="-my-1 block py-1 hover:opacity-70">
+                <span className={`block w-1.5 rounded-sm ${RUN_BAR[r.status]} ${r.status === 'failed' ? 'h-4' : 'h-3'}`} />
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+      <Link to={`/jobs?q=${encodeURIComponent(`schedule:${s.name}`)}`} className="text-zinc-500 hover:text-accent-600 dark:text-zinc-400">
+        {failed ? `${failed} of ${runs.length} failed` : 'history'}
+      </Link>
+    </div>
+  )
 }
 
 export function SchedulesPage() {
@@ -142,6 +181,7 @@ export function SchedulesPage() {
                 </div>
                 <div className="w-52 space-y-1 text-xs">
                   <Summary s={s} />
+                  <RecentRuns s={s} />
                   {s.lastRunAt && (
                     <p className="text-zinc-500 dark:text-zinc-400">
                       {relTime(new Date(s.lastRunAt))}

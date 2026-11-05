@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Schedules**
+
+- Each schedule shows its last 10 runs as a strip of bars, colored by how they went and linked to their jobs, with a link to all of its jobs in the history. A schedule that keeps failing now stands out even when its latest run was fine.
+
+**Fixes**
+
+- Schedules running `test.ping`, `grains.*` or other functions the history skips as noise reported every minion as *no return* after 15 minutes. Their jobs and returns are now recorded.
+
 ## 1.5.0
 
 **System page**

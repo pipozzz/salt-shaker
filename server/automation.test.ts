@@ -136,6 +136,9 @@ describe.each(testDialects)('scheduler storage (%s)', (dialect) => {
     const [after] = await db.select().from(schema.schedule).where(eq(schema.schedule.id, s.id))
     expect(after.lastJid).toBe('j1')
     expect(after.lastRunAt).not.toBeNull()
+    // recorded in the history at once, tagged with the schedule
+    const [job] = await db.select().from(schema.job).where(eq(schema.job.jid, 'j1'))
+    expect(job).toMatchObject({ fun: 'state.apply', args: '[{"__kwarg__":true,"test":true}]', target: '*', shakerUser: 'schedule:nightly', minions: '["web-01","web-02"]', dryRun: true })
 
     const summary = (x: object) => JSON.stringify({ ok: 1, changed: 0, pending: 0, failed: 0, ...x })
     await db.insert(schema.jobReturn).values([

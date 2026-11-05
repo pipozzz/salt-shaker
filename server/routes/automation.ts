@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, type Notifier } from '../notify'
+import { recentScheduleRuns } from '../schedule-runs'
 import { dueAt, nextRun, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
 import type { AuditRow, Env } from '../types'
 
@@ -89,6 +90,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
 
   r.get('/schedules', async (c) => {
     const rows = await db.select().from(t).orderBy(asc(t.name))
+    const runs = await recentScheduleRuns(db, schema, rows)
     return c.json({
       schedules: rows.map((s) => {
         let next: Date | null = null
@@ -98,7 +100,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
         } catch (e) {
           cronError = e instanceof Error ? e.message : String(e)
         }
-        return { ...s, args: s.args ? JSON.parse(s.args) : null, lastSummary: s.lastSummary ? JSON.parse(s.lastSummary) : null, nextRunAt: next, cronError }
+        return { ...s, args: s.args ? JSON.parse(s.args) : null, lastSummary: s.lastSummary ? JSON.parse(s.lastSummary) : null, nextRunAt: next, cronError, recentRuns: runs.get(s.name) ?? [] }
       }),
     })
   })

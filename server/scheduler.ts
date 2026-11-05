@@ -1,6 +1,7 @@
 import { Cron } from 'croner'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Db, Schema } from './db'
+import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
 import { complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary } from './summaries'
@@ -117,6 +118,7 @@ export class Scheduler {
         return null
       }
       await this.db.update(this.schema.schedule).set({ lastJid: ret.jid }).where(eq(this.schema.schedule.id, s.id))
+      await this.record(ret.jid, low, ret.minions ?? [], who)
       await this.audit({ username: who, client: 'local_async', fun: low.fun, target: s.target, targetType: s.targetType, jid: ret.jid, outcome: 'ok' })
       this.pending.set(ret.jid, { schedule: s, minions: ret.minions ?? [], deadline: Date.now() + RESULT_DEADLINE_MS })
       return ret.jid
@@ -126,6 +128,21 @@ export class Scheduler {
       await this.db.update(this.schema.schedule).set({ lastSummary: JSON.stringify({ error }) }).where(eq(this.schema.schedule.id, s.id))
       return null
     }
+  }
+
+  /**
+   * Stores the job right away, so the history has it even for functions it otherwise skips
+   * (e.g. test.ping) and before the master's "new" event arrives.
+   */
+  private async record(jid: string, low: ReturnType<typeof lowstateFor>, minions: string[], who: string) {
+    const job = this.schema.job
+    // same shape as the master's events: keyword arguments last, marked with __kwarg__
+    const args: unknown[] = [...low.arg, ...(Object.keys(low.kwarg).length ? [{ __kwarg__: true, ...low.kwarg }] : [])]
+    await this.db
+      .insert(job)
+      .values({ jid, fun: low.fun, args: JSON.stringify(args), target: low.tgt, targetType: low.tgt_type, shakerUser: who, minions: JSON.stringify(minions), dryRun: isDryRun(args), startedAt: new Date() })
+      .onConflictDoNothing()
+    await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
   }
 
   /** Summarizes runs whose minions have all returned (or that hit the deadline) and notifies. */

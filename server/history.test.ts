@@ -64,6 +64,14 @@ describe('parseJobEvent', () => {
     expect(parseJobEvent('20261101191151725177', newEvent)).toBeNull()
   })
 
+  it('keeps returns of noisy functions that a schedule ran', () => {
+    const ping = { ...retEvent, fun: 'test.ping', return: true, metadata: { salt_shaker_user: 'schedule:ping all' } }
+    const p = parseJobEvent('salt/job/20261101191151725177/ret/web-01', ping)
+    expect(p?.kind === 'ret' && p.ret.shakerUser).toBe('schedule:ping all')
+    // the same function run by a person stays out
+    expect(parseJobEvent('salt/job/20261101191151725177/ret/web-01', { ...ping, metadata: { salt_shaker_user: 'otto' } })).toBeNull()
+  })
+
   it('stores huge returns as a marker', () => {
     const p = parseJobEvent('salt/job/20261101191151725177/ret/web-01', { ...retEvent, return: 'x'.repeat(600 * 1024) })
     expect(p?.kind === 'ret' && JSON.parse(p.ret.ret)).toMatchObject({ _truncated: true })

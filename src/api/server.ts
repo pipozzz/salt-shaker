@@ -309,6 +309,15 @@ export interface Schedule {
   lastSummary: Record<string, unknown> | null
   nextRunAt: string | null
   cronError: string | null
+  /** latest recorded runs, oldest first */
+  recentRuns: ScheduleRun[]
+}
+
+export interface ScheduleRun {
+  jid: string
+  startedAt: string
+  status: 'ok' | 'changed' | 'failed' | 'noreturn' | 'running'
+  detail: string
 }
 
 export interface ScheduleInput {

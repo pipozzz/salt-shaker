@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { findingsCsv, type FindingRow } from '../../src/lib/export'
-import type { Env } from '../types'
+import type { AuditRow, Env } from '../types'
 import { SEVERITIES, severityCounts, type Acceptance, type Finding, type MinionVulns, type VulnInfo, type VulnService } from '../vulns'
 
 const RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i])) as Record<string, number>
@@ -11,7 +11,7 @@ const acceptanceFields = (a: Acceptance) => ({ note: a.note, acceptedBy: a.accep
 const findingFields = (f: Finding) => ({ ...vulnFields(f.vuln), package: f.package, version: f.version, binaries: f.binaries, fixed: f.fixed })
 
 /** The vulnerability report, for everyone signed in. Scans themselves are ordinary jobs. */
-export function vulnRoutes({ vulns }: { vulns: VulnService }) {
+export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnService; audit?: (row: AuditRow) => Promise<unknown> }) {
   const r = new Hono<Env>()
 
   // only these paths: a '*' here would apply to every /api route mounted after this one
@@ -76,13 +76,22 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     const u = c.get('user')!
     return u.role === 'admin' || u.role === 'operator' ? (u.username ?? u.name) : null
   }
+  // accepting a risk is a security decision: who did it, and who tried, goes in the audit log
+  const record = (c: { get: (k: 'user') => Env['Variables']['user'] }, fun: string, target: string, outcome: string, extra: Partial<AuditRow> = {}) => {
+    const u = c.get('user')!
+    return audit({ userId: u.id, username: u.username ?? u.name, role: u.role, client: 'console', fun, target, outcome, ...extra })
+  }
 
   /** Accept the risk of a vulnerability: { id, note, days? }. Operators and admins. */
   r.post('/vulns/accepted', async (c) => {
     const by = writer(c)
-    if (!by) return c.json({ error: 'Only operators and admins can accept vulnerabilities' }, 403)
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
     const id = typeof body.id === 'string' ? body.id.trim() : ''
+    if (!by) {
+      const error = 'Only operators and admins can accept vulnerabilities'
+      await record(c, 'vulns.accept', id.slice(0, 200), 'denied', { error })
+      return c.json({ error }, 403)
+    }
     const note = typeof body.note === 'string' ? body.note.trim() : ''
     const days = body.days == null ? null : Number(body.days)
     if (!id || id.length > 200) return c.json({ error: 'A vulnerability id is required' }, 400)
@@ -91,12 +100,19 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     const now = new Date()
     const a: Acceptance = { vulnId: id, note, acceptedBy: by, acceptedAt: now, expiresAt: days ? new Date(+now + days * 86400_000) : null }
     await vulns.accept(a)
+    await record(c, 'vulns.accept', id, 'ok', { args: JSON.stringify({ note, days }) })
     return c.json({ accepted: { id, ...acceptanceFields(a) } }, 201)
   })
 
   r.delete('/vulns/accepted/:id', async (c) => {
-    if (!writer(c)) return c.json({ error: 'Only operators and admins can withdraw an acceptance' }, 403)
-    if (!(await vulns.unaccept(c.req.param('id')))) return c.json({ error: 'Not accepted' }, 404)
+    const id = c.req.param('id')
+    if (!writer(c)) {
+      const error = 'Only operators and admins can withdraw an acceptance'
+      await record(c, 'vulns.unaccept', id, 'denied', { error })
+      return c.json({ error }, 403)
+    }
+    if (!(await vulns.unaccept(id))) return c.json({ error: 'Not accepted' }, 404)
+    await record(c, 'vulns.unaccept', id, 'ok')
     return c.json({ ok: true })
   })
 

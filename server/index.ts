@@ -378,7 +378,7 @@ scheduler.vulns = vulns
 scheduler.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 app.route('/api', targetRoutes({ db, schema }))
-app.route('/api', vulnRoutes({ vulns }))
+app.route('/api', vulnRoutes({ vulns, audit }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))

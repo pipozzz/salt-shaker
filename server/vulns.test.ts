@@ -261,7 +261,8 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
       c.set('user', name ? { id: name, name, username: name, role } : null)
       await next()
     })
-    app.route('/api', vulnRoutes({ vulns: svc }))
+    const audited: Array<{ username: string; fun: string; target?: string | null; outcome: string; args?: string | null }> = []
+    app.route('/api', vulnRoutes({ vulns: svc, audit: async (row) => audited.push(row) }))
     const get = async (path: string, user = 'ann:viewer') => {
       const res = await app.request(`/api${path}`, { headers: { 'x-user': user } })
       return { status: res.status, body: (await res.json()) as Record<string, unknown> }
@@ -326,6 +327,13 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     expect((await del('DEBIAN-CVE-2024-1', 'ann:viewer')).status).toBe(403)
     expect((await del('DEBIAN-CVE-2024-1', 'ops:operator')).status).toBe(200)
     expect((await del('DEBIAN-CVE-2024-1', 'ops:operator')).status).toBe(404)
+    // the audit log has who accepted, why, who withdrew, and who wasn't allowed to
+    expect(audited.map(({ username, fun, target, outcome, args }) => [username, fun, target, outcome, args ?? null])).toEqual([
+      ['ann', 'vulns.accept', 'DEBIAN-CVE-2024-1', 'denied', null],
+      ['ops', 'vulns.accept', 'DEBIAN-CVE-2024-1', 'ok', JSON.stringify({ note: 'behind a firewall', days: 30 })],
+      ['ann', 'vulns.unaccept', 'DEBIAN-CVE-2024-1', 'denied', null],
+      ['ops', 'vulns.unaccept', 'DEBIAN-CVE-2024-1', 'ok', null],
+    ])
     // an expired acceptance no longer counts
     await db.insert(schema.vulnAcceptance).values({ vulnId: 'DEBIAN-CVE-2024-1', note: 'old', acceptedBy: 'ops', acceptedAt: new Date(NOW - 2 * 86400_000), expiresAt: new Date(NOW - 86400_000) })
     expect(((await get('/vulns')).body.vulns as unknown[]).length).toBe(2)

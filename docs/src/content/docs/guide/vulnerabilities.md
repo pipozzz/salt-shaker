@@ -38,7 +38,7 @@ The rating is the distribution's own when it has one: Ubuntu's priority, the Red
 
 Some vulnerabilities don't matter where you run the package: the service isn't exposed, or the fix comes with the next image rebuild. Open the vulnerability and choose **Accept risk…**, say why, and pick how long: 30 days, 90 days, a year or until withdrawn. Operators and admins can do this.
 
-An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. When an acceptance expires, the vulnerability counts again.
+An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. When an acceptance expires, the vulnerability counts again. Accepting and withdrawing, and attempts by anyone not allowed to, are in the [audit log](/guide/users-audit/#audit-log).
 
 ### Things to know
 

@@ -168,6 +168,13 @@ test('patches flag the upgrades that fix known vulnerabilities', async ({ page }
   await page.getByText(/Fixes vulnerabilities \(\d+\)/).click()
   await expect(openssl).toBeVisible()
   await expect(page.getByRole('cell', { name: 'tzdata', exact: true })).toHaveCount(0)
+
+  // one click upgrades only those, only where they fix something
+  await page.getByRole('button', { name: 'Upgrade security fixes' }).click()
+  await expect(page.getByRole('heading', { name: 'Upgrade security fixes on 2 minions' })).toBeVisible()
+  await expect(page.getByText('pkg.install pkgs=["libssl3t64","nginx","openssl"] only_upgrade=True')).toBeVisible()
+  await page.getByRole('button', { name: 'Upgrade 2 minions' }).click()
+  await expect(page.getByText('2/2 returned')).toBeVisible()
 })
 
 test('compliance check groups minions', async ({ page }) => {

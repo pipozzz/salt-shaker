@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArrowRight, ChevronRight, ExternalLink, Package, PackageCheck, Play, RefreshCw, Search, Server, Unplug } from 'lucide-react'
+import { ArrowRight, ChevronRight, ExternalLink, Package, PackageCheck, Play, RefreshCw, Search, Server, ShieldAlert, Unplug } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { demoVulns } from '../api/demo-vulns'
@@ -131,6 +131,10 @@ export function PatchesPage() {
     .filter((m) => (!securityOnly || m.fix) && (!q || m.id.includes(q) || Object.keys(m.ups).some((p) => p.toLowerCase().includes(q))))
     .sort((a, b) => fixRank(a.fix) - fixRank(b.fix) || Object.keys(b.ups).length - Object.keys(a.ups).length || a.id.localeCompare(b.id))
   const securityPackages = Object.entries(byPackage).filter(([pkg, p]) => p.minions.some((m) => fixes[m]?.[pkg])).length
+  // only the upgrades that fix something, on only the minions they fix it on
+  const security = Object.entries(byMinion)
+    .map(([id, ups]) => [id, Object.keys(ups).filter((p) => fixes[id]?.[p])] as const)
+    .filter(([, pkgs]) => pkgs.length)
   const needing = Object.values(byMinion).filter((u) => Object.keys(u).length > 0).length
   const noReturn = run?.done ? run.minions.filter((m) => !(m in run.results)) : []
   const scanning = !!run && !run.done
@@ -245,6 +249,21 @@ export function PatchesPage() {
                   <input type="checkbox" checked={securityOnly} onChange={(e) => setSecurityOnly(e.target.checked)} className="accent-accent-600" />
                   Fixes vulnerabilities ({securityPackages})
                 </label>
+              )}
+              {security.length > 0 && run.done && canInstall && (
+                <Button
+                  icon={<ShieldAlert className="size-4" />}
+                  onClick={() =>
+                    setPlan({
+                      title: `Upgrade security fixes on ${security.length} ${security.length === 1 ? 'minion' : 'minions'}`,
+                      fun: 'pkg.install',
+                      minions: security.map(([id]) => id).sort(),
+                      pkgs: [...new Set(security.flatMap(([, pkgs]) => pkgs))].sort(),
+                    })
+                  }
+                >
+                  Upgrade security fixes
+                </Button>
               )}
               {needing > 0 && run.done && canUpgradeAll && (
                 <Button

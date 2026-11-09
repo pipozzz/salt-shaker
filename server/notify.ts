@@ -6,6 +6,7 @@ import { jobFailedMessage, pendingKeyMessage, type Message } from './summaries'
 export const EVENTS = {
   drift: 'A scheduled compliance check found drift or errors',
   patches: 'A scheduled patch scan found upgrades',
+  vulns: 'A scheduled vulnerability scan found critical or high vulnerabilities with a fix',
   schedule: 'Any scheduled run finished',
   job_failed: 'A job failed on any minion',
   pending_key: 'A new minion is waiting for key approval',

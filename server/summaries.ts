@@ -129,3 +129,19 @@ export function minionsUpMessage(ids: string[]): Message {
     path: ids.length === 1 ? `/minions/${encodeURIComponent(ids[0])}` : '/',
   }
 }
+
+export function vulnMessage(name: string, target: string, v: { scanned: number; notCovered: number; affected: number; critical: number; high: number; fixable: number; noreturn: number }, error: string | null): Message {
+  const found = v.critical + v.high
+  const counts = [v.critical && `${v.critical} critical`, v.high && `${v.high} high`].filter(Boolean).join(' and ')
+  return {
+    title: found ? `Vulnerabilities "${name}": ${counts} on ${minions(v.affected)}, ${v.fixable} with a fix` : `Vulnerabilities "${name}": nothing critical or high on ${minions(v.scanned)}`,
+    lines: [
+      `Target: ${target}`,
+      ...(v.notCovered ? [`${minions(v.notCovered)} not covered (unsupported OS or the scan failed)`] : []),
+      ...(v.noreturn ? [`${minions(v.noreturn)} did not return`] : []),
+      ...(error ? [error] : []),
+    ],
+    severity: v.critical ? 'error' : found ? 'warning' : 'info',
+    path: '/vulnerabilities',
+  }
+}

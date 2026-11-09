@@ -31,6 +31,7 @@ With several server instances on one database, each scheduled run still starts e
 | --- | --- |
 | Drift | a scheduled compliance check found drifted minions or errors |
 | Patches | a scheduled patch scan found upgrades |
+| Vulnerabilities | a scheduled vulnerability scan found critical or high vulnerabilities that an upgrade fixes |
 | Every scheduled run | any schedule finished, with its summary |
 | Failed jobs | a job failed on any minion; failures of one job are combined into one alert |
 | Pending keys | a new minion is waiting for approval; at most once every 6 hours per minion |

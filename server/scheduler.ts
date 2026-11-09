@@ -5,7 +5,8 @@ import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../src/lib/inventory'
 import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
-import { complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary } from './summaries'
+import { complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
+import { vulnScanSummary, type VulnService } from './vulns'
 
 export const SCHEDULE_KINDS = {
   compliance: 'Compliance check (state.apply test=True)',
@@ -61,6 +62,9 @@ export class Scheduler {
   private pending = new Map<string, Pending>()
   private timer: ReturnType<typeof setInterval> | null = null
   private ticking = false
+
+  /** for vulnerability scans: matches the inventories once they're in */
+  vulns: VulnService | null = null
 
   constructor(db: Db, schema: Schema, salt: SaltService, notifier: Notifier, audit: Scheduler['audit']) {
     this.db = db
@@ -148,6 +152,21 @@ export class Scheduler {
     await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
   }
 
+  private async summarizeVulns(s: ScheduleRow, jid: string, expected: number, target: string) {
+    try {
+      const { report, updating } = await this.vulns!.get(10 * 60_000)
+      if (!report || updating) throw new Error('Matching the packages against OSV.dev took too long')
+      const summary = vulnScanSummary(report, jid, expected)
+      const msg = vulnMessage(s.name, target, summary, report.error)
+      if (summary.fixable > 0) await this.notifier.emit('vulns', msg)
+      await this.notifier.emit('schedule', msg)
+      await this.db.update(this.schema.schedule).set({ lastSummary: JSON.stringify(summary) }).where(eq(this.schema.schedule.id, s.id))
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      await this.db.update(this.schema.schedule).set({ lastSummary: JSON.stringify({ error }) }).where(eq(this.schema.schedule.id, s.id))
+    }
+  }
+
   /** Summarizes runs whose minions have all returned (or that hit the deadline) and notifies. */
   private async collect() {
     for (const [jid, p] of this.pending) {
@@ -169,6 +188,10 @@ export class Scheduler {
         const msg = patchMessage(s.name, target, ps, jid)
         if (ps.needUpdates > 0) await this.notifier.emit('patches', msg)
         await this.notifier.emit('schedule', msg)
+      } else if (s.kind === 'vulns' && this.vulns) {
+        // matching against OSV.dev can take a while the first time; don't hold up other schedules
+        void this.summarizeVulns(s, jid, p.minions.length, target)
+        continue
       } else {
         const f = failureSummary(rows, p.minions.length)
         summary = { returned: f.returned, failed: f.failed.length, noreturn: f.noreturn }

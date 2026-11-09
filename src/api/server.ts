@@ -300,7 +300,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 // ---- automation (admin) ----
 
 export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
 
 export interface Schedule {
   id: number
@@ -465,7 +465,8 @@ export interface VulnAffected {
 }
 
 export const vulns = {
-  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[] }>('/api/vulns'),
+  // a short wait: while the server is still building, the page polls and shows the progress
+  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[] }>('/api/vulns?wait=3000'),
   /** per-minion counts only, without waiting for a report that's being built */
   minions: () => request<VulnStatus & { minions: VulnMinion[] }>('/api/vulns?only=minions&wait=0'),
   minion: (id: string) => request<VulnStatus & { minion: VulnMinion; findings: VulnFinding[] }>(`/api/vulns/minions/${encodeURIComponent(id)}`),

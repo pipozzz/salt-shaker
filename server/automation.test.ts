@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { payloadFor } from './notify'
 import { maskUrl } from './routes/automation'
 import type { Notifier } from './notify'
@@ -8,6 +8,7 @@ import { dueAt, lowstateFor, nextRun, Scheduler } from './scheduler'
 import { openTestDatabase, testDialects } from './testdb'
 import { complianceCounts, complianceMessage, failureSummary, patchSummary } from './summaries'
 import { INVENTORY_SCRIPT } from '../src/lib/inventory'
+import type { VulnService } from './vulns'
 
 const sum = (s: object | null) => ({ summary: s ? JSON.stringify(s) : null })
 
@@ -152,5 +153,31 @@ describe.each(testDialects)('scheduler storage (%s)', (dialect) => {
     expect(JSON.parse(done.lastSummary!)).toEqual({ ok: 1, drift: 1, error: 0, noreturn: 0 })
     expect(emitted.sort()).toEqual(['drift', 'schedule'])
     expect(calls).toHaveLength(1)
+  })
+
+  it('summarizes a vulnerability scan from the report and alerts when a fix is available', async () => {
+    const { db, schema } = opened
+    const [s] = await db
+      .insert(schema.schedule)
+      .values({ name: 'cves', kind: 'vulns', target: 'web-*', targetType: 'glob', cron: '* * * * *', createdAt: new Date(Date.now() - 3600_000) })
+      .returning()
+    const salt = { call: async () => ({ jid: 'v1', minions: ['web-01'] }) } as unknown as SaltService
+    const emitted: string[] = []
+    const notifier = { emit: async (event: string) => void emitted.push(event) } as unknown as Notifier
+    const sch = new Scheduler(db, schema, salt, notifier, async () => undefined)
+    const finding = { vuln: { id: 'X-1', summary: '', cves: [], severity: 'critical' as const, score: 9.8, fixed: {} }, package: 'openssl', version: '1', binaries: [], fixed: '2' }
+    const report = { builtAt: new Date(), error: null, unchecked: 0, minions: [{ minion: 'web-01', jid: 'v1', scannedAt: new Date(), os: 'debian 12', ecosystem: 'Debian:12', packages: 1, error: null, findings: [finding] }] }
+    sch.vulns = { get: async () => ({ report, updating: false }) } as unknown as VulnService
+
+    await sch.run(s)
+    const [job] = await db.select().from(schema.job).where(eq(schema.job.jid, 'v1'))
+    expect(job.fun).toBe('cmd.run')
+    await db.insert(schema.jobReturn).values({ jid: 'v1', minion: 'web-01', ret: '""', retcode: 0, success: true, returnedAt: new Date() })
+    await sch.tick()
+    await vi.waitFor(async () => {
+      const [done] = await db.select().from(schema.schedule).where(eq(schema.schedule.id, s.id))
+      expect(JSON.parse(done.lastSummary!)).toEqual({ scanned: 1, notCovered: 0, affected: 1, critical: 1, high: 0, fixable: 1, noreturn: 0 })
+    })
+    expect(emitted.sort()).toEqual(['schedule', 'vulns'])
   })
 })

@@ -14,6 +14,7 @@ const FORMAT: Record<Channel['kind'], { label: string; placeholder: string }> = 
 const EVENT_SHORT: Record<NotifyEvent, string> = {
   drift: 'Drift',
   patches: 'Patches',
+  vulns: 'Vulnerabilities',
   schedule: 'Every scheduled run',
   job_failed: 'Failed jobs',
   pending_key: 'Pending keys',

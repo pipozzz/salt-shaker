@@ -305,6 +305,9 @@ export function VulnerabilitiesPage() {
   )
 }
 
+/** An inventory older than a week misses what was installed or upgraded since. */
+const isStale = (at: string) => Date.now() - Date.parse(at) > 7 * 86400_000
+
 const worst = (c: SeverityCounts) => c.critical * 1e6 + c.high * 1e4 + c.medium * 100 + c.low
 
 function VulnTable({ list, canUpgrade }: { list: VulnSummary[]; canUpgrade: boolean }) {
@@ -448,7 +451,12 @@ function MinionRow({ m, open, onToggle }: { m: VulnMinion; open: boolean; onTogg
         <td className="px-3 py-2.5">{m.error ? <span className="text-xs text-zinc-500 dark:text-zinc-400">{m.error}</span> : <CountsBadges counts={m.counts} />}</td>
         <td className="hidden px-3 py-2.5 text-zinc-600 tabular-nums sm:table-cell dark:text-zinc-400">{m.error ? '' : m.counts.fixable}</td>
         <td className="hidden px-3 py-2.5 pr-4 text-xs text-zinc-500 md:table-cell dark:text-zinc-400">
-          <Link to={`/jobs/${m.jid}`} onClick={(e) => e.stopPropagation()} className="hover:text-accent-600" title={new Date(m.scannedAt).toLocaleString()}>
+          <Link
+            to={`/jobs/${m.jid}`}
+            onClick={(e) => e.stopPropagation()}
+            className={clsx('hover:text-accent-600', isStale(m.scannedAt) && 'font-medium text-amber-700 dark:text-amber-400')}
+            title={`${new Date(m.scannedAt).toLocaleString()}${isStale(m.scannedAt) ? ' — more than a week old; scan again for current results' : ''}`}
+          >
             {relTime(new Date(m.scannedAt))}
           </Link>
           {!m.error && ` · ${m.packages} packages`}

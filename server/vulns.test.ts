@@ -1,7 +1,11 @@
+import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../src/lib/inventory'
+import { vulnRoutes } from './routes/vulns'
+import { vulnMessage } from './summaries'
 import { openTestDatabase, testDialects } from './testdb'
-import { cvss3Score, ecosystemFor, OsvClient, parseInventory, severityCounts, VulnService, vulnInfo } from './vulns'
+import type { Env } from './types'
+import { cvss3Score, ecosystemFor, OsvClient, parseInventory, severityCounts, VulnService, vulnInfo, vulnScanSummary } from './vulns'
 
 const inventory = (os: string, ...pkgs: string[]) => [`os\t${os}`, ...pkgs.map((p) => `pkg\t${p}`), ''].join('\n')
 
@@ -88,6 +92,8 @@ describe('vulnInfo', () => {
   })
 })
 
+const NOW = Date.UTC(2026, 10, 1, 11)
+
 /** A fake OSV.dev: which vulnerabilities affect which `name@version`, and the records. */
 function fakeOsv(affects: Record<string, string[]>, records: Record<string, object>) {
   const calls = { batch: 0, packages: 0, vulns: [] as string[] }
@@ -138,7 +144,7 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     const debian = inventory('debian\t12\t12 (bookworm)', 'openssl\t3.0.11-1~deb12u2\tlibssl3', 'bash\t5.2.15-2\tbash', 'zlib\t1.2.13\tzlib1g')
     await scan('1', 0, { web: { ret: inventory('debian\t12\t12', 'openssl\t3.0.9-1\tlibssl3') }, win: { ret: "'/bin/sh' is not recognized", retcode: 1 } })
     await scan('2', 5, { web: { ret: debian }, db: { ret: debian }, arch: { ret: inventory('arch\t\t', 'glibc\t2.40\tglibc') } })
-    let now = Date.UTC(2026, 10, 1, 11)
+    let now = NOW
     const svc = new VulnService(db, schema, osv.client, { now: () => now })
 
     const { report, updating } = await svc.get()
@@ -175,6 +181,25 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     expect(osv.calls.vulns).toHaveLength(2)
   })
 
+  it('leaves out old inventories and minions whose key is gone', async () => {
+    const { db, schema, scan } = await setup()
+    const debian = inventory('debian\t12\t12', 'bash\t5.2.15-2\tbash')
+    await scan('1', 0, { web: { ret: debian }, old: { ret: debian }, gone: { ret: debian } })
+    await scan('2', 5, { web: { ret: "'/bin/sh' failed", retcode: 1 } })
+    const osv = fakeOsv(affects, records)
+    // a failed newer scan doesn't hide an older good inventory
+    const recent = new VulnService(db, schema, osv.client, { now: () => NOW })
+    const by = Object.fromEntries((await recent.get()).report!.minions.map((m) => [m.minion, m]))
+    expect(by.web.jid).toBe('1')
+    expect(by.web.error).toBeNull()
+
+    // 31 days later only newer scans count (old was not scanned since), and gone's key was deleted
+    await scan('3', 31 * 24 * 60, { web: { ret: debian }, gone: { ret: debian } })
+    const svc = new VulnService(db, schema, osv.client, { now: () => NOW + 31 * 86400_000, minions: async () => ['web', 'old'] })
+    const { report } = await svc.get()
+    expect(report!.minions.map((m) => [m.minion, m.jid])).toEqual([['web', '3']])
+  })
+
   it('keeps what it knows when OSV.dev is unreachable', async () => {
     const { db, schema, scan } = await setup()
     const debian = inventory('debian\t12\t12', 'openssl\t3.0.11-1~deb12u2\tlibssl3')
@@ -182,7 +207,7 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     const down = new OsvClient('https://osv.test', async () => {
       throw new Error('getaddrinfo ENOTFOUND osv.test')
     })
-    const { report } = await new VulnService(db, schema, down).get()
+    const { report } = await new VulnService(db, schema, down, { now: () => NOW }).get()
     expect(report!.error).toMatch(/Couldn't ask OSV.dev about the packages: getaddrinfo ENOTFOUND/)
     expect(report!.unchecked).toBe(1)
     expect(report!.minions[0].findings).toEqual([])
@@ -198,11 +223,80 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
       await gate
       return osv.fetchFn(url, init)
     })
-    const svc = new VulnService(db, schema, slow)
+    const svc = new VulnService(db, schema, slow, { now: () => NOW })
     expect(await svc.get(10)).toEqual({ report: null, updating: true })
     release()
     const done = await svc.get()
     expect(done.updating).toBe(false)
     expect(done.report!.minions[0].findings.map((f) => f.vuln.id)).toEqual(['DEBIAN-CVE-2024-1'])
+  })
+})
+
+describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
+  let close: (() => Promise<unknown>) | null = null
+  afterEach(async () => {
+    await close?.()
+    close = null
+  })
+
+  it('reports per minion and per vulnerability, to signed-in users with a role', async () => {
+    const opened = await openTestDatabase(dialect)
+    close = opened.close
+    const { db, schema } = opened
+    const args = JSON.stringify([INVENTORY_SCRIPT, { __kwarg__: true, ...INVENTORY_KWARG }])
+    const at = new Date(NOW - 3600_000)
+    await db.insert(schema.job).values({ jid: '1', fun: 'cmd.run', args, target: '*', targetType: 'glob', minions: '[]', startedAt: at })
+    const debian = inventory('debian\t12\t12', 'openssl\t3.0.11-1~deb12u2\tlibssl3', 'bash\t5.2.15-2\tbash')
+    await db.insert(schema.jobReturn).values([
+      { jid: '1', minion: 'web', ret: JSON.stringify(debian), retcode: 0, success: true, returnedAt: at },
+      { jid: '1', minion: 'db', ret: JSON.stringify(inventory('debian\t12\t12', 'bash\t5.2.15-2\tbash')), retcode: 0, success: true, returnedAt: at },
+    ])
+    const svc = new VulnService(db, schema, fakeOsv({ 'openssl@3.0.11-1~deb12u2': ['DEBIAN-CVE-2024-1'], 'bash@5.2.15-2': ['DEBIAN-CVE-2024-2'] }, {
+      'DEBIAN-CVE-2024-1': { id: 'DEBIAN-CVE-2024-1', details: 'Bad thing', severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' }], affected: [{ package: { name: 'openssl', ecosystem: 'Debian:12' }, ranges: [{ type: 'ECOSYSTEM', events: [{ introduced: '0' }, { fixed: '3.0.15-1~deb12u1' }] }] }] },
+      'DEBIAN-CVE-2024-2': { id: 'DEBIAN-CVE-2024-2', details: 'Unfixed thing', affected: [{ ecosystem_specific: { urgency: 'unimportant' } }] },
+    }).client, { now: () => NOW })
+    const app = new Hono<Env>()
+    app.use('*', async (c, next) => {
+      const [name, role] = (c.req.header('x-user') ?? '').split(':')
+      c.set('user', name ? { id: name, name, username: name, role } : null)
+      await next()
+    })
+    app.route('/api', vulnRoutes({ vulns: svc }))
+    const get = async (path: string, user = 'ann:viewer') => {
+      const res = await app.request(`/api${path}`, { headers: { 'x-user': user } })
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+    }
+
+    expect((await get('/vulns', '')).status).toBe(401)
+    expect((await get('/vulns/minions/web', 'bob:none')).status).toBe(403)
+
+    const all = await get('/vulns')
+    expect(all.status).toBe(200)
+    expect(all.body.vulns).toEqual([
+      { id: 'DEBIAN-CVE-2024-1', cves: [], severity: 'critical', score: 9.8, summary: 'Bad thing', packages: ['openssl'], minions: 1, fixable: 1 },
+      { id: 'DEBIAN-CVE-2024-2', cves: [], severity: 'low', score: null, summary: 'Unfixed thing', packages: ['bash'], minions: 2, fixable: 0 },
+    ])
+    expect((all.body.minions as { minion: string; counts: object }[]).map((m) => [m.minion, m.counts])).toEqual([
+      ['db', { critical: 0, high: 0, medium: 0, low: 1, unknown: 0, fixable: 0 }],
+      ['web', { critical: 1, high: 0, medium: 0, low: 1, unknown: 0, fixable: 1 }],
+    ])
+    expect((await get('/vulns?only=minions&wait=0')).body.vulns).toEqual([])
+
+    const web = await get('/vulns/minions/web')
+    expect((web.body.findings as { id: string; fixed: string | null }[]).map((f) => [f.id, f.fixed])).toEqual([
+      ['DEBIAN-CVE-2024-1', '3.0.15-1~deb12u1'],
+      ['DEBIAN-CVE-2024-2', null],
+    ])
+    expect((await get('/vulns/minions/nope')).status).toBe(404)
+    const byId = await get(`/vulns/by-id/${encodeURIComponent('DEBIAN-CVE-2024-2')}`)
+    expect((byId.body.minions as { minion: string }[]).map((m) => m.minion)).toEqual(['db', 'web'])
+    expect((await get('/vulns/by-id/X-1')).status).toBe(404)
+
+    // what a scheduled scan reports
+    const { report } = await svc.get()
+    const summary = vulnScanSummary(report!, '1', 3)
+    expect(summary).toEqual({ scanned: 2, notCovered: 0, affected: 1, critical: 1, high: 0, fixable: 1, noreturn: 1 })
+    expect(vulnMessage('nightly', '*', summary, null)).toMatchObject({ title: 'Vulnerabilities "nightly": 1 critical on 1 minion, 1 with a fix', severity: 'error', lines: ['Target: *', '1 minion did not return'] })
+    expect(vulnMessage('nightly', '*', { ...summary, critical: 0, affected: 0, fixable: 0 }, null).title).toBe('Vulnerabilities "nightly": nothing critical or high on 2 minions')
   })
 })

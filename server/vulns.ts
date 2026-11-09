@@ -1,4 +1,4 @@
-import { desc, eq, inArray, and, like, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, like, sql } from 'drizzle-orm'
 import { INVENTORY_MARKER } from '../src/lib/inventory'
 import type { Db, Schema } from './db'
 
@@ -239,47 +239,70 @@ export interface VulnReport {
   unchecked: number
 }
 
-interface ScanReturn {
+/** A minion's inventory job return, without the (large) output. */
+export interface ScanRef {
   minion: string
   jid: string
   startedAt: Date
-  ret: string | null
-  retcode: number | null
+  ok: boolean
 }
 
-/** Each minion's latest inventory, from the most recent `scans` inventory jobs. */
-export async function latestInventories(db: Db, schema: Schema, scans = 20) {
+const chunks = <T>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
+
+/**
+ * Each minion's latest inventory since `since`: the newest one that succeeded, or its newest failure
+ * when none did. Only metadata is read, so this is cheap enough to run on every request.
+ */
+export async function latestScans(db: Db, schema: Schema, since: Date): Promise<ScanRef[]> {
   const t = schema.job
   const r = schema.jobReturn
   const jobs = await db
     .select({ jid: t.jid, startedAt: t.startedAt })
     .from(t)
-    .where(and(eq(t.fun, 'cmd.run'), like(t.args, `%${INVENTORY_MARKER}%`)))
+    .where(and(eq(t.fun, 'cmd.run'), gte(t.startedAt, since), like(t.args, `%${INVENTORY_MARKER}%`)))
     .orderBy(desc(t.startedAt))
-    .limit(scans)
+    .limit(1000)
   if (!jobs.length) return []
   const startedAt = new Map(jobs.map((j) => [j.jid, j.startedAt]))
-  const rows = await db.select({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode }).from(r).where(inArray(r.jid, [...startedAt.keys()]))
+  const rows: { jid: string; minion: string; retcode: number | null }[] = []
+  for (const c of chunks([...startedAt.keys()], 500)) rows.push(...(await db.select({ jid: r.jid, minion: r.minion, retcode: r.retcode }).from(r).where(inArray(r.jid, c))))
   // newest first, so a minion's latest good inventory wins, and its latest failure shows when it never had one
-  const all: ScanReturn[] = rows.map((x) => ({ ...x, startedAt: startedAt.get(x.jid)! })).sort((a, b) => +b.startedAt - +a.startedAt)
-  const out = new Map<string, { scan: ScanReturn; inventory: Inventory | null; error: string | null }>()
+  const all = rows.map((x) => ({ minion: x.minion, jid: x.jid, startedAt: startedAt.get(x.jid)!, ok: !x.retcode })).sort((a, b) => +b.startedAt - +a.startedAt)
+  const out = new Map<string, ScanRef>()
   for (const s of all) {
     const prev = out.get(s.minion)
-    if (prev?.inventory) continue
-    let value: unknown = null
-    try {
-      value = s.ret ? JSON.parse(s.ret) : null
-    } catch {
-      value = null
-    }
-    const inventory = !s.retcode ? parseInventory(value) : null
-    if (inventory) out.set(s.minion, { scan: s, inventory, error: null })
-    else if (!prev) out.set(s.minion, { scan: s, inventory: null, error: typeof value === 'string' && value.trim() ? value.trim().split('\n')[0].slice(0, 200) : 'The scan returned nothing usable' })
+    if (!prev || (!prev.ok && s.ok)) out.set(s.minion, s)
   }
   return [...out.values()]
 }
 
-const chunks = <T>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
+interface Parsed {
+  inventory: Inventory | null
+  error: string | null
+}
+
+/** Reads and parses the output of the given inventory returns. */
+async function loadInventories(db: Db, schema: Schema, scans: ScanRef[]) {
+  const r = schema.jobReturn
+  const wanted = new Set(scans.map((s) => `${s.jid}|${s.minion}`))
+  const out = new Map<string, Parsed>()
+  for (const c of chunks([...new Set(scans.map((s) => s.jid))], 200)) {
+    const rows = await db.select({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode }).from(r).where(inArray(r.jid, c))
+    for (const x of rows) {
+      const key = `${x.jid}|${x.minion}`
+      if (!wanted.has(key)) continue
+      let value: unknown = null
+      try {
+        value = x.ret ? JSON.parse(x.ret) : null
+      } catch {
+        value = null
+      }
+      const inventory = !x.retcode ? parseInventory(value) : null
+      out.set(key, { inventory, error: inventory ? null : typeof value === 'string' && value.trim() ? value.trim().split('\n')[0].slice(0, 200) : 'The scan returned nothing usable' })
+    }
+  }
+  return out
+}
 
 async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>) {
   let i = 0
@@ -293,6 +316,10 @@ export interface VulnServiceOptions {
   packageTtlMs?: number
   /** how long a report is reused when no new inventory came in */
   reportTtlMs?: number
+  /** inventories older than this are left out (minions that are gone, or no longer scanned) */
+  windowDays?: number
+  /** the accepted minions; others (keys deleted since) are left out. Null when unknown. */
+  minions?: () => Promise<string[] | null>
   now?: () => number
 }
 
@@ -307,7 +334,11 @@ export class VulnService {
   progress: { step: 'packages' | 'vulns'; done: number; total: number } | null = null
   private packageTtlMs: number
   private reportTtlMs: number
+  private windowMs: number
+  private minions: () => Promise<string[] | null>
   private now: () => number
+  /** parsed inventories by `jid|minion`, so a rebuild only reads new ones */
+  private parsed = new Map<string, Parsed>()
 
   constructor(
     private db: Db,
@@ -317,16 +348,23 @@ export class VulnService {
   ) {
     this.packageTtlMs = opts.packageTtlMs ?? 12 * 3600_000
     this.reportTtlMs = opts.reportTtlMs ?? 3600_000
+    this.windowMs = (opts.windowDays ?? 30) * 86400_000
+    this.minions = opts.minions ?? (async () => null)
     this.now = opts.now ?? Date.now
   }
 
   /** The current report: rebuilt when new inventories came in or it's old, waiting at most `waitMs`. */
   async get(waitMs = 20_000): Promise<{ report: VulnReport | null; updating: boolean }> {
-    const inventories = await latestInventories(this.db, this.schema)
-    const key = inventories.map((i) => `${i.scan.minion}:${i.scan.jid}`).sort().join(',')
+    let scans = await latestScans(this.db, this.schema, new Date(this.now() - this.windowMs))
+    const accepted = await this.minions().catch(() => null)
+    if (accepted) {
+      const keep = new Set(accepted)
+      scans = scans.filter((s) => keep.has(s.minion))
+    }
+    const key = scans.map((s) => `${s.minion}:${s.jid}`).sort().join(',')
     const fresh = this.report && this.report.key === key && this.now() - +this.report.builtAt < this.reportTtlMs
     if (!fresh && !this.building) {
-      this.building = this.build(inventories, key).finally(() => {
+      this.building = this.build(scans, key).finally(() => {
         this.building = null
         this.progress = null
       })
@@ -340,9 +378,19 @@ export class VulnService {
     return { report: this.report, updating: false }
   }
 
-  private async build(inventories: Awaited<ReturnType<typeof latestInventories>>, key: string): Promise<VulnReport> {
+  private async build(scans: ScanRef[], key: string): Promise<VulnReport> {
     const { db, schema } = this
     let error: string | null = null
+
+    // only inventories not parsed before are read from the database
+    const fresh = await loadInventories(db, schema, scans.filter((s) => !this.parsed.has(`${s.jid}|${s.minion}`)))
+    const parsed = new Map<string, Parsed>()
+    for (const s of scans) {
+      const k = `${s.jid}|${s.minion}`
+      parsed.set(k, this.parsed.get(k) ?? fresh.get(k) ?? { inventory: null, error: 'The scan returned nothing usable' })
+    }
+    this.parsed = parsed
+    const inventories = scans.map((scan) => ({ scan, ...parsed.get(`${scan.jid}|${scan.minion}`)! }))
 
     // every package version in the fleet, once
     const wanted = new Map<string, OsvQuery>()
@@ -455,4 +503,43 @@ export function severityCounts(findings: Finding[]) {
     if (f.fixed) fixable++
   }
   return { ...counts, fixable }
+}
+
+/** What a scheduled scan found on the minions that answered it: its notification and summary. */
+export interface VulnScanSummary {
+  scanned: number
+  notCovered: number
+  /** minions with a critical or high vulnerability */
+  affected: number
+  critical: number
+  high: number
+  /** critical and high vulnerabilities with a fixed version available */
+  fixable: number
+  noreturn: number
+}
+
+export function vulnScanSummary(report: VulnReport, jid: string, expected: number): VulnScanSummary {
+  const mine = report.minions.filter((m) => m.jid === jid)
+  const serious = new Map<string, { severity: Severity; fixed: boolean }>()
+  let affected = 0
+  for (const m of mine) {
+    let hit = false
+    for (const f of m.findings) {
+      if (f.vuln.severity !== 'critical' && f.vuln.severity !== 'high') continue
+      hit = true
+      const prev = serious.get(f.vuln.id)
+      serious.set(f.vuln.id, { severity: f.vuln.severity, fixed: !!prev?.fixed || !!f.fixed })
+    }
+    if (hit) affected++
+  }
+  const all = [...serious.values()]
+  return {
+    scanned: mine.filter((m) => !m.error).length,
+    notCovered: mine.filter((m) => m.error).length,
+    affected,
+    critical: all.filter((v) => v.severity === 'critical').length,
+    high: all.filter((v) => v.severity === 'high').length,
+    fixable: all.filter((v) => v.fixed).length,
+    noreturn: Math.max(0, expected - mine.length),
+  }
 }

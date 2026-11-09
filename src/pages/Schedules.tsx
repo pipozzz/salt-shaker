@@ -49,6 +49,16 @@ function Summary({ s }: { s: Schedule }) {
     const p = sum as { needUpdates: number; packages: number; scanned: number }
     return p.needUpdates ? <Badge tone="amber">{p.needUpdates} minions · {p.packages} packages</Badge> : <Badge tone="green">up to date</Badge>
   }
+  if (s.kind === 'vulns' && 'critical' in sum) {
+    const v = sum as { scanned: number; critical: number; high: number; fixable: number }
+    return (
+      <Link to="/vulnerabilities" className="flex flex-wrap gap-1">
+        {v.critical > 0 && <Badge tone="red">{v.critical} critical</Badge>}
+        {v.high > 0 && <Badge tone="amber">{v.high} high</Badge>}
+        {v.critical + v.high > 0 ? <Badge>{v.fixable} with a fix</Badge> : <Badge tone="green">nothing critical or high · {v.scanned} scanned</Badge>}
+      </Link>
+    )
+  }
   const f = sum as { returned: number; failed: number }
   return f.failed ? <Badge tone="red">{f.failed} failed</Badge> : <Badge tone="green">{f.returned} ok</Badge>
 }

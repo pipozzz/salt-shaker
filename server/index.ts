@@ -59,7 +59,18 @@ if (config.oidc) {
   }
 }
 const salt = new SaltService(config.saltApi)
-const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl))
+// accepted minion ids, so minions whose key was deleted drop out of the vulnerability report
+let acceptedCache: { at: number; ids: string[] } | null = null
+const acceptedMinions = async () => {
+  if (!acceptedCache || Date.now() - acceptedCache.at > 60_000) {
+    const res = (await salt.call({ client: 'wheel', fun: 'key.list_all' })) as { data?: { return?: { minions?: string[] } } } | null
+    const ids = res?.data?.return?.minions
+    if (!Array.isArray(ids)) return null
+    acceptedCache = { at: Date.now(), ids }
+  }
+  return acceptedCache.ids
+}
+const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions })
 const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
@@ -363,6 +374,7 @@ app.get('/api/history/compliance', async (c) => {
 })
 
 const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...row, role: 'system' }))
+scheduler.vulns = vulns
 scheduler.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 app.route('/api', targetRoutes({ db, schema }))

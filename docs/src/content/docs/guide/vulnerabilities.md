@@ -15,7 +15,9 @@ The first check of a fleet fetches every vulnerability record once and can take 
 
 Covered: **Debian**, **Ubuntu**, **AlmaLinux**, **Rocky Linux** and **Alpine**. Other systems (e.g. RHEL, CentOS, SUSE, Windows) show as *not covered*.
 
-Operators and admins can scan (it needs `cmd.run`); everyone signed in sees the results. To keep them current, add a [schedule](/salt-shaker/guide/schedules/) of kind **Vulnerability scan**, for example every night.
+Operators and admins can scan (it needs `cmd.run`); everyone signed in sees the results. To keep them current, add a [schedule](/salt-shaker/guide/schedules/) of kind **Vulnerability scan**, for example every night. Its summary counts the critical and high vulnerabilities it found and how many have a fix, and the **Vulnerabilities** notification event alerts you when an upgrade would fix a critical or high one.
+
+Each minion's latest successful inventory from the last 30 days counts, so scanning the fleet in groups works. Minions not scanned for 30 days and minions whose key was deleted drop out. An inventory older than a week is marked in the *By minion* view, since it misses what was installed or upgraded since.
 
 ## Reading the results
 

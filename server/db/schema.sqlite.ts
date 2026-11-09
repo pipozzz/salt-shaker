@@ -186,3 +186,12 @@ export const osvVuln = sqliteTable('osv_vuln', {
   data: text('data').notNull(),
   fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** Vulnerabilities the team accepted the risk of: left out of counts, alerts and Patches until they expire. */
+export const vulnAcceptance = sqliteTable('vuln_acceptance', {
+  vulnId: text('vuln_id').primaryKey(),
+  note: text('note').notNull(),
+  acceptedBy: text('accepted_by'),
+  acceptedAt: integer('accepted_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+})

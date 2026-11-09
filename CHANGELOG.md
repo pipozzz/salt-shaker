@@ -9,6 +9,7 @@
 - Each minion's latest inventory from the last 30 days counts; minions whose key was deleted drop out, and inventories older than a week are marked.
 - Each minion's page has a **Vulnerabilities** tab, and **Export CSV** downloads every finding with the page's filters, one row per minion and package.
 - **Patches** marks the pending upgrades that fix a known vulnerability (when the version on offer reaches the fixed one), with the worst severity, sorts them first and can show only them; **Upgrade security fixes** upgrades only those, only on the minions they fix.
+- **Accept risk** on a vulnerability, with a reason and for 30 days, 90 days, a year or until withdrawn, leaves it out of the counts, alerts, export and Patches; the **Accepted** tab lists them and withdraws them. Operators and admins can accept.
 - The server needs to reach `https://api.osv.dev`; `OSV_API_URL` points it elsewhere.
 
 **Minions**

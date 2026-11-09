@@ -126,6 +126,27 @@ test('vulnerabilities are listed by severity and a fix opens Run with the upgrad
   await expect(page.getByLabel('Arguments')).toHaveValue(`pkgs='["nginx","nginx-common"]' only_upgrade=True`)
 })
 
+test('accepting the risk of a vulnerability takes it out of the list until withdrawn', async ({ page }) => {
+  await openDemo(page, '/vulnerabilities')
+  await page.getByRole('button', { name: 'Show minions with DEMO-2025-0912' }).click()
+  await page.getByRole('button', { name: 'Accept risk…' }).click()
+  await expect(page.getByRole('button', { name: 'Accept risk', exact: true })).toBeDisabled()
+  await page.getByPlaceholder(/The service isn't exposed/).fill('Only local users, none untrusted')
+  await page.getByRole('combobox').last().selectOption({ label: '30 days' })
+  await page.getByRole('button', { name: 'Accept risk', exact: true }).click()
+  await expect(page.getByRole('button', { name: /minions with DEMO-2025-0912/ })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Accepted (1)' }).click()
+  await expect(page).toHaveURL(/view=accepted/)
+  const row = page.getByRole('row', { name: /DEMO-2025-0912/ })
+  await expect(row).toContainText('Only local users, none untrusted')
+  await expect(row).toContainText('demo')
+  await row.getByRole('button', { name: 'Withdraw' }).click()
+  await expect(page.getByText('No accepted vulnerabilities')).toBeVisible()
+  await page.getByRole('button', { name: 'By vulnerability' }).click()
+  await expect(page.getByRole('button', { name: 'Show minions with DEMO-2025-0912' })).toBeVisible()
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

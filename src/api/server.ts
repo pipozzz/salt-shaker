@@ -464,9 +464,24 @@ export interface VulnAffected {
   fixed: string | null
 }
 
+export interface VulnAcceptance {
+  note: string
+  acceptedBy: string | null
+  acceptedAt: string
+  expiresAt: string | null
+}
+
+/** An accepted vulnerability; `vuln` is null when no minion has it any more. */
+export interface VulnAccepted extends VulnAcceptance {
+  id: string
+  vuln: Vuln | null
+  packages: string[]
+  minions: number
+}
+
 export const vulns = {
   // a short wait: while the server is still building, the page polls and shows the progress
-  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[] }>('/api/vulns?wait=3000'),
+  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[]; accepted: VulnAccepted[] }>('/api/vulns?wait=3000'),
   /** per-minion counts only, without waiting for a report that's being built */
   minions: () => request<VulnStatus & { minions: VulnMinion[] }>('/api/vulns?only=minions&wait=0'),
   minion: (id: string) => request<VulnStatus & { minion: VulnMinion; findings: VulnFinding[] }>(`/api/vulns/minions/${encodeURIComponent(id)}`),
@@ -479,7 +494,10 @@ export const vulns = {
     const qs = p.toString()
     return `/api/vulns/export${qs ? `?${qs}` : ''}`
   },
-  byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[] }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
+  byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[]; acceptance: VulnAcceptance | null }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
+  /** accept the risk of a vulnerability, for `days` or until withdrawn */
+  accept: (id: string, note: string, days: number | null) => post<{ accepted: VulnAcceptance & { id: string } }>('/api/vulns/accepted', { id, note, days }),
+  unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */
   fixes: () => request<VulnStatus & { minions: VulnFixes }>('/api/vulns/fixes'),
 }

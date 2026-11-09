@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { findingsCsv, type FindingRow } from '../../src/lib/export'
 import type { Env } from '../types'
-import { SEVERITIES, severityCounts, type Finding, type MinionVulns, type VulnInfo, type VulnService } from '../vulns'
+import { SEVERITIES, severityCounts, type Acceptance, type Finding, type MinionVulns, type VulnInfo, type VulnService } from '../vulns'
 
 const RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i])) as Record<string, number>
 
 const vulnFields = ({ id, cves, severity, score, summary }: VulnInfo) => ({ id, cves, severity, score, summary })
 const minionFields = ({ findings, ...m }: MinionVulns) => ({ ...m, counts: severityCounts(findings) })
+const acceptanceFields = (a: Acceptance) => ({ note: a.note, acceptedBy: a.acceptedBy, acceptedAt: a.acceptedAt, expiresAt: a.expiresAt })
 const findingFields = (f: Finding) => ({ ...vulnFields(f.vuln), package: f.package, version: f.version, binaries: f.binaries, fixed: f.fixed })
 
 /** The vulnerability report, for everyone signed in. Scans themselves are ordinary jobs. */
@@ -51,7 +52,52 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     const list = [...byId.values()]
       .map((e) => ({ ...vulnFields(e.vuln), packages: [...e.packages].sort(), minions: e.minions.size, fixable: e.fixable.size }))
       .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.minions - a.minions || (b.score ?? 0) - (a.score ?? 0) || a.id.localeCompare(b.id))
-    return c.json({ ...status(got), minions: minions.map(minionFields).sort((a, b) => a.minion.localeCompare(b.minion)), vulns: list })
+    // the accepted ones, with where they're still found
+    const found = new Map<string, { vuln: VulnInfo; minions: Set<string>; packages: Set<string> }>()
+    for (const m of got.all?.minions ?? []) {
+      for (const f of m.findings) {
+        if (!got.accepted.has(f.vuln.id)) continue
+        const e = found.get(f.vuln.id) ?? { vuln: f.vuln, minions: new Set(), packages: new Set() }
+        e.minions.add(m.minion)
+        e.packages.add(f.package)
+        found.set(f.vuln.id, e)
+      }
+    }
+    const accepted = [...got.accepted.values()]
+      .map((a) => {
+        const e = found.get(a.vulnId)
+        return { id: a.vulnId, vuln: e ? vulnFields(e.vuln) : null, packages: e ? [...e.packages].sort() : [], minions: e?.minions.size ?? 0, ...acceptanceFields(a) }
+      })
+      .sort((a, b) => +b.acceptedAt - +a.acceptedAt)
+    return c.json({ ...status(got), minions: minions.map(minionFields).sort((a, b) => a.minion.localeCompare(b.minion)), vulns: list, accepted })
+  })
+
+  const writer = (c: { get: (k: 'user') => Env['Variables']['user'] }) => {
+    const u = c.get('user')!
+    return u.role === 'admin' || u.role === 'operator' ? (u.username ?? u.name) : null
+  }
+
+  /** Accept the risk of a vulnerability: { id, note, days? }. Operators and admins. */
+  r.post('/vulns/accepted', async (c) => {
+    const by = writer(c)
+    if (!by) return c.json({ error: 'Only operators and admins can accept vulnerabilities' }, 403)
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+    const id = typeof body.id === 'string' ? body.id.trim() : ''
+    const note = typeof body.note === 'string' ? body.note.trim() : ''
+    const days = body.days == null ? null : Number(body.days)
+    if (!id || id.length > 200) return c.json({ error: 'A vulnerability id is required' }, 400)
+    if (!note || note.length > 1000) return c.json({ error: 'Say why the risk is accepted (max 1000 characters)' }, 400)
+    if (days !== null && !(Number.isInteger(days) && days >= 1 && days <= 3650)) return c.json({ error: 'days must be a whole number from 1 to 3650' }, 400)
+    const now = new Date()
+    const a: Acceptance = { vulnId: id, note, acceptedBy: by, acceptedAt: now, expiresAt: days ? new Date(+now + days * 86400_000) : null }
+    await vulns.accept(a)
+    return c.json({ accepted: { id, ...acceptanceFields(a) } }, 201)
+  })
+
+  r.delete('/vulns/accepted/:id', async (c) => {
+    if (!writer(c)) return c.json({ error: 'Only operators and admins can withdraw an acceptance' }, 403)
+    if (!(await vulns.unaccept(c.req.param('id')))) return c.json({ error: 'Not accepted' }, 404)
+    return c.json({ ok: true })
   })
 
   /** Every finding as CSV, with the page's filters: ?severity=critical,high&fix=1&q=openssl */
@@ -108,7 +154,7 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     const id = c.req.param('id')
     let vuln: VulnInfo | null = null
     const affected: Array<{ minion: string; package: string; version: string; binaries: string[]; fixed: string | null }> = []
-    for (const m of got.report?.minions ?? []) {
+    for (const m of got.all?.minions ?? []) {
       for (const f of m.findings) {
         if (f.vuln.id !== id) continue
         vuln = f.vuln
@@ -117,7 +163,8 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     }
     if (!vuln) return c.json({ error: 'Not found on any minion' }, 404)
     affected.sort((a, b) => a.minion.localeCompare(b.minion) || a.package.localeCompare(b.package))
-    return c.json({ ...status(got), vuln: vulnFields(vuln), minions: affected })
+    const a = got.accepted.get(id)
+    return c.json({ ...status(got), vuln: vulnFields(vuln), minions: affected, acceptance: a ? acceptanceFields(a) : null })
   })
 
   return r

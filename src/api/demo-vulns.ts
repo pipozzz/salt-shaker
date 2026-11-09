@@ -1,5 +1,5 @@
 import type { FindingRow } from '../lib/export'
-import type { Severity, SeverityCounts, Vuln, VulnAffected, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
+import type { Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
  * The demo's vulnerability report. The real one is built by the server from package inventories
@@ -121,7 +121,7 @@ const fields = ({ id, cves, severity, score, summary }: Vuln): Vuln => ({ id, cv
 function minionRow(minion: string): VulnMinion {
   const s = SCANNED[minion]
   const counts = Object.fromEntries([...LEVELS, 'fixable'].map((k) => [k, 0])) as SeverityCounts
-  for (const v of DEMO) {
+  for (const v of visible()) {
     const hit = v.hits.find((h) => h[0] === minion)
     if (!hit) continue
     counts[v.severity]++
@@ -130,34 +130,42 @@ function minionRow(minion: string): VulnMinion {
   return { minion, jid: '20261109080000000000', scannedAt: new Date(Date.now() - s.hoursAgo * 3600_000).toISOString(), os: s.os, ecosystem: s.ecosystem, packages: s.packages, error: null, counts }
 }
 
+/** accepted in this browser session; the demo forgets them on reload */
+const accepted = new Map<string, VulnAcceptance>()
+const visible = () => DEMO.filter((v) => !accepted.has(v.id))
+
 const delay = <T>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 150))
 
 export const demoVulns = {
   report: () => {
-    const list: VulnSummary[] = DEMO.map((v) => ({ ...fields(v), packages: [v.package], minions: v.hits.length, fixable: v.hits.filter((h) => h[2]).length }))
+    const list: VulnSummary[] = visible().map((v) => ({ ...fields(v), packages: [v.package], minions: v.hits.length, fixable: v.hits.filter((h) => h[2]).length }))
     list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.minions - a.minions)
-    return delay({ ...status(), minions: Object.keys(SCANNED).sort().map(minionRow), vulns: list })
+    const acc: VulnAccepted[] = [...accepted].map(([id, a]) => {
+      const v = DEMO.find((x) => x.id === id)!
+      return { id, vuln: fields(v), packages: [v.package], minions: v.hits.length, ...a }
+    })
+    return delay({ ...status(), minions: Object.keys(SCANNED).sort().map(minionRow), vulns: list, accepted: acc })
   },
   minions: () => delay({ ...status(), minions: Object.keys(SCANNED).sort().map(minionRow) }),
   minion: (id: string) => {
     if (!SCANNED[id]) return Promise.reject(new Error('This minion has no inventory yet'))
-    const findings: VulnFinding[] = DEMO.flatMap((v) => v.hits.filter((h) => h[0] === id).map(([, version, fixed, binaries]) => ({ ...fields(v), package: v.package, version, fixed, binaries })))
+    const findings: VulnFinding[] = visible().flatMap((v) => v.hits.filter((h) => h[0] === id).map(([, version, fixed, binaries]) => ({ ...fields(v), package: v.package, version, fixed, binaries })))
     return delay({ ...status(), minion: minionRow(id), findings })
   },
   /** every finding, for the CSV export */
   findings: (): FindingRow[] =>
-    DEMO.flatMap((v) => v.hits.map(([minion, version, fixed, binaries]) => ({ minion, os: SCANNED[minion].os, scannedAt: minionRow(minion).scannedAt, package: v.package, binaries, version, ...fields(v), fixed }))).sort(
+    visible().flatMap((v) => v.hits.map(([minion, version, fixed, binaries]) => ({ minion, os: SCANNED[minion].os, scannedAt: minionRow(minion).scannedAt, package: v.package, binaries, version, ...fields(v), fixed }))).sort(
       (a, b) => a.minion.localeCompare(b.minion) || RANK[a.severity] - RANK[b.severity],
     ),
   byId: (id: string) => {
     const v = DEMO.find((x) => x.id === id)
     if (!v) return Promise.reject(new Error('Not found on any minion'))
     const minions: VulnAffected[] = v.hits.map(([minion, version, fixed, binaries]) => ({ minion, package: v.package, version, fixed, binaries }))
-    return delay({ ...status(), vuln: fields(v), minions })
+    return delay({ ...status(), vuln: fields(v), minions, acceptance: accepted.get(id) ?? null })
   },
   fixes: () => {
     const out: VulnFixes = {}
-    for (const v of DEMO) {
+    for (const v of visible()) {
       for (const [minion, , fixed, binaries] of v.hits) {
         if (!fixed) continue
         const e = (out[minion] ??= { ecosystem: SCANNED[minion].ecosystem, packages: {} })
@@ -165,5 +173,15 @@ export const demoVulns = {
       }
     }
     return delay({ ...status(), minions: out })
+  },
+  accept: (id: string, note: string, days: number | null) => {
+    const at = new Date()
+    const a = { note, acceptedBy: 'demo', acceptedAt: at.toISOString(), expiresAt: days ? new Date(+at + days * 86400_000).toISOString() : null }
+    accepted.set(id, a)
+    return delay({ accepted: { id, ...a } })
+  },
+  unaccept: (id: string) => {
+    accepted.delete(id)
+    return delay({ ok: true as const })
   },
 }

@@ -1,12 +1,12 @@
 import clsx from 'clsx'
-import { ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, Wrench } from 'lucide-react'
+import { ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, ShieldOff, Undo2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { demoVulns } from '../api/demo-vulns'
-import { vulns as serverVulns, type Severity, type SeverityCounts, type Vuln, type VulnFinding, type VulnMinion, type VulnSummary } from '../api/server'
+import { vulns as serverVulns, type Severity, type SeverityCounts, type Vuln, type VulnAccepted, type VulnFinding, type VulnMinion, type VulnSummary } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, PermNote, Spinner, Stat, Tabs, type Tone } from '../components/ui'
+import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Select, Spinner, Stat, Tabs, type Tone } from '../components/ui'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { download, findingsCsv } from '../lib/export'
@@ -92,12 +92,14 @@ export function VulnerabilitiesPage() {
   const can = useCan()
   const canScan = can('local', 'cmd.run')
   const canUpgrade = can('local', 'pkg.install')
+  // accepting a risk is a team decision: operators and admins, on the server's own accounts
+  const canAccept = demo || (session?.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator'))
   const scan = useJob()
   const [tgt, setTgt] = useState('*')
   const [tgtType, setTgtType] = useState<TargetType>('glob')
   const [scanError, setScanError] = useState<Error | null>(null)
   const [params, setParams] = useSearchParams()
-  const view = params.get('view') === 'minions' ? 'minions' : 'vulns'
+  const view = params.get('view') === 'minions' ? 'minions' : params.get('view') === 'accepted' ? 'accepted' : 'vulns'
   const filter = FILTERS.find((f) => f === params.get('severity')) ?? 'all'
   const fixOnly = params.get('fix') === '1'
   const query = params.get('q') ?? ''
@@ -149,6 +151,8 @@ export function VulnerabilitiesPage() {
     .filter((m) => filter === 'all' || m.counts[filter] > 0)
     .filter((m) => !fixOnly || m.counts.fixable > 0)
     .sort((a, b) => worst(b.counts) - worst(a.counts) || a.minion.localeCompare(b.minion))
+  const acceptedList = (data?.accepted ?? []).filter((a) => !q || a.id.toLowerCase().includes(q) || a.note.toLowerCase().includes(q) || a.packages.some((p) => p.toLowerCase().includes(q)))
+  const changed = () => setReloads((n) => n + 1)
   const filterKey = `${view}|${filter}|${fixOnly}|${q}`
   const [paging, setPaging] = useState({ key: '', count: PAGE })
   const count = paging.key === filterKey ? paging.count : PAGE
@@ -282,22 +286,35 @@ export function VulnerabilitiesPage() {
                 items={[
                   { value: 'vulns', label: 'By vulnerability' },
                   { value: 'minions', label: 'By minion' },
+                  ...(data.accepted.length || view === 'accepted' ? [{ value: 'accepted' as const, label: `Accepted (${data.accepted.length})` }] : []),
                 ]}
               />
               <div className="relative min-w-48 flex-1">
                 <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-                <Input value={query} onChange={(e) => update({ q: e.target.value })} placeholder={view === 'vulns' ? 'Filter by CVE, package or text…' : 'Filter minions…'} className="pl-9" />
+                <Input value={query} onChange={(e) => update({ q: e.target.value })} placeholder={view === 'vulns' ? 'Filter by CVE, package or text…' : view === 'accepted' ? 'Filter by id, package or reason…' : 'Filter minions…'} className="pl-9" />
               </div>
-              <Tabs value={filter} onChange={(f) => update({ severity: f === 'all' ? null : f })} items={FILTERS.map((f) => ({ value: f, label: f === 'all' ? 'All' : SEVERITY[f].label }))} />
-              <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                <input type="checkbox" checked={fixOnly} onChange={(e) => update({ fix: e.target.checked ? '1' : null })} className="accent-accent-600" />
-                Fix available
-              </label>
+              {view !== 'accepted' && (
+                <>
+                  <Tabs value={filter} onChange={(f) => update({ severity: f === 'all' ? null : f })} items={FILTERS.map((f) => ({ value: f, label: f === 'all' ? 'All' : SEVERITY[f].label }))} />
+                  <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                    <input type="checkbox" checked={fixOnly} onChange={(e) => update({ fix: e.target.checked ? '1' : null })} className="accent-accent-600" />
+                    Fix available
+                  </label>
+                </>
+              )}
             </div>
 
-            {view === 'vulns' ? (
+            {view === 'accepted' ? (
+              acceptedList.length ? (
+                <AcceptedTable list={acceptedList} canAccept={canAccept} onChanged={changed} />
+              ) : (
+                <Empty icon={<ShieldOff />} title={data.accepted.length ? 'Nothing matches' : 'No accepted vulnerabilities'}>
+                  {data.accepted.length ? 'Try a different filter.' : 'Open a vulnerability and accept its risk to leave it out of the counts, alerts and Patches.'}
+                </Empty>
+              )
+            ) : view === 'vulns' ? (
               list.length ? (
-                <VulnTable list={list.slice(0, count)} canUpgrade={canUpgrade} />
+                <VulnTable list={list.slice(0, count)} canUpgrade={canUpgrade} canAccept={canAccept} onChanged={changed} />
               ) : (
                 <Empty icon={<ShieldCheck />} title={all.length ? 'Nothing matches' : 'No known vulnerabilities'}>
                   {all.length ? 'Try a different filter.' : 'OSV.dev knows of no vulnerability in the installed package versions.'}
@@ -308,7 +325,7 @@ export function VulnerabilitiesPage() {
             ) : (
               <Empty icon={<Server />} title="No minions match" />
             )}
-            {(view === 'vulns' ? list : minions).length > count && (
+            {view !== 'accepted' && (view === 'vulns' ? list : minions).length > count && (
               <div className="flex items-center justify-center gap-3 border-t border-zinc-100 p-3 text-sm dark:border-zinc-800">
                 <span className="text-zinc-500 dark:text-zinc-400">
                   Showing {count} of {(view === 'vulns' ? list : minions).length}
@@ -331,7 +348,12 @@ const isStale = (at: string) => Date.now() - Date.parse(at) > 7 * 86400_000
 
 const worst = (c: SeverityCounts) => c.critical * 1e6 + c.high * 1e4 + c.medium * 100 + c.low
 
-function VulnTable({ list, canUpgrade }: { list: VulnSummary[]; canUpgrade: boolean }) {
+interface AcceptProps {
+  canAccept: boolean
+  onChanged: () => void
+}
+
+function VulnTable({ list, canUpgrade, ...accept }: { list: VulnSummary[]; canUpgrade: boolean } & AcceptProps) {
   const [open, setOpen] = useState<string | null>(null)
   return (
     <div className="overflow-x-auto">
@@ -348,7 +370,7 @@ function VulnTable({ list, canUpgrade }: { list: VulnSummary[]; canUpgrade: bool
         </thead>
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
           {list.map((v) => (
-            <VulnRow key={v.id} v={v} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} canUpgrade={canUpgrade} />
+            <VulnRow key={v.id} v={v} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} canUpgrade={canUpgrade} {...accept} />
           ))}
         </tbody>
       </table>
@@ -356,7 +378,7 @@ function VulnTable({ list, canUpgrade }: { list: VulnSummary[]; canUpgrade: bool
   )
 }
 
-function VulnRow({ v, open, onToggle, canUpgrade }: { v: VulnSummary; open: boolean; onToggle: () => void; canUpgrade: boolean }) {
+function VulnRow({ v, open, onToggle, canUpgrade, ...accept }: { v: VulnSummary; open: boolean; onToggle: () => void; canUpgrade: boolean } & AcceptProps) {
   return (
     <>
       <tr onClick={onToggle} className="cursor-pointer align-top hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
@@ -381,7 +403,7 @@ function VulnRow({ v, open, onToggle, canUpgrade }: { v: VulnSummary; open: bool
       {open && (
         <tr>
           <td colSpan={6} className="bg-zinc-50/60 px-4 py-3 dark:bg-zinc-900/40">
-            <Affected id={v.id} canUpgrade={canUpgrade} />
+            <Affected id={v.id} canUpgrade={canUpgrade} {...accept} />
           </td>
         </tr>
       )}
@@ -389,9 +411,10 @@ function VulnRow({ v, open, onToggle, canUpgrade }: { v: VulnSummary; open: bool
   )
 }
 
-function Affected({ id, canUpgrade }: { id: string; canUpgrade: boolean }) {
+function Affected({ id, canUpgrade, canAccept, onChanged }: { id: string; canUpgrade: boolean } & AcceptProps) {
   const vulns = useVulnApi()
   const { data, error } = useAsync(() => vulns.byId(id), [vulns, id])
+  const [accepting, setAccepting] = useState(false)
   if (error) return <ErrorBox error={error} />
   if (!data) return <Spinner />
   const fixable = data.minions.filter((m) => m.fixed)
@@ -427,6 +450,143 @@ function Affected({ id, canUpgrade }: { id: string; canUpgrade: boolean }) {
           <Play className="size-3.5" /> Upgrade on {new Set(fixable.map((m) => m.minion)).size} {new Set(fixable.map((m) => m.minion)).size === 1 ? 'minion' : 'minions'}
         </Link>
       )}
+      {canAccept && !data.acceptance && (
+        <Button size="sm" className={clsx(fixable.length > 0 && canUpgrade && 'ml-2')} icon={<ShieldOff className="size-3.5" />} onClick={() => setAccepting(true)}>
+          Accept risk…
+        </Button>
+      )}
+      <AcceptModal id={accepting ? id : null} onClose={() => setAccepting(false)} onDone={onChanged} />
+    </div>
+  )
+}
+
+const DURATIONS = [
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: 365, label: 'A year' },
+  { days: 0, label: 'Until withdrawn' },
+]
+
+/** Asks why, and for how long, before accepting the risk of a vulnerability on every minion. */
+function AcceptModal({ id, onClose, onDone }: { id: string | null; onClose: () => void; onDone: () => void }) {
+  const vulns = useVulnApi()
+  const [note, setNote] = useState('')
+  const [days, setDays] = useState(90)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!id) return
+    setBusy(true)
+    setError(null)
+    try {
+      await vulns.accept(id, note.trim(), days || null)
+      setNote('')
+      onClose()
+      onDone()
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open={!!id} onClose={onClose} title={`Accept the risk of ${id ?? ''}`}>
+      <form onSubmit={submit} className="space-y-4 text-sm">
+        <p className="text-zinc-600 dark:text-zinc-400">It drops out of the counts, the scheduled scan alerts and Patches on every minion. It stays listed under Accepted, and comes back when the acceptance expires or is withdrawn.</p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Why</span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            required
+            maxLength={1000}
+            rows={3}
+            placeholder="e.g. The service isn't exposed; fixed in the next image rebuild."
+            className="w-full rounded-lg border border-zinc-200 bg-white p-2 text-sm focus:border-accent-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">For</span>
+          <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            {DURATIONS.map((d) => (
+              <option key={d.days} value={d.days}>
+                {d.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        {error && <ErrorBox error={error} />}
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={busy} disabled={!note.trim()}>
+            Accept risk
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function AcceptedTable({ list, canAccept, onChanged }: { list: VulnAccepted[] } & AcceptProps) {
+  const vulns = useVulnApi()
+  const [error, setError] = useState<Error | null>(null)
+  const withdraw = async (id: string) => {
+    setError(null)
+    try {
+      await vulns.unaccept(id)
+      onChanged()
+    } catch (err) {
+      setError(err as Error)
+    }
+  }
+  return (
+    <div className="overflow-x-auto">
+      {error && (
+        <div className="p-3">
+          <ErrorBox error={error} />
+        </div>
+      )}
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            <th className="py-2.5 pr-3 pl-4 font-medium">Severity</th>
+            <th className="px-3 py-2.5 font-medium">Vulnerability</th>
+            <th className="px-3 py-2.5 font-medium">Minions</th>
+            <th className="px-3 py-2.5 font-medium">Why</th>
+            <th className="px-3 py-2.5 font-medium">Accepted</th>
+            <th className="px-3 py-2.5 pr-4" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+          {list.map((a) => (
+            <tr key={a.id} className="align-top">
+              <td className="py-2.5 pr-3 pl-4">{a.vuln ? <SeverityBadge severity={a.vuln.severity} score={a.vuln.score} /> : <Badge>gone</Badge>}</td>
+              <td className="px-3 py-2.5">
+                {a.vuln ? <VulnLink v={a.vuln} /> : <span className="font-mono text-xs">{a.id}</span>}
+                {a.packages.length > 0 && <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{a.packages.join(', ')}</div>}
+              </td>
+              <td className="px-3 py-2.5">
+                <Badge>{a.minions}</Badge>
+              </td>
+              <td className="max-w-md px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">{a.note}</td>
+              <td className="px-3 py-2.5 text-xs whitespace-nowrap text-zinc-500 dark:text-zinc-400">
+                {a.acceptedBy ?? 'someone'}, {relTime(new Date(a.acceptedAt))}
+                <div>{a.expiresAt ? `until ${new Date(a.expiresAt).toLocaleDateString()}` : 'until withdrawn'}</div>
+              </td>
+              <td className="px-3 py-2.5 pr-4 text-right">
+                {canAccept && (
+                  <Button size="sm" icon={<Undo2 className="size-3.5" />} onClick={() => void withdraw(a.id)}>
+                    Withdraw
+                  </Button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

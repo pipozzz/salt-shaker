@@ -184,3 +184,12 @@ export const osvVuln = pgTable('osv_vuln', {
   data: text('data').notNull(),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
 })
+
+/** Vulnerabilities the team accepted the risk of: left out of counts, alerts and Patches until they expire. */
+export const vulnAcceptance = pgTable('vuln_acceptance', {
+  vulnId: text('vuln_id').primaryKey(),
+  note: text('note').notNull(),
+  acceptedBy: text('accepted_by'),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+})

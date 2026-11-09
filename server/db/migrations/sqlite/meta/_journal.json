@@ -50,6 +50,13 @@
       "when": 1794216458089,
       "tag": "0006_vulnerability_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794232002062,
+      "tag": "0007_vuln_acceptance",
+      "breakpoints": true
     }
   ]
 }

@@ -230,6 +230,20 @@ export interface MinionVulns {
   findings: Finding[]
 }
 
+export interface Acceptance {
+  vulnId: string
+  note: string
+  acceptedBy: string | null
+  acceptedAt: Date
+  expiresAt: Date | null
+}
+
+/** The report without the accepted vulnerabilities. */
+export function withoutAccepted(report: VulnReport, accepted: Map<string, Acceptance>): VulnReport {
+  if (!accepted.size) return report
+  return { ...report, minions: report.minions.map((m) => ({ ...m, findings: m.findings.filter((f) => !accepted.has(f.vuln.id)) })) }
+}
+
 export interface VulnReport {
   builtAt: Date
   minions: MinionVulns[]
@@ -353,8 +367,35 @@ export class VulnService {
     this.now = opts.now ?? Date.now
   }
 
-  /** The current report: rebuilt when new inventories came in or it's old, waiting at most `waitMs`. */
-  async get(waitMs = 20_000): Promise<{ report: VulnReport | null; updating: boolean }> {
+  /** Acceptances that haven't expired, by vulnerability id. */
+  async accepted(): Promise<Map<string, Acceptance>> {
+    const rows = await this.db.select().from(this.schema.vulnAcceptance)
+    const now = this.now()
+    return new Map(rows.filter((r) => !r.expiresAt || +r.expiresAt > now).map((r) => [r.vulnId, r]))
+  }
+
+  /** Accepts the risk of a vulnerability on every minion, replacing an earlier acceptance. */
+  async accept(a: Acceptance) {
+    const t = this.schema.vulnAcceptance
+    await this.db.insert(t).values(a).onConflictDoUpdate({ target: t.vulnId, set: { note: a.note, acceptedBy: a.acceptedBy, acceptedAt: a.acceptedAt, expiresAt: a.expiresAt } })
+  }
+
+  async unaccept(vulnId: string): Promise<boolean> {
+    const t = this.schema.vulnAcceptance
+    const gone = await this.db.delete(t).where(eq(t.vulnId, vulnId)).returning({ id: t.vulnId })
+    return gone.length > 0
+  }
+
+  /**
+   * The current report without the accepted vulnerabilities (`all` has them too), rebuilt when new
+   * inventories came in or it's old, waiting at most `waitMs`.
+   */
+  async get(waitMs = 20_000): Promise<{ report: VulnReport | null; all: VulnReport | null; accepted: Map<string, Acceptance>; updating: boolean }> {
+    const [got, accepted] = await Promise.all([this.current(waitMs), this.accepted()])
+    return { ...got, all: got.report, report: got.report && withoutAccepted(got.report, accepted), accepted }
+  }
+
+  private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {
     let scans = await latestScans(this.db, this.schema, new Date(this.now() - this.windowMs))
     const accepted = await this.minions().catch(() => null)
     if (accepted) {

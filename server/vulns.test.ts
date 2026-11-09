@@ -224,7 +224,7 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
       return osv.fetchFn(url, init)
     })
     const svc = new VulnService(db, schema, slow, { now: () => NOW })
-    expect(await svc.get(10)).toEqual({ report: null, updating: true })
+    expect(await svc.get(10)).toMatchObject({ report: null, all: null, updating: true })
     release()
     const done = await svc.get()
     expect(done.updating).toBe(false)
@@ -308,6 +308,28 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     // what a pending upgrade fixes, by installed (binary) package, for the Patches page
     expect((await get('/vulns/fixes')).body.minions).toEqual({ web: { ecosystem: 'Debian:12', packages: { libssl3: [{ id: 'DEBIAN-CVE-2024-1', severity: 'critical', fixed: '3.0.15-1~deb12u1' }] } } })
     expect((await get('/vulns/fixes', '')).status).toBe(401)
+
+    // accepting the risk leaves a vulnerability out of the counts, the list and the fixes, not the details
+    const post = (body: object, user: string) => app.request('/api/vulns/accepted', { method: 'POST', headers: { 'x-user': user, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    expect((await post({ id: 'DEBIAN-CVE-2024-1', note: 'behind a firewall' }, 'ann:viewer')).status).toBe(403)
+    expect((await post({ id: 'DEBIAN-CVE-2024-1' }, 'ops:operator')).status).toBe(400)
+    expect((await post({ id: 'DEBIAN-CVE-2024-1', note: 'x', days: 0 }, 'ops:operator')).status).toBe(400)
+    expect((await post({ id: 'DEBIAN-CVE-2024-1', note: 'behind a firewall', days: 30 }, 'ops:operator')).status).toBe(201)
+    const after = await get('/vulns')
+    expect((after.body.vulns as { id: string }[]).map((v) => v.id)).toEqual(['DEBIAN-CVE-2024-2'])
+    expect(after.body.accepted).toMatchObject([{ id: 'DEBIAN-CVE-2024-1', vuln: { severity: 'critical' }, packages: ['openssl'], minions: 1, note: 'behind a firewall', acceptedBy: 'ops' }])
+    expect((after.body.minions as { minion: string; counts: { critical: number } }[]).find((m) => m.minion === 'web')!.counts.critical).toBe(0)
+    expect((await get('/vulns/fixes')).body.minions).toEqual({})
+    expect((await get('/vulns/by-id/DEBIAN-CVE-2024-1')).body.acceptance).toMatchObject({ note: 'behind a firewall', acceptedBy: 'ops' })
+    expect(vulnScanSummary((await svc.get()).report!, '1', 2).critical).toBe(0)
+    const del = (id: string, user: string) => app.request(`/api/vulns/accepted/${id}`, { method: 'DELETE', headers: { 'x-user': user } })
+    expect((await del('DEBIAN-CVE-2024-1', 'ann:viewer')).status).toBe(403)
+    expect((await del('DEBIAN-CVE-2024-1', 'ops:operator')).status).toBe(200)
+    expect((await del('DEBIAN-CVE-2024-1', 'ops:operator')).status).toBe(404)
+    // an expired acceptance no longer counts
+    await db.insert(schema.vulnAcceptance).values({ vulnId: 'DEBIAN-CVE-2024-1', note: 'old', acceptedBy: 'ops', acceptedAt: new Date(NOW - 2 * 86400_000), expiresAt: new Date(NOW - 86400_000) })
+    expect(((await get('/vulns')).body.vulns as unknown[]).length).toBe(2)
+    await db.delete(schema.vulnAcceptance)
 
     // what a scheduled scan reports
     const { report } = await svc.get()

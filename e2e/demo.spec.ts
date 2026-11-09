@@ -159,6 +159,17 @@ test('risky commands on many minions need the count typed', async ({ page }) => 
   await expect(page.getByText(/\d\/6 returned/)).toBeVisible()
 })
 
+test('patches flag the upgrades that fix known vulnerabilities', async ({ page }) => {
+  await openDemo(page, '/patches')
+  await page.getByRole('button', { name: 'Scan for updates' }).click()
+  const openssl = page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'openssl', exact: true }) })
+  await expect(openssl.getByRole('link', { name: /Critical/ })).toHaveAttribute('href', '/vulnerabilities?q=DEMO-2026-0101')
+  await expect(page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'tzdata', exact: true }) })).toBeVisible()
+  await page.getByText(/Fixes vulnerabilities \(\d+\)/).click()
+  await expect(openssl).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'tzdata', exact: true })).toHaveCount(0)
+})
+
 test('compliance check groups minions', async ({ page }) => {
   await openDemo(page, '/compliance')
   await page.getByRole('button', { name: 'Check now' }).click()

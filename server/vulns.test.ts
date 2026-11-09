@@ -305,6 +305,10 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     expect(everything.trim().split('\r\n').slice(1).map((l) => l.split(',').slice(0, 3).join(','))).toEqual(['db,debian 12,bash', 'web,debian 12,openssl', 'web,debian 12,bash'])
     expect((await app.request('/api/vulns/export')).status).toBe(401)
 
+    // what a pending upgrade fixes, by installed (binary) package, for the Patches page
+    expect((await get('/vulns/fixes')).body.minions).toEqual({ web: { libssl3: { severity: 'critical', ids: ['DEBIAN-CVE-2024-1'] } } })
+    expect((await get('/vulns/fixes', '')).status).toBe(401)
+
     // what a scheduled scan reports
     const { report } = await svc.get()
     const summary = vulnScanSummary(report!, '1', 3)

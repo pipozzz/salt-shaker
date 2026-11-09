@@ -2,14 +2,17 @@ import clsx from 'clsx'
 import { ArrowRight, ChevronRight, ExternalLink, Package, PackageCheck, Play, RefreshCw, Search, Server, Unplug } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { demoVulns } from '../api/demo-vulns'
+import { vulns as serverVulns, type Severity, type VulnFixes } from '../api/server'
 import type { TargetType } from '../api/types'
 import { ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Spinner, Stat, Tabs } from '../components/ui'
-import { useStoredState } from '../lib/hooks'
+import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from '../lib/format'
+import { SeverityBadge } from './Vulnerabilities'
 
 type Upgrades = Record<string, string> // package -> available version
 
@@ -18,6 +21,32 @@ interface Plan {
   fun: 'pkg.install' | 'pkg.upgrade'
   minions: string[]
   pkgs?: string[]
+}
+
+type Fix = { severity: Severity; ids: string[] }
+
+const RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 }
+const noFixes = (): Promise<VulnFixes> => Promise.resolve({})
+
+/** The worst of several fixes, and every vulnerability they cover. */
+function merge(fixes: (Fix | undefined)[]): Fix | null {
+  const all = fixes.filter((f): f is Fix => !!f)
+  if (!all.length) return null
+  return { severity: all.reduce((w, f) => (RANK[f.severity] < RANK[w] ? f.severity : w), all[0].severity), ids: [...new Set(all.flatMap((f) => f.ids))].sort() }
+}
+
+const vulnsUrl = (ids: string[]) => (ids.length === 1 ? `/vulnerabilities?q=${encodeURIComponent(ids[0])}` : '/vulnerabilities?fix=1')
+
+/** "Critical · 2 vulns", linked to the Vulnerabilities page. */
+function FixBadge({ fix }: { fix: Fix }) {
+  return (
+    <Link to={vulnsUrl(fix.ids)} title={`Fixes ${fix.ids.join(', ')}`} className="inline-flex items-center gap-1.5 hover:opacity-80">
+      <SeverityBadge severity={fix.severity} />
+      <span className="text-xs whitespace-nowrap text-zinc-500 dark:text-zinc-400">
+        {fix.ids.length} {fix.ids.length === 1 ? 'vuln' : 'vulns'}
+      </span>
+    </Link>
+  )
 }
 
 const isUpgrades = (v: unknown): v is Upgrades => !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every((x) => typeof x === 'string')
@@ -39,6 +68,10 @@ export function PatchesPage() {
   const [query, setQuery] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [securityOnly, setSecurityOnly] = useState(false)
+  // which pending upgrades fix a known vulnerability; live mode has no server to ask
+  const vulnApi = session?.mode === 'demo' ? demoVulns : session?.mode === 'live' ? null : serverVulns
+  const { data: fixes = {} } = useAsync(() => (vulnApi ? vulnApi.fixes().then((r) => r.minions, noFixes) : noFixes()), [vulnApi])
 
   useEffect(() => {
     if (last && !scan.run) scan.load(last.jid).catch(() => setLast(null))
@@ -88,12 +121,16 @@ export function PatchesPage() {
   }, [run])
 
   const q = query.toLowerCase()
+  const fixRank = (f: Fix | null) => (f ? RANK[f.severity] : 9)
   const packages = Object.entries(byPackage)
-    .filter(([pkg, p]) => !q || pkg.toLowerCase().includes(q) || p.minions.some((m) => m.includes(q)))
-    .sort((a, b) => b[1].minions.length - a[1].minions.length || a[0].localeCompare(b[0]))
+    .map(([pkg, p]) => ({ pkg, ...p, fix: merge(p.minions.map((m) => fixes[m]?.[pkg])) }))
+    .filter((p) => (!securityOnly || p.fix) && (!q || p.pkg.toLowerCase().includes(q) || p.minions.some((m) => m.includes(q))))
+    .sort((a, b) => fixRank(a.fix) - fixRank(b.fix) || b.minions.length - a.minions.length || a.pkg.localeCompare(b.pkg))
   const minions = Object.entries(byMinion)
-    .filter(([id, ups]) => !q || id.includes(q) || Object.keys(ups).some((p) => p.toLowerCase().includes(q)))
-    .sort((a, b) => Object.keys(b[1]).length - Object.keys(a[1]).length || a[0].localeCompare(b[0]))
+    .map(([id, ups]) => ({ id, ups, fix: merge(Object.keys(ups).map((p) => fixes[id]?.[p])) }))
+    .filter((m) => (!securityOnly || m.fix) && (!q || m.id.includes(q) || Object.keys(m.ups).some((p) => p.toLowerCase().includes(q))))
+    .sort((a, b) => fixRank(a.fix) - fixRank(b.fix) || Object.keys(b.ups).length - Object.keys(a.ups).length || a.id.localeCompare(b.id))
+  const securityPackages = Object.entries(byPackage).filter(([pkg, p]) => p.minions.some((m) => fixes[m]?.[pkg])).length
   const needing = Object.values(byMinion).filter((u) => Object.keys(u).length > 0).length
   const noReturn = run?.done ? run.minions.filter((m) => !(m in run.results)) : []
   const scanning = !!run && !run.done
@@ -203,6 +240,12 @@ export function PatchesPage() {
                 <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter packages or minions…" className="pl-9" />
               </div>
+              {securityPackages > 0 && (
+                <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" title="Upgrades of installed packages that the latest vulnerability report has a fix for">
+                  <input type="checkbox" checked={securityOnly} onChange={(e) => setSecurityOnly(e.target.checked)} className="accent-accent-600" />
+                  Fixes vulnerabilities ({securityPackages})
+                </label>
+              )}
               {needing > 0 && run.done && canUpgradeAll && (
                 <Button
                   variant="primary"
@@ -226,15 +269,17 @@ export function PatchesPage() {
                     <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                       <th className="py-2.5 pr-3 pl-4 font-medium">Package</th>
                       <th className="px-3 py-2.5 font-medium">Available</th>
+                      {securityPackages > 0 && <th className="px-3 py-2.5 font-medium">Fixes</th>}
                       <th className="px-3 py-2.5 font-medium">Minions</th>
                       <th className="px-3 py-2.5 pr-4" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-                    {packages.map(([pkg, p]) => (
+                    {packages.map(({ pkg, fix, ...p }) => (
                       <tr key={pkg}>
                         <td className="py-2.5 pr-3 pl-4 font-mono font-medium">{pkg}</td>
                         <td className="px-3 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{[...p.versions].join(', ')}</td>
+                        {securityPackages > 0 && <td className="px-3 py-2.5">{fix && <FixBadge fix={fix} />}</td>}
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap items-center gap-1">
                             <Badge tone="amber">{p.minions.length}</Badge>
@@ -260,8 +305,8 @@ export function PatchesPage() {
 
             {view === 'minion' && minions.length > 0 && (
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-                {minions.map(([id, ups]) => (
-                  <MinionRow key={id} id={id} ups={ups} disabled={!run.done || !canUpgradeAll} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
+                {minions.map(({ id, ups, fix }) => (
+                  <MinionRow key={id} id={id} ups={ups} fix={fix} fixes={fixes[id] ?? {}} disabled={!run.done || !canUpgradeAll} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
                 ))}
               </ul>
             )}
@@ -319,7 +364,7 @@ export function PatchesPage() {
   )
 }
 
-function MinionRow({ id, ups, disabled, onUpgrade }: { id: string; ups: Upgrades; disabled: boolean; onUpgrade: () => void }) {
+function MinionRow({ id, ups, fix, fixes, disabled, onUpgrade }: { id: string; ups: Upgrades; fix: Fix | null; fixes: Record<string, Fix>; disabled: boolean; onUpgrade: () => void }) {
   const salt = useSalt()
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<Record<string, string> | null>(null)
@@ -347,6 +392,7 @@ function MinionRow({ id, ups, disabled, onUpgrade }: { id: string; ups: Upgrades
           <span className="font-mono text-sm font-medium">{id}</span>
           {names.length ? <Badge tone="amber">{names.length} pending</Badge> : <Badge tone="green">up to date</Badge>}
         </button>
+        {fix && <FixBadge fix={fix} />}
         {names.length > 0 && (
           <Button size="sm" disabled={disabled} onClick={onUpgrade}>
             Upgrade all
@@ -364,7 +410,8 @@ function MinionRow({ id, ups, disabled, onUpgrade }: { id: string; ups: Upgrades
                   <td className="py-1 pr-2">
                     <ArrowRight className="size-3 text-zinc-500 dark:text-zinc-400" />
                   </td>
-                  <td className="py-1 font-mono text-xs text-emerald-700 dark:text-emerald-400">{ups[n]}</td>
+                  <td className="py-1 pr-6 font-mono text-xs text-emerald-700 dark:text-emerald-400">{ups[n]}</td>
+                  <td className="py-1">{fixes[n] && <FixBadge fix={fixes[n]} />}</td>
                 </tr>
               ))}
             </tbody>

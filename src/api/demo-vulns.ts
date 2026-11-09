@@ -1,5 +1,5 @@
 import type { FindingRow } from '../lib/export'
-import type { Severity, SeverityCounts, Vuln, VulnAffected, VulnFinding, VulnMinion, VulnStatus, VulnSummary } from './server'
+import type { Severity, SeverityCounts, Vuln, VulnAffected, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
  * The demo's vulnerability report. The real one is built by the server from package inventories
@@ -145,5 +145,19 @@ export const demoVulns = {
     if (!v) return Promise.reject(new Error('Not found on any minion'))
     const minions: VulnAffected[] = v.hits.map(([minion, version, fixed, binaries]) => ({ minion, package: v.package, version, fixed, binaries }))
     return delay({ ...status(), vuln: fields(v), minions })
+  },
+  fixes: () => {
+    const out: VulnFixes = {}
+    for (const v of DEMO) {
+      for (const [minion, , fixed, binaries] of v.hits) {
+        if (!fixed) continue
+        for (const b of binaries) {
+          const e = ((out[minion] ??= {})[b] ??= { severity: v.severity, ids: [] })
+          if (RANK[v.severity] < RANK[e.severity]) e.severity = v.severity
+          e.ids.push(v.id)
+        }
+      }
+    }
+    return delay({ ...status(), minions: out })
   },
 }

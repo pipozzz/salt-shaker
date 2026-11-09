@@ -74,6 +74,28 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
     return c.body(findingsCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
   })
 
+  /**
+   * The installed packages, per minion, whose upgrade has a known fix, for the Patches page:
+   * { minions: { web-01: { libssl3: { severity: 'critical', ids: [...] } } } }. Keyed by binary package,
+   * as pkg.list_upgrades names them. Never waits for a report that's being built.
+   */
+  r.get('/vulns/fixes', async (c) => {
+    const got = await vulns.get(0)
+    const out: Record<string, Record<string, { severity: string; ids: string[] }>> = {}
+    for (const m of got.report?.minions ?? []) {
+      for (const f of m.findings) {
+        if (!f.fixed) continue
+        for (const b of f.binaries) {
+          const e = ((out[m.minion] ??= {})[b] ??= { severity: f.vuln.severity, ids: [] })
+          if (RANK[f.vuln.severity] < RANK[e.severity]) e.severity = f.vuln.severity
+          if (!e.ids.includes(f.vuln.id)) e.ids.push(f.vuln.id)
+        }
+      }
+    }
+    for (const pkgs of Object.values(out)) for (const e of Object.values(pkgs)) e.ids.sort()
+    return c.json({ ...status(got), minions: out })
+  })
+
   /** What was found on one minion. */
   r.get('/vulns/minions/:id', async (c) => {
     const got = await vulns.get()

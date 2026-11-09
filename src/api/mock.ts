@@ -112,7 +112,7 @@ const upgrades: Record<string, Record<string, [string, string]>> = {}
 for (const [id, m] of Object.entries(minions)) {
   const os = m.grains.os
   const u: Record<string, [string, string]> = {}
-  if (os === 'Ubuntu') Object.assign(u, { openssl: ['3.0.13-0ubuntu3.3', '3.0.13-0ubuntu3.4'], libssl3t64: ['3.0.13-0ubuntu3.3', '3.0.13-0ubuntu3.4'], tzdata: ['2026a-0ubuntu0.24.04', '2026f-0ubuntu0.24.04'] })
+  if (os === 'Ubuntu') Object.assign(u, { openssl: ['3.0.13-0ubuntu3.4', '3.0.13-0ubuntu3.5'], libssl3t64: ['3.0.13-0ubuntu3.4', '3.0.13-0ubuntu3.5'], tzdata: ['2026a-0ubuntu0.24.04', '2026f-0ubuntu0.24.04'] })
   if (os === 'Debian') Object.assign(u, { tzdata: ['2026a-0+deb12u1', '2026f-0+deb12u1'], 'linux-image-amd64': ['6.1.112-1', '6.1.119-1'] })
   if (os === 'Rocky') Object.assign(u, { kernel: ['5.14.0-503.11.1.el9_5', '5.14.0-503.14.1.el9_5'], curl: ['7.76.1-29.el9_4', '7.76.1-31.el9'] })
   if (id === 'web-01') u.nginx = ['1.24.0-2ubuntu7', '1.24.0-2ubuntu7.1']

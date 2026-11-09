@@ -499,7 +499,7 @@ export const vulns = {
   accept: (id: string, note: string, days: number | null) => post<{ accepted: VulnAcceptance & { id: string } }>('/api/vulns/accepted', { id, note, days }),
   unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */
-  fixes: () => request<VulnStatus & { minions: VulnFixes }>('/api/vulns/fixes'),
+  fixes: (wait = 0) => request<VulnStatus & { minions: VulnFixes }>(`/api/vulns/fixes?wait=${wait}`),
 }
 
 /** minion -> installed (binary) package -> the vulnerabilities with a fixed version */

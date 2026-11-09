@@ -140,10 +140,10 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
    * Per minion, the installed packages that have a fixed version for a known vulnerability, for the
    * Patches page to compare with the version on offer: { web-01: { ecosystem, packages: { libssl3:
    * [{ id, severity, fixed }] } } }. Keyed by binary package, as pkg.list_upgrades names them.
-   * Never waits for a report that's being built.
+   * Waits for a report that's being built only as long as ?wait= says (ms, at most 60s).
    */
   r.get('/vulns/fixes', async (c) => {
-    const got = await vulns.get(0)
+    const got = await vulns.get(Math.min(Number(c.req.query('wait')) || 0, 60_000))
     const out: Record<string, { ecosystem: string | null; packages: Record<string, Array<{ id: string; severity: string; fixed: string }>> }> = {}
     for (const m of got.report?.minions ?? []) {
       for (const f of m.findings) {

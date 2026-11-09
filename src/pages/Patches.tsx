@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { ArrowRight, ChevronRight, ExternalLink, Package, PackageCheck, Play, RefreshCw, Search, Server, ShieldAlert, Unplug } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { demoVulns } from '../api/demo-vulns'
 import { vulns as serverVulns, type Severity, type VulnFixes } from '../api/server'
@@ -12,6 +12,7 @@ import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from '../lib/format'
+import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { compareVersions } from '../lib/pkgversion'
 import { SeverityBadge } from './Vulnerabilities'
 
@@ -60,6 +61,7 @@ export function PatchesPage() {
   const canUpgradeAll = can('local', 'pkg.upgrade')
   const scan = useJob()
   const upgrade = useJob()
+  const inventory = useJob()
   const scope = `salt-shaker.patches.${session?.mode}.${session?.apiUrl}`
   const [last, setLast] = useStoredState<{ jid: string; tgt: string; tgtType: TargetType } | null>(scope, null)
   const [tgt, setTgt] = useState(last?.tgt ?? '*')
@@ -72,7 +74,22 @@ export function PatchesPage() {
   const [securityOnly, setSecurityOnly] = useState(false)
   // which pending upgrades fix a known vulnerability; live mode has no server to ask
   const vulnApi = session?.mode === 'demo' ? demoVulns : session?.mode === 'live' ? null : serverVulns
-  const { data: fixes = {} } = useAsync(() => (vulnApi ? vulnApi.fixes().then((r) => r.minions, noFixes) : noFixes()), [vulnApi])
+  const inventoryDone = !!inventory.run?.done
+  // after a fresh inventory, wait a little for the server to rebuild the report
+  const { data: fixes = {} } = useAsync(() => (vulnApi ? vulnApi.fixes(inventoryDone ? 15_000 : 0).then((r) => r.minions, noFixes) : noFixes()), [vulnApi, inventoryDone])
+
+  // once an upgrade is done, refresh the package inventory of the minions in the vulnerability report,
+  // so it (and the Fixes column) stops listing what was just fixed
+  const canInventory = !!vulnApi && can('local', 'cmd.run')
+  const rescanned = useRef<string | null>(null)
+  const upgraded = upgrade.run?.done ? Object.keys(upgrade.run.results).filter((m) => fixes[m]) : []
+  useEffect(() => {
+    const jid = upgrade.run?.done ? upgrade.run.jid : null
+    if (!jid || !canInventory || rescanned.current === jid || !upgraded.length) return
+    rescanned.current = jid
+    inventory.start(upgraded.join(','), 'list', 'cmd.run', [INVENTORY_SCRIPT], { ...INVENTORY_KWARG }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upgrade.run?.done, canInventory, upgraded.join(',')])
 
   useEffect(() => {
     if (last && !scan.run) scan.load(last.jid).catch(() => setLast(null))
@@ -227,6 +244,25 @@ export function PatchesPage() {
           <div className="p-3">
             <ResultView results={upgrade.run.results} expected={upgrade.run.done ? Object.keys(upgrade.run.results) : upgrade.run.minions} />
           </div>
+          {inventory.run && (
+            <p className="flex items-center gap-2 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              {inventory.run.done ? (
+                <>
+                  <PackageCheck className="size-3.5 text-emerald-600" /> Package inventory refreshed on {Object.keys(inventory.run.results).length} {Object.keys(inventory.run.results).length === 1 ? 'minion' : 'minions'};{' '}
+                  <Link to="/vulnerabilities" className="text-accent-700 hover:underline dark:text-accent-400">
+                    see the vulnerability report
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" /> Refreshing the package inventory for the vulnerability report… {Object.keys(inventory.run.results).length}/{inventory.run.minions.length}
+                </>
+              )}
+              <Link to={`/jobs/${inventory.run.jid}`} className="ml-auto font-mono hover:text-accent-600">
+                jid {inventory.run.jid}
+              </Link>
+            </p>
+          )}
         </Card>
       )}
 
@@ -387,6 +423,7 @@ export function PatchesPage() {
               ))}
             </div>
             <p className="text-xs text-amber-700 dark:text-amber-400">Services may restart while packages upgrade.</p>
+            {canInventory && plan.minions.some((m) => fixes[m]) && <p className="text-xs text-zinc-500 dark:text-zinc-400">Afterwards, their package inventory is refreshed (read-only) so the vulnerability report is current.</p>}
             <div className="flex justify-end gap-2">
               <Button onClick={() => setPlan(null)}>Cancel</Button>
               <Button variant="success" icon={<Play className="size-4" />} onClick={runPlan}>

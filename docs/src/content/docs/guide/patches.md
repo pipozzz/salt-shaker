@@ -14,4 +14,6 @@ With the server or in the demo, upgrades that fix a vulnerability from the lates
 
 **Upgrade security fixes** upgrades just those packages, only on the minions where they fix something (`pkg.install pkgs=[…] only_upgrade=True`). It needs permission for `pkg.install`.
 
+After any upgrade, the minions in the vulnerability report get a fresh package inventory (the same read-only scan as on the Vulnerabilities page, if you may run `cmd.run`), so the report and the **Fixes** column stop listing what was just fixed.
+
 A vulnerability counts only when the version on offer reaches the version it's fixed in, compared the way `dpkg` or `rpm` would. If the repository only offers an older version, the expanded minion row says **fix needs** and the version. Run a vulnerability scan after upgrading to confirm.

@@ -203,8 +203,11 @@ test('patches flag the upgrades that fix known vulnerabilities', async ({ page }
   await page.getByRole('button', { name: 'Upgrade security fixes' }).click()
   await expect(page.getByRole('heading', { name: 'Upgrade security fixes on 2 minions' })).toBeVisible()
   await expect(page.getByText('pkg.install pkgs=["libssl3t64","nginx","openssl"] only_upgrade=True')).toBeVisible()
+  await expect(page.getByText('Afterwards, their package inventory is refreshed')).toBeVisible()
   await page.getByRole('button', { name: 'Upgrade 2 minions' }).click()
   await expect(page.getByText('2/2 returned')).toBeVisible()
+  // then the package inventory is refreshed for the vulnerability report
+  await expect(page.getByText('Package inventory refreshed on 2 minions')).toBeVisible()
 })
 
 test('compliance check groups minions', async ({ page }) => {

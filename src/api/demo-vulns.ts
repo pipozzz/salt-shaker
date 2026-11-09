@@ -163,7 +163,7 @@ export const demoVulns = {
     const minions: VulnAffected[] = v.hits.map(([minion, version, fixed, binaries]) => ({ minion, package: v.package, version, fixed, binaries }))
     return delay({ ...status(), vuln: fields(v), minions, acceptance: accepted.get(id) ?? null })
   },
-  fixes: () => {
+  fixes: (_wait = 0) => {
     const out: VulnFixes = {}
     for (const v of visible()) {
       for (const [minion, , fixed, binaries] of v.hits) {

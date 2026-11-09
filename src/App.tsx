@@ -22,6 +22,7 @@ import { UsersPage } from './pages/Users'
 import { NotificationsPage } from './pages/Notifications'
 import { SystemPage } from './pages/System'
 import { SchedulesPage } from './pages/Schedules'
+import { VulnerabilitiesPage } from './pages/Vulnerabilities'
 
 function Gate() {
   const { session, login, server } = useSession()
@@ -45,6 +46,7 @@ function Gate() {
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="patches" element={<PatchesPage />} />
+        {session.mode !== 'live' && <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />}
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
         <Route path="orchestrate" element={<OrchestratePage />} />

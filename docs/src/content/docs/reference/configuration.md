@@ -22,6 +22,7 @@ The server is configured with environment variables.
 | `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert; `0` turns it off |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/), e.g. `Europe/Bratislava` |
 | `PASSWORD_LOGIN` | `all` | `admins` allows passwords for admins only, as a break-glass next to [SSO](/salt-shaker/deploy/sso/) |
+| `OSV_API_URL` | `https://api.osv.dev` | where the [vulnerability check](/salt-shaker/guide/vulnerabilities/) asks about packages; another server with the OSV API works too |
 | `METRICS_TOKEN` | off | bearer token for the Prometheus endpoint `/metrics`, see [Monitoring](/salt-shaker/deploy/monitoring/) |
 | `STATIC_DIR` | `./dist` | where the built UI is served from |
 

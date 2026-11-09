@@ -60,10 +60,10 @@ describe('minionsCsv', () => {
   })
 
   it('adds compliance and patch columns with the server', () => {
-    const csv = minionsCsv([{ id: 'web-01', up: true, g, compliance: { status: 'drift', checkedAt: '2026-11-01T10:00:00.000Z' }, updates: { packages: 0, checkedAt: '2026-11-02T10:00:00.000Z' } }, { id: 'db-01', g: {} }], true)
+    const csv = minionsCsv([{ id: 'web-01', up: true, g, compliance: { status: 'drift', checkedAt: '2026-11-01T10:00:00.000Z' }, updates: { packages: 0, checkedAt: '2026-11-02T10:00:00.000Z' }, vulns: { error: null, scannedAt: '2026-11-03T10:00:00.000Z', counts: { critical: 1, high: 2, medium: 3, low: 1, unknown: 0, fixable: 5 } } }, { id: 'db-01', g: {} }], true)
     const [head, web, db] = csv.split('\r\n')
-    expect(head.endsWith(',compliance,compliance_checked_at,pending_updates,updates_checked_at')).toBe(true)
-    expect(web.endsWith(',drift,2026-11-01T10:00:00.000Z,0,2026-11-02T10:00:00.000Z')).toBe(true)
-    expect(db.endsWith(',unknown,,,,,,,,,,,,,')).toBe(true)
+    expect(head.endsWith(',compliance,compliance_checked_at,pending_updates,updates_checked_at,vulnerabilities,critical,high,with_fix,inventory_at')).toBe(true)
+    expect(web.endsWith(',drift,2026-11-01T10:00:00.000Z,0,2026-11-02T10:00:00.000Z,7,1,2,5,2026-11-03T10:00:00.000Z')).toBe(true)
+    expect(db.endsWith(',unknown,,,,,,,,,,,,,,,,,,')).toBe(true)
   })
 })

@@ -1,6 +1,7 @@
 import { Cron } from 'croner'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Db, Schema } from './db'
+import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../src/lib/inventory'
 import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
@@ -9,6 +10,7 @@ import { complianceCounts, complianceMessage, failureSummary, functionMessage, p
 export const SCHEDULE_KINDS = {
   compliance: 'Compliance check (state.apply test=True)',
   patches: 'Patch scan (pkg.list_upgrades)',
+  vulns: 'Vulnerability scan (package inventory)',
   function: 'Any function',
 } as const
 export type ScheduleKind = keyof typeof SCHEDULE_KINDS
@@ -35,6 +37,7 @@ export function lowstateFor(s: Pick<ScheduleRow, 'id' | 'name' | 'kind' | 'fun' 
   }
   if (s.kind === 'compliance') return { ...base, fun: 'state.apply', arg: [], kwarg: { test: true } }
   if (s.kind === 'patches') return { ...base, fun: 'pkg.list_upgrades', arg: [], kwarg: { refresh: true } }
+  if (s.kind === 'vulns') return { ...base, fun: 'cmd.run', arg: [INVENTORY_SCRIPT], kwarg: { ...INVENTORY_KWARG } }
   const args = s.args ? (JSON.parse(s.args) as { arg?: unknown[]; kwarg?: Record<string, unknown> }) : {}
   return { ...base, fun: s.fun ?? 'test.ping', arg: args.arg ?? [], kwarg: args.kwarg ?? {} }
 }

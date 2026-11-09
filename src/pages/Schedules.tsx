@@ -18,8 +18,8 @@ const PRESETS: Array<[string, string]> = [
 ]
 const presetLabel = (cron: string) => PRESETS.find(([c]) => c === cron)?.[1]
 
-const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', function: 'zinc' }
-const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', function: 'Function' }
+const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', vulns: 'red', function: 'zinc' }
+const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', vulns: 'Vulnerability scan', function: 'Function' }
 
 /** "in 3h", "in 12m": relTime() only speaks about the past. */
 function untilTime(d: Date) {

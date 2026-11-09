@@ -49,6 +49,7 @@ export interface InventoryRow {
   g: Grains
   compliance?: { status: string; checkedAt: string }
   updates?: { packages: number; checkedAt: string }
+  vulns?: { error: string | null; scannedAt: string; counts: Record<'critical' | 'high' | 'medium' | 'low' | 'unknown' | 'fixable', number> }
 }
 
 /**
@@ -57,9 +58,9 @@ export interface InventoryRow {
  */
 export function minionsCsv(rows: InventoryRow[], withServer: boolean) {
   const head = ['minion', 'status', 'os', 'os_release', 'kernel', 'ipv4', 'cpus', 'memory_mb', 'virtual', 'roles', 'salt_version']
-  if (withServer) head.push('compliance', 'compliance_checked_at', 'pending_updates', 'updates_checked_at')
+  if (withServer) head.push('compliance', 'compliance_checked_at', 'pending_updates', 'updates_checked_at', 'vulnerabilities', 'critical', 'high', 'with_fix', 'inventory_at')
   const out: unknown[][] = [head]
-  for (const { id, up, g, compliance, updates } of rows) {
+  for (const { id, up, g, compliance, updates, vulns } of rows) {
     const list = (v: unknown) => (Array.isArray(v) ? v.join(' ') : '')
     const row: unknown[] = [
       id,
@@ -74,7 +75,11 @@ export function minionsCsv(rows: InventoryRow[], withServer: boolean) {
       list(g.roles),
       g.saltversion ?? '',
     ]
-    if (withServer) row.push(compliance?.status ?? '', compliance?.checkedAt ?? '', updates ? updates.packages : '', updates?.checkedAt ?? '')
+    if (withServer) {
+      const c = vulns && !vulns.error ? vulns.counts : null
+      row.push(compliance?.status ?? '', compliance?.checkedAt ?? '', updates ? updates.packages : '', updates?.checkedAt ?? '')
+      row.push(c ? c.critical + c.high + c.medium + c.low + c.unknown : '', c?.critical ?? '', c?.high ?? '', c?.fixable ?? '', c ? vulns!.scannedAt : '')
+    }
     out.push(row.map((v) => (typeof v === 'number' ? String(v) : v)))
   }
   return toCsv(out)

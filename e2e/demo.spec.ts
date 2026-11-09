@@ -77,6 +77,36 @@ test('the filtered minions list downloads as CSV', async ({ page }) => {
   expect(lines.some((l) => l.startsWith('db-01,'))).toBe(false)
 })
 
+test('vulnerabilities are listed by severity and a fix opens Run with the upgrade', async ({ page }) => {
+  await openDemo(page)
+  // the minions list links each minion's counts to the report
+  await page.getByRole('row', { name: /db-01/ }).getByRole('link', { name: /1 critical/ }).click()
+  await expect(page).toHaveURL(/\/vulnerabilities\?view=minions&q=db-01$/)
+  await page.getByRole('button', { name: 'Show vulnerabilities on db-01' }).click()
+  await expect(page.getByRole('cell', { name: 'postgresql-15 15.8-0+deb12u1', exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'By vulnerability' }).click()
+  await page.getByPlaceholder('Filter by CVE, package or text…').fill('')
+  await page.getByRole('button', { name: 'High', exact: true }).click()
+  await expect(page).toHaveURL(/severity=high/)
+  await expect(page.getByRole('row', { name: /DEMO-2026-0144/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /DEMO-2026-0101/ })).toBeHidden()
+
+  await page.getByRole('button', { name: 'All', exact: true }).click()
+  // the filter lives in the URL, so the box is checked once the address changes
+  await page.getByLabel('Fix available').click()
+  await expect(page).toHaveURL(/fix=1/)
+  await expect(page.getByLabel('Fix available')).toBeChecked()
+  await expect(page.getByRole('row', { name: /DEMO-2025-0912/ })).toBeHidden()
+  await page.getByRole('button', { name: 'Show minions with DEMO-2026-0144' }).click()
+  // web-02 already has the fixed nginx, so only web-01 gets the upgrade
+  await page.getByRole('link', { name: 'Upgrade on 1 minion' }).click()
+  await expect(page).toHaveURL(/\/run\?/)
+  await expect(page.getByLabel('Target')).toHaveValue('web-01')
+  await expect(page.getByLabel('Function')).toHaveValue('pkg.install')
+  await expect(page.getByLabel('Arguments')).toHaveValue(`pkgs='["nginx","nginx-common"]' only_upgrade=True`)
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

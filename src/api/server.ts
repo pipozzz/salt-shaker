@@ -299,7 +299,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 
 // ---- automation (admin) ----
 
-export type ScheduleKind = 'compliance' | 'patches' | 'function'
+export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'function'
 export type NotifyEvent = 'drift' | 'patches' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
 
 export interface Schedule {
@@ -409,3 +409,65 @@ export interface SystemStatus {
 }
 
 export const system = () => request<SystemStatus>('/api/system')
+
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+export type SeverityCounts = Record<Severity, number> & { fixable: number }
+
+/** How fresh the vulnerability report is, and whether the server is still building it. */
+export interface VulnStatus {
+  updating: boolean
+  progress: { step: 'packages' | 'vulns'; done: number; total: number } | null
+  builtAt: string | null
+  /** OSV.dev couldn't be reached; the report comes from what was cached */
+  error: string | null
+  unchecked: number
+}
+
+export interface VulnMinion {
+  minion: string
+  jid: string
+  scannedAt: string
+  os: string | null
+  ecosystem: string | null
+  packages: number
+  error: string | null
+  counts: SeverityCounts
+}
+
+export interface Vuln {
+  id: string
+  cves: string[]
+  severity: Severity
+  score: number | null
+  summary: string
+}
+
+export interface VulnSummary extends Vuln {
+  packages: string[]
+  minions: number
+  /** minions where a fixed version exists */
+  fixable: number
+}
+
+export interface VulnFinding extends Vuln {
+  package: string
+  version: string
+  binaries: string[]
+  fixed: string | null
+}
+
+export interface VulnAffected {
+  minion: string
+  package: string
+  version: string
+  binaries: string[]
+  fixed: string | null
+}
+
+export const vulns = {
+  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[] }>('/api/vulns'),
+  /** per-minion counts only, without waiting for a report that's being built */
+  minions: () => request<VulnStatus & { minions: VulnMinion[] }>('/api/vulns?only=minions&wait=0'),
+  minion: (id: string) => request<VulnStatus & { minion: VulnMinion; findings: VulnFinding[] }>(`/api/vulns/minions/${encodeURIComponent(id)}`),
+  byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[] }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
+}

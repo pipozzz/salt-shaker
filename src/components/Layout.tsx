@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, BellRing, CalendarClock, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, CalendarClock, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -61,7 +61,8 @@ export function Layout() {
   // in server mode, eauth holds the user's Salt Shaker role
   const role = session?.mode === 'server' ? session.eauth : null
   const items = [
-    ...nav,
+    // the vulnerability report is built by the server (the demo has a made-up one)
+    ...nav.flatMap((n) => (n.to === '/patches' && session && session.mode !== 'live' ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }] : [n])),
     ...(role === 'admin' || role === 'operator' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
     ...(role === 'admin'
       ? [

@@ -165,3 +165,22 @@ export const savedTarget = pgTable('saved_target', {
   createdBy: text('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
+
+export const osvPackage = pgTable(
+  'osv_package',
+  {
+    ecosystem: text('ecosystem').notNull(),
+    name: text('name').notNull(),
+    version: text('version').notNull(),
+    vulns: text('vulns').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.ecosystem, t.name, t.version] })],
+)
+
+export const osvVuln = pgTable('osv_vuln', {
+  id: text('id').primaryKey(),
+  modified: text('modified').notNull(),
+  data: text('data').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+})

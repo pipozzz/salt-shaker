@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**Vulnerabilities**
+
+- New **Vulnerabilities** page: a scan lists the packages installed on each minion (`dpkg`, `rpm` or `apk`, read-only), and the server checks them against [OSV.dev](https://osv.dev), which gathers the Debian, Ubuntu, AlmaLinux, Rocky Linux and Alpine security trackers. See every vulnerability by severity or by minion, with the installed and the fixed version, filter to the ones with a fix, and open Run with the upgrade for the affected minions.
+- A **Vulnerability scan** schedule keeps the results current, the Minions list shows each minion's counts and its CSV export includes them.
+- The server needs to reach `https://api.osv.dev`; `OSV_API_URL` points it elsewhere.
+
 **Minions**
 
 - **Export CSV** downloads the minions the search and filters match as an inventory spreadsheet: status, OS, kernel, IPs, CPUs, memory, roles and Salt version, plus the latest compliance result and pending upgrades with the server.

@@ -75,8 +75,12 @@ const tones = {
 }
 export type Tone = keyof typeof tones
 
-export function Badge({ tone = 'zinc', children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={clsx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset', tones[tone], className)}>{children}</span>
+export function Badge({ tone = 'zinc', children, className, title }: { tone?: Tone; children: ReactNode; className?: string; title?: string }) {
+  return (
+    <span title={title} className={clsx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset', tones[tone], className)}>
+      {children}
+    </span>
+  )
 }
 
 export function StatusDot({ up }: { up: boolean | undefined }) {

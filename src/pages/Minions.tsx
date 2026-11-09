@@ -3,10 +3,12 @@ import { CircleOff, Download, KeyRound, Play, RefreshCw, Search, Server, Triangl
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
-import { history, type MinionUpdates } from '../api/server'
+import { demoVulns } from '../api/demo-vulns'
+import { history, vulns, type MinionUpdates } from '../api/server'
 import type { Grains } from '../api/types'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
 import { download, minionsCsv } from '../lib/export'
+import { CountsBadges } from './Vulnerabilities'
 import { useAsync } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { fmtMem, relTime } from '../lib/format'
@@ -63,6 +65,11 @@ export function MinionsPage() {
   const compliance = useAsync(() => (fromServer ? history.minionCompliance() : Promise.resolve(null)), [fromServer, refreshes])
   // and so is the latest patch scan
   const updates = useAsync(() => (fromServer ? history.minionUpdates() : Promise.resolve(null)), [fromServer, refreshes])
+  // and the known vulnerabilities from the latest package inventory; the column shows once there is one
+  const demo = session?.mode === 'demo'
+  const vulnReport = useAsync(() => (fromServer ? vulns.minions().catch(() => null) : demo ? demoVulns.minions() : Promise.resolve(null)), [fromServer, demo, refreshes])
+  const vulnBy = useMemo(() => new Map((vulnReport.data?.minions ?? []).map((m) => [m.minion, m])), [vulnReport.data])
+  const showVulns = vulnBy.size > 0
   const reload = () => setRefreshes((n) => n + 1)
 
   const rows = useMemo(() => {
@@ -112,7 +119,7 @@ export function MinionsPage() {
       `minions-${new Date().toISOString().slice(0, 10)}.csv`,
       'text/csv',
       minionsCsv(
-        rows.map((r) => ({ ...r, compliance: compliance.data?.minions[r.id], updates: updates.data?.minions[r.id] })),
+        rows.map((r) => ({ ...r, compliance: compliance.data?.minions[r.id], updates: updates.data?.minions[r.id], vulns: vulnBy.get(r.id) })),
         fromServer,
       ),
     )
@@ -214,6 +221,7 @@ export function MinionsPage() {
                   <th className="px-3 py-2.5 font-medium">OS</th>
                   {fromServer && <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Compliance</th>}
                   {fromServer && <th className="hidden px-3 py-2.5 font-medium md:table-cell">Updates</th>}
+                  {showVulns && <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Vulnerabilities</th>}
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">IP</th>
                   <th className="hidden px-3 py-2.5 font-medium lg:table-cell">CPU / RAM</th>
                   <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Roles</th>
@@ -250,6 +258,11 @@ export function MinionsPage() {
                     {fromServer && (
                       <td className="hidden px-3 py-2.5 md:table-cell">
                         <UpdatesBadge u={updates.data?.minions[id]} loading={!updates.data && !updates.error} />
+                      </td>
+                    )}
+                    {showVulns && (
+                      <td className="hidden px-3 py-2.5 lg:table-cell">
+                        <VulnsCell m={vulnBy.get(id)} />
                       </td>
                     )}
                     <td className="hidden px-3 py-2.5 font-mono text-xs text-zinc-600 md:table-cell dark:text-zinc-400">{g.ipv4?.find((ip) => ip !== '127.0.0.1') ?? '—'}</td>
@@ -325,6 +338,16 @@ function ComplianceBadge({ c, loading }: { c?: { status: 'ok' | 'drift' | 'error
       className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500"
     >
       <Badge tone={tone}>{label}</Badge>
+    </Link>
+  )
+}
+
+function VulnsCell({ m }: { m?: { minion: string; error: string | null; counts: Parameters<typeof CountsBadges>[0]['counts'] } }) {
+  if (!m) return <span className="text-xs text-zinc-500 dark:text-zinc-400">not scanned</span>
+  if (m.error) return <span className="text-xs text-zinc-500 dark:text-zinc-400" title={m.error}>not covered</span>
+  return (
+    <Link to={`/vulnerabilities?view=minions&q=${encodeURIComponent(m.minion)}`} onClick={(e) => e.stopPropagation()} className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500">
+      <CountsBadges counts={m.counts} />
     </Link>
   )
 }

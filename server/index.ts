@@ -20,8 +20,10 @@ import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
 import { PresenceWatcher } from './presence'
 import { systemStatus } from './system'
+import { OsvClient, VulnService } from './vulns'
 import { automationRoutes } from './routes/automation'
 import { targetRoutes } from './routes/targets'
+import { vulnRoutes } from './routes/vulns'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
@@ -57,6 +59,7 @@ if (config.oidc) {
   }
 }
 const salt = new SaltService(config.saltApi)
+const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl))
 const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
@@ -363,6 +366,7 @@ const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...
 scheduler.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 app.route('/api', targetRoutes({ db, schema }))
+app.route('/api', vulnRoutes({ vulns }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))

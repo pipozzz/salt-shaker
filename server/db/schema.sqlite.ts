@@ -164,3 +164,25 @@ export const savedTarget = sqliteTable('saved_target', {
   createdBy: text('created_by'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+// What OSV.dev said about each installed package version: the ids of the vulnerabilities that
+// affect it, with when each was last modified (JSON [{id, modified}]).
+export const osvPackage = sqliteTable(
+  'osv_package',
+  {
+    ecosystem: text('ecosystem').notNull(),
+    name: text('name').notNull(),
+    version: text('version').notNull(),
+    vulns: text('vulns').notNull(),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.ecosystem, t.name, t.version] })],
+)
+
+// The parts of an OSV vulnerability record the console shows (JSON, see server/vulns.ts).
+export const osvVuln = sqliteTable('osv_vuln', {
+  id: text('id').primaryKey(),
+  modified: text('modified').notNull(),
+  data: text('data').notNull(),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+})

@@ -7,6 +7,7 @@ import type { SaltService } from './salt'
 import { dueAt, lowstateFor, nextRun, Scheduler } from './scheduler'
 import { openTestDatabase, testDialects } from './testdb'
 import { complianceCounts, complianceMessage, failureSummary, patchSummary } from './summaries'
+import { INVENTORY_SCRIPT } from '../src/lib/inventory'
 
 const sum = (s: object | null) => ({ summary: s ? JSON.stringify(s) : null })
 
@@ -103,6 +104,7 @@ describe('scheduler', () => {
       metadata: { salt_shaker_user: 'schedule:nightly', salt_shaker_schedule: 7 },
     })
     expect(lowstateFor({ ...base, kind: 'patches' })).toMatchObject({ fun: 'pkg.list_upgrades', kwarg: { refresh: true } })
+    expect(lowstateFor({ ...base, kind: 'vulns' })).toMatchObject({ fun: 'cmd.run', arg: [INVENTORY_SCRIPT], kwarg: { python_shell: true, shell: '/bin/sh' } })
     expect(lowstateFor({ ...base, kind: 'function', fun: 'saltutil.sync_all', args: JSON.stringify({ arg: [], kwarg: { refresh: true } }) })).toMatchObject({
       fun: 'saltutil.sync_all',
       kwarg: { refresh: true },

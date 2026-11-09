@@ -13,6 +13,8 @@ export interface Config {
   staticDir: string
   /** Extra origins allowed to call the API with cookies (e.g. the Vite dev server). */
   trustedOrigins: string[]
+  /** OSV.dev API, or a mirror of it, for the vulnerability check */
+  osvApiUrl: string
   /** How long job history is kept in the database. */
   historyDays: number
   /** How long audit entries are kept; 0 keeps them forever. */
@@ -102,6 +104,7 @@ export function loadConfig(): Config {
     historyDays: Math.max(1, Number(process.env.JOB_RETENTION_DAYS ?? 90) || 90),
     auditDays: Math.max(0, Math.floor(Number(process.env.AUDIT_RETENTION_DAYS ?? 0)) || 0),
     presenceMinutes: Math.max(0, Number(process.env.PRESENCE_CHECK_MINUTES ?? 5) || 0),
+    osvApiUrl: (process.env.OSV_API_URL ?? 'https://api.osv.dev').replace(/\/+$/, ''),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }
 }

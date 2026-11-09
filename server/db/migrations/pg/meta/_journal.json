@@ -43,6 +43,13 @@
       "when": 1793884318503,
       "tag": "0005_saved_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794216458313,
+      "tag": "0006_vulnerability_cache",
+      "breakpoints": true
     }
   ]
 }

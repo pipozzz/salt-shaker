@@ -12,6 +12,7 @@ import { useAsync, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 import { relTime } from '../lib/format'
+import { compareVersions } from '../lib/pkgversion'
 import { SeverityBadge } from './Vulnerabilities'
 
 type Upgrades = Record<string, string> // package -> available version
@@ -120,20 +121,36 @@ export function PatchesPage() {
     return { byMinion, byPackage, failed }
   }, [run])
 
+  // a vulnerability counts as fixed only when the version on offer reaches the fixed one
+  const reached: Record<string, Record<string, Fix>> = {}
+  const short: Record<string, Record<string, string>> = {}
+  for (const [id, ups] of Object.entries(byMinion)) {
+    const known = fixes[id]
+    if (!known) continue
+    for (const [pkg, available] of Object.entries(ups)) {
+      const list = known.packages[pkg] ?? []
+      const ok = list.filter((f) => compareVersions(known.ecosystem, available, f.fixed) >= 0)
+      const fix = merge(ok.map((f) => ({ severity: f.severity, ids: [f.id] })))
+      if (fix) (reached[id] ??= {})[pkg] = fix
+      const missing = list.filter((f) => !ok.includes(f)).map((f) => f.fixed)
+      if (missing.length) (short[id] ??= {})[pkg] = missing.sort((a, b) => compareVersions(known.ecosystem, b, a))[0]
+    }
+  }
+
   const q = query.toLowerCase()
   const fixRank = (f: Fix | null) => (f ? RANK[f.severity] : 9)
   const packages = Object.entries(byPackage)
-    .map(([pkg, p]) => ({ pkg, ...p, fix: merge(p.minions.map((m) => fixes[m]?.[pkg])) }))
+    .map(([pkg, p]) => ({ pkg, ...p, fix: merge(p.minions.map((m) => reached[m]?.[pkg])) }))
     .filter((p) => (!securityOnly || p.fix) && (!q || p.pkg.toLowerCase().includes(q) || p.minions.some((m) => m.includes(q))))
     .sort((a, b) => fixRank(a.fix) - fixRank(b.fix) || b.minions.length - a.minions.length || a.pkg.localeCompare(b.pkg))
   const minions = Object.entries(byMinion)
-    .map(([id, ups]) => ({ id, ups, fix: merge(Object.keys(ups).map((p) => fixes[id]?.[p])) }))
+    .map(([id, ups]) => ({ id, ups, fix: merge(Object.keys(ups).map((p) => reached[id]?.[p])) }))
     .filter((m) => (!securityOnly || m.fix) && (!q || m.id.includes(q) || Object.keys(m.ups).some((p) => p.toLowerCase().includes(q))))
     .sort((a, b) => fixRank(a.fix) - fixRank(b.fix) || Object.keys(b.ups).length - Object.keys(a.ups).length || a.id.localeCompare(b.id))
-  const securityPackages = Object.entries(byPackage).filter(([pkg, p]) => p.minions.some((m) => fixes[m]?.[pkg])).length
+  const securityPackages = Object.entries(byPackage).filter(([pkg, p]) => p.minions.some((m) => reached[m]?.[pkg])).length
   // only the upgrades that fix something, on only the minions they fix it on
   const security = Object.entries(byMinion)
-    .map(([id, ups]) => [id, Object.keys(ups).filter((p) => fixes[id]?.[p])] as const)
+    .map(([id, ups]) => [id, Object.keys(ups).filter((p) => reached[id]?.[p])] as const)
     .filter(([, pkgs]) => pkgs.length)
   const needing = Object.values(byMinion).filter((u) => Object.keys(u).length > 0).length
   const noReturn = run?.done ? run.minions.filter((m) => !(m in run.results)) : []
@@ -325,7 +342,7 @@ export function PatchesPage() {
             {view === 'minion' && minions.length > 0 && (
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
                 {minions.map(({ id, ups, fix }) => (
-                  <MinionRow key={id} id={id} ups={ups} fix={fix} fixes={fixes[id] ?? {}} disabled={!run.done || !canUpgradeAll} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
+                  <MinionRow key={id} id={id} ups={ups} fix={fix} fixes={reached[id] ?? {}} short={short[id] ?? {}} disabled={!run.done || !canUpgradeAll} onUpgrade={() => setPlan({ title: `Upgrade everything on ${id}`, fun: 'pkg.upgrade', minions: [id] })} />
                 ))}
               </ul>
             )}
@@ -383,7 +400,7 @@ export function PatchesPage() {
   )
 }
 
-function MinionRow({ id, ups, fix, fixes, disabled, onUpgrade }: { id: string; ups: Upgrades; fix: Fix | null; fixes: Record<string, Fix>; disabled: boolean; onUpgrade: () => void }) {
+function MinionRow({ id, ups, fix, fixes, short, disabled, onUpgrade }: { id: string; ups: Upgrades; fix: Fix | null; fixes: Record<string, Fix>; short: Record<string, string>; disabled: boolean; onUpgrade: () => void }) {
   const salt = useSalt()
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<Record<string, string> | null>(null)
@@ -430,7 +447,16 @@ function MinionRow({ id, ups, fix, fixes, disabled, onUpgrade }: { id: string; u
                     <ArrowRight className="size-3 text-zinc-500 dark:text-zinc-400" />
                   </td>
                   <td className="py-1 pr-6 font-mono text-xs text-emerald-700 dark:text-emerald-400">{ups[n]}</td>
-                  <td className="py-1">{fixes[n] && <FixBadge fix={fixes[n]} />}</td>
+                  <td className="py-1">
+                    <span className="flex items-center gap-2">
+                      {fixes[n] && <FixBadge fix={fixes[n]} />}
+                      {short[n] && (
+                        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400" title="A vulnerability in this package is fixed in a newer version than the one on offer">
+                          fix needs {short[n]}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

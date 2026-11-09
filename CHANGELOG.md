@@ -8,7 +8,7 @@
 - A **Vulnerability scan** schedule keeps the results current: its summary counts the critical and high vulnerabilities and how many have a fix, and the new **Vulnerabilities** notification event alerts when an upgrade fixes a critical or high one. The Minions list shows each minion's counts and its CSV export includes them.
 - Each minion's latest inventory from the last 30 days counts; minions whose key was deleted drop out, and inventories older than a week are marked.
 - Each minion's page has a **Vulnerabilities** tab, and **Export CSV** downloads every finding with the page's filters, one row per minion and package.
-- **Patches** marks the pending upgrades that fix a known vulnerability, with the worst severity, sorts them first and can show only them; **Upgrade security fixes** upgrades only those, only on the minions they fix.
+- **Patches** marks the pending upgrades that fix a known vulnerability (when the version on offer reaches the fixed one), with the worst severity, sorts them first and can show only them; **Upgrade security fixes** upgrades only those, only on the minions they fix.
 - The server needs to reach `https://api.osv.dev`; `OSV_API_URL` points it elsewhere.
 
 **Minions**

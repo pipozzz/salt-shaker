@@ -480,9 +480,9 @@ export const vulns = {
     return `/api/vulns/export${qs ? `?${qs}` : ''}`
   },
   byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[] }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
-  /** per minion, the installed packages whose upgrade fixes a known vulnerability */
+  /** per minion, the installed packages with a fixed version for a known vulnerability */
   fixes: () => request<VulnStatus & { minions: VulnFixes }>('/api/vulns/fixes'),
 }
 
-/** minion -> installed (binary) package -> the worst vulnerability its upgrade fixes, and all of them */
-export type VulnFixes = Record<string, Record<string, { severity: Severity; ids: string[] }>>
+/** minion -> installed (binary) package -> the vulnerabilities with a fixed version */
+export type VulnFixes = Record<string, { ecosystem: string | null; packages: Record<string, Array<{ id: string; severity: Severity; fixed: string }>> }>

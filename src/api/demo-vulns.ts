@@ -54,6 +54,15 @@ const DEMO: DemoVuln[] = [
     ],
   },
   {
+    id: 'DEMO-2026-0219',
+    cves: [],
+    severity: 'medium',
+    score: 5.5,
+    summary: 'A local user can crash the kernel through a use-after-free in the netfilter connection tracker.',
+    package: 'kernel',
+    hits: [['mon-01', '5.14.0-503.11.1.el9_5', '5.14.0-503.15.1.el9_5', ['kernel', 'kernel-core']]],
+  },
+  {
     id: 'DEMO-2026-0203',
     cves: [],
     severity: 'medium',
@@ -151,11 +160,8 @@ export const demoVulns = {
     for (const v of DEMO) {
       for (const [minion, , fixed, binaries] of v.hits) {
         if (!fixed) continue
-        for (const b of binaries) {
-          const e = ((out[minion] ??= {})[b] ??= { severity: v.severity, ids: [] })
-          if (RANK[v.severity] < RANK[e.severity]) e.severity = v.severity
-          e.ids.push(v.id)
-        }
+        const e = (out[minion] ??= { ecosystem: SCANNED[minion].ecosystem, packages: {} })
+        for (const b of binaries) (e.packages[b] ??= []).push({ id: v.id, severity: v.severity, fixed })
       }
     }
     return delay({ ...status(), minions: out })

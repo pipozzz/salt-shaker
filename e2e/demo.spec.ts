@@ -169,6 +169,15 @@ test('patches flag the upgrades that fix known vulnerabilities', async ({ page }
   await expect(openssl).toBeVisible()
   await expect(page.getByRole('cell', { name: 'tzdata', exact: true })).toHaveCount(0)
 
+  // an upgrade that stops short of the fixed version doesn't count
+  await expect(page.getByRole('cell', { name: 'kernel', exact: true })).toHaveCount(0)
+  await page.getByText(/Fixes vulnerabilities/).click()
+  await page.getByRole('button', { name: 'By minion' }).click()
+  await page.getByRole('button', { name: /mon-01/ }).click()
+  await expect(page.getByText('fix needs 5.14.0-503.15.1.el9_5')).toBeVisible()
+  await page.getByRole('button', { name: 'By package' }).click()
+  await page.getByText(/Fixes vulnerabilities/).click()
+
   // one click upgrades only those, only where they fix something
   await page.getByRole('button', { name: 'Upgrade security fixes' }).click()
   await expect(page.getByRole('heading', { name: 'Upgrade security fixes on 2 minions' })).toBeVisible()

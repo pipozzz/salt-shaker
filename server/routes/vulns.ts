@@ -75,24 +75,21 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
   })
 
   /**
-   * The installed packages, per minion, whose upgrade has a known fix, for the Patches page:
-   * { minions: { web-01: { libssl3: { severity: 'critical', ids: [...] } } } }. Keyed by binary package,
-   * as pkg.list_upgrades names them. Never waits for a report that's being built.
+   * Per minion, the installed packages that have a fixed version for a known vulnerability, for the
+   * Patches page to compare with the version on offer: { web-01: { ecosystem, packages: { libssl3:
+   * [{ id, severity, fixed }] } } }. Keyed by binary package, as pkg.list_upgrades names them.
+   * Never waits for a report that's being built.
    */
   r.get('/vulns/fixes', async (c) => {
     const got = await vulns.get(0)
-    const out: Record<string, Record<string, { severity: string; ids: string[] }>> = {}
+    const out: Record<string, { ecosystem: string | null; packages: Record<string, Array<{ id: string; severity: string; fixed: string }>> }> = {}
     for (const m of got.report?.minions ?? []) {
       for (const f of m.findings) {
         if (!f.fixed) continue
-        for (const b of f.binaries) {
-          const e = ((out[m.minion] ??= {})[b] ??= { severity: f.vuln.severity, ids: [] })
-          if (RANK[f.vuln.severity] < RANK[e.severity]) e.severity = f.vuln.severity
-          if (!e.ids.includes(f.vuln.id)) e.ids.push(f.vuln.id)
-        }
+        const e = (out[m.minion] ??= { ecosystem: m.ecosystem, packages: {} })
+        for (const b of f.binaries) (e.packages[b] ??= []).push({ id: f.vuln.id, severity: f.vuln.severity, fixed: f.fixed })
       }
     }
-    for (const pkgs of Object.values(out)) for (const e of Object.values(pkgs)) e.ids.sort()
     return c.json({ ...status(got), minions: out })
   })
 

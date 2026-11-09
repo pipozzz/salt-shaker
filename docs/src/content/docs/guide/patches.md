@@ -14,4 +14,4 @@ With the server or in the demo, upgrades that fix a vulnerability from the lates
 
 **Upgrade security fixes** upgrades just those packages, only on the minions where they fix something (`pkg.install pkgs=[…] only_upgrade=True`). It needs permission for `pkg.install`.
 
-The match is by package name: if the repository only offers a version older than the fix, the badge still shows. Run a vulnerability scan after upgrading to confirm.
+A vulnerability counts only when the version on offer reaches the version it's fixed in, compared the way `dpkg` or `rpm` would. If the repository only offers an older version, the expanded minion row says **fix needs** and the version. Run a vulnerability scan after upgrading to confirm.

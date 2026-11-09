@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resultsCsv, resultsJson, retryTargets } from './export'
+import { minionsCsv, resultsCsv, resultsJson, retryTargets } from './export'
 
 const state = (result: boolean | null, changes = {}) => ({ result, changes, comment: '', __run_num__: 0 })
 const results = {
@@ -42,5 +42,28 @@ describe('resultsJson', () => {
   it('includes the job, returns and minions that did not return', () => {
     const doc = JSON.parse(resultsJson({ jid: '1', fun: 'test.ping', target: '*' }, { a: true }, ['a', 'b']))
     expect(doc).toEqual({ jid: '1', fun: 'test.ping', target: '*', returns: { a: true }, noReturn: ['b'] })
+  })
+})
+
+describe('minionsCsv', () => {
+  const g = { os: 'Ubuntu', osrelease: '24.04', kernelrelease: '6.8.0', ipv4: ['127.0.0.1', '10.0.0.5', '10.1.0.5'], num_cpus: 4, mem_total: 7962, virtual: 'kvm', roles: ['web', 'edge'], saltversion: '3007.1' }
+
+  it('writes one row per minion with its grains', () => {
+    const csv = minionsCsv([{ id: 'web-01', up: true, g }, { id: 'db-01', up: false, g: {} }, { id: 'x', g: {} }], false)
+    expect(csv.split('\r\n')).toEqual([
+      'minion,status,os,os_release,kernel,ipv4,cpus,memory_mb,virtual,roles,salt_version',
+      'web-01,up,Ubuntu,24.04,6.8.0,10.0.0.5 10.1.0.5,4,7962,kvm,web edge,3007.1',
+      'db-01,down,,,,,,,,,',
+      'x,unknown,,,,,,,,,',
+      '',
+    ])
+  })
+
+  it('adds compliance and patch columns with the server', () => {
+    const csv = minionsCsv([{ id: 'web-01', up: true, g, compliance: { status: 'drift', checkedAt: '2026-11-01T10:00:00.000Z' }, updates: { packages: 0, checkedAt: '2026-11-02T10:00:00.000Z' } }, { id: 'db-01', g: {} }], true)
+    const [head, web, db] = csv.split('\r\n')
+    expect(head.endsWith(',compliance,compliance_checked_at,pending_updates,updates_checked_at')).toBe(true)
+    expect(web.endsWith(',drift,2026-11-01T10:00:00.000Z,0,2026-11-02T10:00:00.000Z')).toBe(true)
+    expect(db.endsWith(',unknown,,,,,,,,,,,,,')).toBe(true)
   })
 })

@@ -1,4 +1,5 @@
 import { toCsv } from './csv'
+import type { Grains } from '../api/types'
 import { isFailure, stateSummary } from './states'
 
 /** Minions to run again after a job: those whose return failed, then those that never returned. */
@@ -40,4 +41,41 @@ export function download(name: string, type: string, text: string) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export interface InventoryRow {
+  id: string
+  up?: boolean
+  g: Grains
+  compliance?: { status: string; checkedAt: string }
+  updates?: { packages: number; checkedAt: string }
+}
+
+/**
+ * The minions list as an inventory spreadsheet: one row per minion with its key grains. The
+ * compliance and patch columns are only there when the server records them.
+ */
+export function minionsCsv(rows: InventoryRow[], withServer: boolean) {
+  const head = ['minion', 'status', 'os', 'os_release', 'kernel', 'ipv4', 'cpus', 'memory_mb', 'virtual', 'roles', 'salt_version']
+  if (withServer) head.push('compliance', 'compliance_checked_at', 'pending_updates', 'updates_checked_at')
+  const out: unknown[][] = [head]
+  for (const { id, up, g, compliance, updates } of rows) {
+    const list = (v: unknown) => (Array.isArray(v) ? v.join(' ') : '')
+    const row: unknown[] = [
+      id,
+      up === undefined ? 'unknown' : up ? 'up' : 'down',
+      g.os ?? '',
+      g.osrelease ?? '',
+      g.kernelrelease ?? '',
+      list(g.ipv4?.filter((ip) => ip !== '127.0.0.1')),
+      g.num_cpus ?? '',
+      g.mem_total ?? '',
+      g.virtual ?? '',
+      list(g.roles),
+      g.saltversion ?? '',
+    ]
+    if (withServer) row.push(compliance?.status ?? '', compliance?.checkedAt ?? '', updates ? updates.packages : '', updates?.checkedAt ?? '')
+    out.push(row.map((v) => (typeof v === 'number' ? String(v) : v)))
+  }
+  return toCsv(out)
 }

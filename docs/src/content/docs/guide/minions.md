@@ -14,6 +14,8 @@ The search, the status filter and the fleet breakdown pick are kept in the page'
 
 To run something on a handful of minions, tick them in the first column (the header box picks every minion the filter shows) and click **Run on selected**. The selection stays while you change the search, so you can pick from several, and Run opens with them as a list target. The bar at the bottom says how many are picked and how many the current filter hides.
 
+**Export CSV** downloads the minions the search and filters match, all of them, not just the 100 on screen, as an inventory spreadsheet: status, OS and release, kernel, IPs, CPUs, memory, virtualization, roles and Salt version. With the server it also has each minion's latest compliance result and pending package upgrades, with when they were checked. Minions whose grains aren't cached yet have empty columns.
+
 ## Large fleets
 
 The list comes from the master's minion data cache (`cache.grains`), so opening it doesn't start a job on the minions. Offline minions keep their last known OS and IPs. Which minions respond (`manage.status`) is filled in once that check finishes. The table shows 100 minions at a time.

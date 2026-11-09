@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Minions**
+
+- **Export CSV** downloads the minions the search and filters match as an inventory spreadsheet: status, OS, kernel, IPs, CPUs, memory, roles and Salt version, plus the latest compliance result and pending upgrades with the server.
+
 ## 1.8.0
 
 **Jobs**

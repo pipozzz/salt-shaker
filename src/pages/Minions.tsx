@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { CircleOff, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
+import { CircleOff, Download, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
 import { history, type MinionUpdates } from '../api/server'
 import type { Grains } from '../api/types'
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
+import { download, minionsCsv } from '../lib/export'
 import { useAsync } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { fmtMem, relTime } from '../lib/format'
@@ -105,6 +106,16 @@ export function MinionsPage() {
       return next
     })
   const runOnPicked = () => navigate(`/run?tgt=${encodeURIComponent(picked.join(','))}&tgt_type=list`)
+  // everything the filters match, not just the page shown
+  const exportCsv = () =>
+    download(
+      `minions-${new Date().toISOString().slice(0, 10)}.csv`,
+      'text/csv',
+      minionsCsv(
+        rows.map((r) => ({ ...r, compliance: compliance.data?.minions[r.id], updates: updates.data?.minions[r.id] })),
+        fromServer,
+      ),
+    )
 
   return (
     <>
@@ -112,9 +123,14 @@ export function MinionsPage() {
         title="Minions"
         description="Accepted minions, their status and key facts from grains."
         actions={
-          <Button icon={<RefreshCw className={clsx('size-4', loading && 'animate-spin')} />} onClick={reload} disabled={loading}>
-            Refresh
-          </Button>
+          <>
+            <Button icon={<Download className="size-4" />} onClick={exportCsv} disabled={!rows.length} title={rows.length && data && rows.length < data.keys.minions.length ? `Exports the ${rows.length} minions the filters match` : undefined}>
+              Export CSV
+            </Button>
+            <Button icon={<RefreshCw className={clsx('size-4', loading && 'animate-spin')} />} onClick={reload} disabled={loading}>
+              Refresh
+            </Button>
+          </>
         }
       />
 

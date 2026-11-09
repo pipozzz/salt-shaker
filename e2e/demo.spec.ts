@@ -63,6 +63,20 @@ test('minions picked on the list open Run with them as a list target', async ({ 
   await expect(page.getByText('3 minions:')).toBeVisible()
 })
 
+test('the filtered minions list downloads as CSV', async ({ page }) => {
+  await openDemo(page)
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')
+  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeHidden()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^minions-\d{4}-\d{2}-\d{2}\.csv$/)
+  const lines = (await readFile(await file.path(), 'utf8')).trim().split('\r\n')
+  expect(lines[0]).toMatch(/^minion,status,os,os_release,kernel,ipv4,cpus,memory_mb,virtual,roles,salt_version/)
+  expect(lines.slice(1).map((l) => l.split(',')[0])).toEqual(expect.arrayContaining(['web-01', 'web-02']))
+  expect(lines.some((l) => l.startsWith('db-01,'))).toBe(false)
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

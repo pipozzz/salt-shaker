@@ -1,3 +1,4 @@
+import type { FindingRow } from '../lib/export'
 import type { Severity, SeverityCounts, Vuln, VulnAffected, VulnFinding, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
@@ -134,6 +135,11 @@ export const demoVulns = {
     const findings: VulnFinding[] = DEMO.flatMap((v) => v.hits.filter((h) => h[0] === id).map(([, version, fixed, binaries]) => ({ ...fields(v), package: v.package, version, fixed, binaries })))
     return delay({ ...status(), minion: minionRow(id), findings })
   },
+  /** every finding, for the CSV export */
+  findings: (): FindingRow[] =>
+    DEMO.flatMap((v) => v.hits.map(([minion, version, fixed, binaries]) => ({ minion, os: SCANNED[minion].os, scannedAt: minionRow(minion).scannedAt, package: v.package, binaries, version, ...fields(v), fixed }))).sort(
+      (a, b) => a.minion.localeCompare(b.minion) || RANK[a.severity] - RANK[b.severity],
+    ),
   byId: (id: string) => {
     const v = DEMO.find((x) => x.id === id)
     if (!v) return Promise.reject(new Error('Not found on any minion'))

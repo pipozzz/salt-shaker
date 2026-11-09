@@ -1,14 +1,15 @@
 import clsx from 'clsx'
-import { ChevronRight, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, Wrench } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, Wrench } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { demoVulns } from '../api/demo-vulns'
-import { vulns as serverVulns, type Severity, type SeverityCounts, type Vuln, type VulnMinion, type VulnSummary } from '../api/server'
+import { vulns as serverVulns, type Severity, type SeverityCounts, type Vuln, type VulnFinding, type VulnMinion, type VulnSummary } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, PermNote, Spinner, Stat, Tabs, type Tone } from '../components/ui'
+import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, PermNote, Spinner, Stat, Tabs, type Tone } from '../components/ui'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
+import { download, findingsCsv } from '../lib/export'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
@@ -75,8 +76,19 @@ function useVulnApi() {
   return session?.mode === 'demo' ? demoVulns : serverVulns
 }
 
+/** The demo has no server to build the CSV, so it's made here, with the same filters. */
+function exportDemo(f: { severity?: string; fix: boolean; q?: string }) {
+  const q = (f.q ?? '').toLowerCase()
+  const rows = demoVulns
+    .findings()
+    .filter((r) => (!f.severity || r.severity === f.severity) && (!f.fix || r.fixed) && (!q || [r.minion, r.package, r.id, r.summary].some((x) => x.toLowerCase().includes(q))))
+  download(`vulnerabilities-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', findingsCsv(rows))
+}
+
 export function VulnerabilitiesPage() {
   const vulns = useVulnApi()
+  const { session } = useSession()
+  const demo = session?.mode === 'demo'
   const can = useCan()
   const canScan = can('local', 'cmd.run')
   const canUpgrade = can('local', 'pkg.install')
@@ -125,25 +137,18 @@ export function VulnerabilitiesPage() {
   }
 
   const q = query.toLowerCase()
-  const list = useMemo(
-    () =>
-      (data?.vulns ?? []).filter(
-        (v) =>
-          (filter === 'all' || v.severity === filter) &&
-          (!fixOnly || v.fixable > 0) &&
-          (!q || v.id.toLowerCase().includes(q) || v.cves.some((c) => c.toLowerCase().includes(q)) || v.packages.some((p) => p.toLowerCase().includes(q)) || v.summary.toLowerCase().includes(q)),
-      ),
-    [data, filter, fixOnly, q],
+  // cheap enough to compute on every render, even for thousands of rows
+  const list = (data?.vulns ?? []).filter(
+    (v) =>
+      (filter === 'all' || v.severity === filter) &&
+      (!fixOnly || v.fixable > 0) &&
+      (!q || v.id.toLowerCase().includes(q) || v.cves.some((c) => c.toLowerCase().includes(q)) || v.packages.some((p) => p.toLowerCase().includes(q)) || v.summary.toLowerCase().includes(q)),
   )
-  const minions = useMemo(
-    () =>
-      (data?.minions ?? [])
-        .filter((m) => !q || m.minion.toLowerCase().includes(q) || (m.os ?? '').includes(q))
-        .filter((m) => filter === 'all' || m.counts[filter] > 0)
-        .filter((m) => !fixOnly || m.counts.fixable > 0)
-        .sort((a, b) => worst(b.counts) - worst(a.counts) || a.minion.localeCompare(b.minion)),
-    [data, filter, fixOnly, q],
-  )
+  const minions = (data?.minions ?? [])
+    .filter((m) => !q || m.minion.toLowerCase().includes(q) || (m.os ?? '').includes(q))
+    .filter((m) => filter === 'all' || m.counts[filter] > 0)
+    .filter((m) => !fixOnly || m.counts.fixable > 0)
+    .sort((a, b) => worst(b.counts) - worst(a.counts) || a.minion.localeCompare(b.minion))
   const filterKey = `${view}|${filter}|${fixOnly}|${q}`
   const [paging, setPaging] = useState({ key: '', count: PAGE })
   const count = paging.key === filterKey ? paging.count : PAGE
@@ -152,6 +157,9 @@ export function VulnerabilitiesPage() {
   const scanned = data?.minions.filter((m) => !m.error) ?? []
   const affected = scanned.filter((m) => LEVELS.some((l) => m.counts[l] > 0)).length
   const lastScan = data?.minions.reduce<string | null>((a, m) => (!a || m.scannedAt > a ? m.scannedAt : a), null)
+  // the export has the filters of the page
+  const exportFilter = { severity: filter === 'all' ? undefined : filter, fix: fixOnly, q: query || undefined }
+  const filtered = filter !== 'all' || fixOnly || !!query
   const run = scan.run
   const scanning = !!run && !run.done
 
@@ -169,9 +177,22 @@ export function VulnerabilitiesPage() {
           </>
         }
         actions={
-          <Button icon={<RefreshCw className={clsx('size-4', report.loading && 'animate-spin')} />} onClick={() => setReloads((n) => n + 1)} disabled={report.loading}>
-            Refresh
-          </Button>
+          <>
+            {data && data.minions.length > 0 && (
+              demo ? (
+                <Button icon={<Download className="size-4" />} onClick={() => exportDemo(exportFilter)}>
+                  Export CSV
+                </Button>
+              ) : (
+                <ButtonLink href={serverVulns.exportUrl(exportFilter)} download icon={<Download className="size-4" />} title={filtered ? 'Exports the findings the filters match' : 'Every finding, one row per minion and package'}>
+                  Export CSV
+                </ButtonLink>
+              )
+            )}
+            <Button icon={<RefreshCw className={clsx('size-4', report.loading && 'animate-spin')} />} onClick={() => setReloads((n) => n + 1)} disabled={report.loading}>
+              Refresh
+            </Button>
+          </>
         }
       />
 
@@ -473,12 +494,53 @@ function MinionRow({ m, open, onToggle }: { m: VulnMinion; open: boolean; onTogg
   )
 }
 
+/** The Vulnerabilities tab of a minion's page. */
+export function MinionVulnerabilities({ id }: { id: string }) {
+  const vulns = useVulnApi()
+  const { data, error } = useAsync(() => vulns.minion(id).catch((e: Error) => (/no inventory/i.test(e.message) ? null : Promise.reject(e))), [vulns, id])
+  if (error) return <div className="p-4"><ErrorBox error={error} /></div>
+  if (data === undefined) return <Spinner />
+  if (data === null)
+    return (
+      <Empty icon={<ShieldCheck />} title="Not scanned yet">
+        Scan it on the{' '}
+        <Link to="/vulnerabilities" className="text-accent-700 hover:underline dark:text-accent-400">
+          Vulnerabilities
+        </Link>{' '}
+        page to check its packages.
+      </Empty>
+    )
+  const m = data.minion
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        {m.error ? <span className="text-zinc-500 dark:text-zinc-400">{m.error}</span> : <CountsBadges counts={m.counts} />}
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {m.os && `${m.os} · `}
+          <Link to={`/jobs/${m.jid}`} className={clsx('hover:text-accent-600', isStale(m.scannedAt) && 'font-medium text-amber-700 dark:text-amber-400')}>
+            inventory {relTime(new Date(m.scannedAt))}
+          </Link>
+          {!m.error && ` · ${m.packages} packages`}
+        </span>
+        <Link to={`/vulnerabilities?view=minions&q=${encodeURIComponent(id)}`} className="ml-auto text-xs text-accent-700 hover:underline dark:text-accent-400">
+          All minions →
+        </Link>
+      </div>
+      {!m.error && <FindingsTable findings={data.findings} />}
+    </div>
+  )
+}
+
 function Findings({ minion }: { minion: string }) {
   const vulns = useVulnApi()
   const { data, error } = useAsync(() => vulns.minion(minion), [vulns, minion])
   if (error) return <ErrorBox error={error} />
   if (!data) return <Spinner />
-  if (!data.findings.length) return <p className="text-sm text-zinc-500 dark:text-zinc-400">No known vulnerabilities.</p>
+  return <FindingsTable findings={data.findings} />
+}
+
+function FindingsTable({ findings }: { findings: VulnFinding[] }) {
+  if (!findings.length) return <p className="text-sm text-zinc-500 dark:text-zinc-400">No known vulnerabilities.</p>
   return (
     <table className="w-full text-xs">
       <thead>
@@ -490,7 +552,7 @@ function Findings({ minion }: { minion: string }) {
         </tr>
       </thead>
       <tbody>
-        {data.findings.map((f) => (
+        {findings.map((f) => (
           <tr key={`${f.id}|${f.package}`} className="align-top">
             <td className="py-1 pr-3">
               <SeverityBadge severity={f.severity} score={f.score} />

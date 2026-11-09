@@ -79,8 +79,11 @@ test('the filtered minions list downloads as CSV', async ({ page }) => {
 
 test('vulnerabilities are listed by severity and a fix opens Run with the upgrade', async ({ page }) => {
   await openDemo(page)
-  // the minions list links each minion's counts to the report
+  // the minions list links each minion's counts to its Vulnerabilities tab
   await page.getByRole('row', { name: /db-01/ }).getByRole('link', { name: /1 critical/ }).click()
+  await expect(page).toHaveURL(/\/minions\/db-01\?tab=vulns$/)
+  await expect(page.getByRole('cell', { name: 'postgresql-15 15.8-0+deb12u1', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'All minions →' }).click()
   await expect(page).toHaveURL(/\/vulnerabilities\?view=minions&q=db-01$/)
   await page.getByRole('button', { name: 'Show vulnerabilities on db-01' }).click()
   await expect(page.getByRole('cell', { name: 'postgresql-15 15.8-0+deb12u1', exact: true })).toBeVisible()
@@ -91,6 +94,22 @@ test('vulnerabilities are listed by severity and a fix opens Run with the upgrad
   await expect(page).toHaveURL(/severity=high/)
   await expect(page.getByRole('row', { name: /DEMO-2026-0144/ })).toBeVisible()
   await expect(page.getByRole('row', { name: /DEMO-2026-0101/ })).toBeHidden()
+
+  // the export has the page's filters
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^vulnerabilities-\d{4}-\d{2}-\d{2}\.csv$/)
+  const lines = (await readFile(await file.path(), 'utf8')).trim().split('\r\n')
+  expect(lines[0]).toBe('minion,os,package,installed_packages,installed_version,vulnerability,cves,severity,cvss,fixed_in,summary,inventory_at')
+  expect(lines.slice(1).map((l) => l.split(',').slice(0, 3).join(','))).toEqual([
+    'mon-01,rocky 9.4,sudo',
+    'web-01,ubuntu 24.04,nginx',
+    'web-01,ubuntu 24.04,sudo',
+    'web-02,ubuntu 24.04,nginx',
+    'web-02,ubuntu 24.04,sudo',
+    'worker-01,ubuntu 22.04,sudo',
+  ])
 
   await page.getByRole('button', { name: 'All', exact: true }).click()
   // the filter lives in the URL, so the box is checked once the address changes

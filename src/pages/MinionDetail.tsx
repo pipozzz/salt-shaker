@@ -10,8 +10,9 @@ import { useAsync } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { OsIcon } from './Minions'
 import { fmtMem, funTone, relTime } from '../lib/format'
+import { MinionVulnerabilities } from './Vulnerabilities'
 
-const TABS = ['grains', 'pillar', 'jobs'] as const
+const TABS = ['grains', 'pillar', 'jobs', 'vulns'] as const
 
 export function MinionDetailPage() {
   const { id = '' } = useParams()
@@ -21,7 +22,7 @@ export function MinionDetailPage() {
   const location = useLocation()
   // the tab and the filter live in the address, so going back from a job returns to the Jobs tab
   const [params, setParams] = useSearchParams()
-  const tab = TABS.find((t) => t === params.get('tab') && (t !== 'jobs' || session?.mode === 'server')) ?? 'grains'
+  const tab = TABS.find((t) => t === params.get('tab') && (t !== 'jobs' || session?.mode === 'server') && (t !== 'vulns' || session?.mode !== 'live')) ?? 'grains'
   const filter = params.get('q') ?? ''
   const update = (k: 'tab' | 'q', value: string) =>
   {
@@ -110,11 +111,13 @@ export function MinionDetailPage() {
                 { value: 'pillar', label: 'Pillar' },
                 // job history is recorded by the server
                 ...(session?.mode === 'server' ? [{ value: 'jobs' as const, label: 'Jobs' }] : []),
+                // the vulnerability report is built by the server (the demo has a made-up one)
+                ...(session && session.mode !== 'live' ? [{ value: 'vulns' as const, label: 'Vulnerabilities' }] : []),
               ]}
             />
           }
           actions={
-            tab !== 'jobs' && (
+            (tab === 'grains' || tab === 'pillar') && (
             <div className="relative">
               <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
               <Input value={filter} onChange={(e) => update('q', e.target.value)} placeholder="Filter keys…" className="w-56 pl-9" />
@@ -123,7 +126,8 @@ export function MinionDetailPage() {
           }
         />
         {tab === 'jobs' && <MinionJobs id={id} />}
-        <div className={tab === 'jobs' ? 'hidden' : 'p-4 pl-8'}>
+        {tab === 'vulns' && <MinionVulnerabilities id={id} />}
+        <div className={tab === 'jobs' || tab === 'vulns' ? 'hidden' : 'p-4 pl-8'}>
           {tab === 'grains' && g && <JsonView value={filtered(g)} openDepth={1} />}
           {tab === 'pillar' && (
             <>

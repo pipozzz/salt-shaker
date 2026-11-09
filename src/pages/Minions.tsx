@@ -346,7 +346,7 @@ function VulnsCell({ m }: { m?: { minion: string; error: string | null; counts: 
   if (!m) return <span className="text-xs text-zinc-500 dark:text-zinc-400">not scanned</span>
   if (m.error) return <span className="text-xs text-zinc-500 dark:text-zinc-400" title={m.error}>not covered</span>
   return (
-    <Link to={`/vulnerabilities?view=minions&q=${encodeURIComponent(m.minion)}`} onClick={(e) => e.stopPropagation()} className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500">
+    <Link to={`/minions/${encodeURIComponent(m.minion)}?tab=vulns`} onClick={(e) => e.stopPropagation()} className="rounded-md focus-visible:outline-2 focus-visible:outline-accent-500">
       <CountsBadges counts={m.counts} />
     </Link>
   )

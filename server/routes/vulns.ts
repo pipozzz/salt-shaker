@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { findingsCsv, type FindingRow } from '../../src/lib/export'
 import type { Env } from '../types'
 import { SEVERITIES, severityCounts, type Finding, type MinionVulns, type VulnInfo, type VulnService } from '../vulns'
 
@@ -51,6 +52,26 @@ export function vulnRoutes({ vulns }: { vulns: VulnService }) {
       .map((e) => ({ ...vulnFields(e.vuln), packages: [...e.packages].sort(), minions: e.minions.size, fixable: e.fixable.size }))
       .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.minions - a.minions || (b.score ?? 0) - (a.score ?? 0) || a.id.localeCompare(b.id))
     return c.json({ ...status(got), minions: minions.map(minionFields).sort((a, b) => a.minion.localeCompare(b.minion)), vulns: list })
+  })
+
+  /** Every finding as CSV, with the page's filters: ?severity=critical,high&fix=1&q=openssl */
+  r.get('/vulns/export', async (c) => {
+    const got = await vulns.get()
+    const severities = (c.req.query('severity') ?? '').split(',').filter(Boolean)
+    const fixOnly = c.req.query('fix') === '1'
+    const q = (c.req.query('q') ?? '').toLowerCase()
+    const rows: FindingRow[] = []
+    for (const m of got.report?.minions ?? []) {
+      for (const f of m.findings) {
+        if (severities.length && !severities.includes(f.vuln.severity)) continue
+        if (fixOnly && !f.fixed) continue
+        if (q && ![m.minion, f.package, f.vuln.id, f.vuln.summary, ...f.vuln.cves].some((x) => x.toLowerCase().includes(q))) continue
+        rows.push({ minion: m.minion, os: m.os, scannedAt: m.scannedAt, ...findingFields(f) })
+      }
+    }
+    rows.sort((a, b) => a.minion.localeCompare(b.minion) || RANK[a.severity] - RANK[b.severity] || a.package.localeCompare(b.package) || a.id.localeCompare(b.id))
+    const name = `vulnerabilities-${new Date().toISOString().slice(0, 10)}.csv`
+    return c.body(findingsCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
   })
 
   /** What was found on one minion. */

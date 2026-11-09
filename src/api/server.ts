@@ -470,5 +470,14 @@ export const vulns = {
   /** per-minion counts only, without waiting for a report that's being built */
   minions: () => request<VulnStatus & { minions: VulnMinion[] }>('/api/vulns?only=minions&wait=0'),
   minion: (id: string) => request<VulnStatus & { minion: VulnMinion; findings: VulnFinding[] }>(`/api/vulns/minions/${encodeURIComponent(id)}`),
+  /** CSV of every finding matching the page's filters */
+  exportUrl: (f: { severity?: string; fix?: boolean; q?: string }) => {
+    const p = new URLSearchParams()
+    if (f.severity) p.set('severity', f.severity)
+    if (f.fix) p.set('fix', '1')
+    if (f.q) p.set('q', f.q)
+    const qs = p.toString()
+    return `/api/vulns/export${qs ? `?${qs}` : ''}`
+  },
   byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[] }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
 }

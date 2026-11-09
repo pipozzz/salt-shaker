@@ -26,7 +26,9 @@ Each minion's latest successful inventory from the last 30 days counts, so scann
 - Filter by severity, search for a CVE, package or text, and tick **Fix available** to hide the ones nobody can fix yet. The filters are kept in the page address.
 - **Upgrade on N minions** opens [Run](/salt-shaker/guide/run/) with `pkg.install pkgs=[…] only_upgrade=True` for the minions that have a fix. Nothing runs until you start it there.
 
-The [Minions](/salt-shaker/guide/minions/) list gets a **Vulnerabilities** column once there is a scan, and its CSV export includes the counts.
+**Export CSV** downloads every finding with the page's filters, one row per minion and package: the installed and fixed versions, the vulnerability and its CVEs, the severity and CVSS score, a summary and when the inventory was taken. Handy for a ticketing system or a report.
+
+The [Minions](/salt-shaker/guide/minions/) list gets a **Vulnerabilities** column once there is a scan, linking to the **Vulnerabilities** tab of each minion's page, and its CSV export includes the counts.
 
 ### Severity
 

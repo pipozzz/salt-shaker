@@ -84,3 +84,28 @@ export function minionsCsv(rows: InventoryRow[], withServer: boolean) {
   }
   return toCsv(out)
 }
+
+export interface FindingRow {
+  minion: string
+  os: string | null
+  scannedAt: string | Date
+  package: string
+  binaries: string[]
+  version: string
+  id: string
+  cves: string[]
+  severity: string
+  score: number | null
+  fixed: string | null
+  summary: string
+}
+
+/** Every vulnerability found, one row per minion and package, for spreadsheets and ticketing. */
+export function findingsCsv(rows: FindingRow[]) {
+  const out: unknown[][] = [['minion', 'os', 'package', 'installed_packages', 'installed_version', 'vulnerability', 'cves', 'severity', 'cvss', 'fixed_in', 'summary', 'inventory_at']]
+  for (const r of rows) {
+    const at = typeof r.scannedAt === 'string' ? r.scannedAt : r.scannedAt.toISOString()
+    out.push([r.minion, r.os ?? '', r.package, r.binaries.join(' '), r.version, r.id, r.cves.join(' '), r.severity, r.score === null ? '' : String(r.score), r.fixed ?? '', r.summary, at])
+  }
+  return toCsv(out)
+}

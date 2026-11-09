@@ -292,6 +292,19 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     expect((byId.body.minions as { minion: string }[]).map((m) => m.minion)).toEqual(['db', 'web'])
     expect((await get('/vulns/by-id/X-1')).status).toBe(404)
 
+    // the CSV export, with the page's filters
+    const csv = await app.request('/api/vulns/export?severity=critical,low&fix=1', { headers: { 'x-user': 'ann:viewer' } })
+    expect(csv.headers.get('content-type')).toBe('text/csv; charset=utf-8')
+    expect(csv.headers.get('content-disposition')).toMatch(/^attachment; filename="vulnerabilities-\d{4}-\d{2}-\d{2}\.csv"$/)
+    expect((await csv.text()).split('\r\n')).toEqual([
+      'minion,os,package,installed_packages,installed_version,vulnerability,cves,severity,cvss,fixed_in,summary,inventory_at',
+      `web,debian 12,openssl,libssl3,3.0.11-1~deb12u2,DEBIAN-CVE-2024-1,,critical,9.8,3.0.15-1~deb12u1,Bad thing,${at.toISOString()}`,
+      '',
+    ])
+    const everything = await (await app.request('/api/vulns/export', { headers: { 'x-user': 'ann:viewer' } })).text()
+    expect(everything.trim().split('\r\n').slice(1).map((l) => l.split(',').slice(0, 3).join(','))).toEqual(['db,debian 12,bash', 'web,debian 12,openssl', 'web,debian 12,bash'])
+    expect((await app.request('/api/vulns/export')).status).toBe(401)
+
     // what a scheduled scan reports
     const { report } = await svc.get()
     const summary = vulnScanSummary(report!, '1', 3)

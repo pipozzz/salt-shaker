@@ -10,7 +10,9 @@ sidebar: { order: 6 }
 
 ## Running a query
 
-Pick a target, write a query or choose one from the **Library**, and **Run query** (or press ⌘/Ctrl + Enter). Filter the rows as they come in, and **Export CSV** downloads the rows the filter shows. The last query's results stay on the page when you open a minion and come back.
+Pick a target, write a query or choose one from the **Library**, and **Run query** (or press ⌘/Ctrl + Enter). Filter the rows as they come in, and **Export CSV** downloads the rows the filter shows. The last query's results stay on the page when you open a minion and come back. Click a column header to sort by it (numbers sort as numbers); click again to reverse.
+
+**Copy link** copies a link that opens the page with this query and target, to send to a colleague. Queries from the library and the team's saved ones are also in ⌘K: type part of the name, e.g. *ssh keys*.
 
 **Group identical rows** shows each distinct row once, with how many minions have it and which, rarest first. What sets a few minions apart from the rest comes to the top: an extra account, an SSH key nobody expected, a port only one server listens on. The CSV export then has `count` and `minions` columns instead of `minion`.
 

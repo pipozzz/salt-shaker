@@ -5,7 +5,8 @@
 **Query**
 
 - New **Query** page: run an [osquery](https://osquery.io) SQL query on a target and see every minion's rows in one table, filter them and export them as CSV. A library has ready-made queries (listening ports, logged-in users, SSH keys, SUID binaries, cron jobs, kernel modules, processes, OS); with the server, operators and admins save queries for the team. Only one SELECT runs at a time, through `cmd.run`.
-- The last query's results are still there after opening a minion and coming back.
+- The last query's results are still there after opening a minion and coming back. Click a column header to sort.
+- **Copy link** shares a query and its target as a link, and ⌘K finds library and saved queries by name.
 - **Group identical rows** shows each distinct row once with the minions that have it, rarest first, so what only a few minions have stands out.
 - **Watch a query**: a new **osquery query** schedule kind runs a query and compares its rows with the previous run, minion by minion. The new **Query changes** notification lists what appeared or went away (a new port, account or SSH key); the first run is the baseline. **Watch…** on the Query page starts one.
 - Minions without osquery are listed with **Install osquery…**, which adds the official `pkg.osquery.io` repository and installs it with apt or dnf/yum.

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { BookOpen, CalendarClock, Database, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, CalendarClock, Check, Database, Link2, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { queries as queriesApi, type SavedQuery } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
@@ -31,6 +31,31 @@ export function QueryPage() {
   const [tgt, setTgt] = useStoredState('salt-shaker.query.tgt', '*')
   const [tgtType, setTgtType] = useStoredState<TargetType>('salt-shaker.query.tgtType', 'glob')
   const [sql, setSql] = useStoredState('salt-shaker.query.sql', OSQUERY_LIBRARY[0].sql)
+  const [sort, setSort] = useState<{ col: string; desc: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
+  // a shared link (or ⌘K) brings the query, and maybe the target, in the address
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const shared = params.get('sql')
+    if (!shared) return
+    setSql(shared)
+    if (params.get('tgt')) {
+      setTgt(params.get('tgt')!)
+      setTgtType((params.get('tgt_type') as TargetType | null) ?? 'glob')
+    }
+    setParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
+  const copyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?${new URLSearchParams({ sql, tgt, tgt_type: tgtType })}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      window.prompt('Copy this link', url)
+    }
+  }
   // the last query's job, so its results are still here after opening a minion and coming back
   const [last, setLast] = useStoredState<{ jid: string; sql: string } | null>(`salt-shaker.query.last.${session?.mode}.${session?.apiUrl}`, null)
   const [ran, setRan] = useState<string | null>(null)
@@ -110,7 +135,10 @@ export function QueryPage() {
   // grouped: one line per distinct row, with the minions that have it in place of the minion column
   const groups = grouped ? groupRows(matching) : []
   const tableColumns = grouped ? ['minions', ...columns.slice(1)] : columns
-  const shown: Array<{ row: OsqueryRow; minions: string[] }> = grouped ? groups : matching.map(({ minion, ...row }) => ({ row, minions: [minion] }))
+  const unsorted: Array<{ row: OsqueryRow; minions: string[] }> = grouped ? groups : matching.map(({ minion, ...row }) => ({ row, minions: [minion] }))
+  // a click on a column header sorts by it, numbers as numbers; again reverses, a third time unsorts
+  const shown = sort && tableColumns.includes(sort.col) ? [...unsorted].sort((a, b) => sortValue(a, sort.col, b) * (sort.desc ? -1 : 1)) : unsorted
+  const toggleSort = (col: string) => setSort((s) => (s?.col !== col ? { col, desc: false } : !s.desc ? { col, desc: true } : null))
   const answered = r ? Object.keys(r.results).length - missing.length - failed.length : 0
   const noReturn = r?.done ? r.minions.filter((m) => !(m in r.results)) : []
 
@@ -175,6 +203,9 @@ export function QueryPage() {
                 {r && !r.done ? `Running… ${Object.keys(r.results).length}/${r.minions.length}` : 'Run query'}
               </Button>
               <span className="text-xs text-zinc-500 dark:text-zinc-400">{invalid && sql.trim() ? invalid : '⌘/Ctrl + Enter runs it'}</span>
+              <Button type="button" size="sm" icon={copied ? <Check className="size-3.5" /> : <Link2 className="size-3.5" />} disabled={!sql.trim()} onClick={() => void copyLink()} title="A link that opens this query and target">
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
               {canSchedule && (
                 <Button
                   type="button"
@@ -296,8 +327,11 @@ export function QueryPage() {
                 <thead>
                   <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                     {tableColumns.map((c) => (
-                      <th key={c} className="px-3 py-2.5 font-medium whitespace-nowrap first:pl-4 last:pr-4">
-                        {c}
+                      <th key={c} className="px-3 py-2.5 font-medium whitespace-nowrap first:pl-4 last:pr-4" aria-sort={sort?.col === c ? (sort.desc ? 'descending' : 'ascending') : undefined}>
+                        <button type="button" onClick={() => toggleSort(c)} className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100">
+                          {c}
+                          {sort?.col === c && (sort.desc ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+                        </button>
                       </th>
                     ))}
                   </tr>
@@ -420,4 +454,16 @@ function MinionLink({ id }: { id: string }) {
       {id}
     </Link>
   )
+}
+
+/** Compares two result rows by a column: minion names, counts of minions, numbers or text. */
+function sortValue(a: { row: OsqueryRow; minions: string[] }, col: string, b: { row: OsqueryRow; minions: string[] }) {
+  if (col === 'minion') return a.minions[0].localeCompare(b.minions[0])
+  if (col === 'minions') return a.minions.length - b.minions.length
+  const x = a.row[col] ?? ''
+  const y = b.row[col] ?? ''
+  const nx = Number(x)
+  const ny = Number(y)
+  if (x !== '' && y !== '' && !Number.isNaN(nx) && !Number.isNaN(ny)) return nx - ny
+  return x.localeCompare(y, undefined, { numeric: true })
 }

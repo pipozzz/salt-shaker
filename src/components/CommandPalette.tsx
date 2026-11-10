@@ -1,9 +1,11 @@
 import clsx from 'clsx'
-import { Bookmark, CornerDownLeft, FileCode2, Hash, History, Search, Server, Terminal, type LucideIcon } from 'lucide-react'
+import { Bookmark, CornerDownLeft, Database, FileCode2, Hash, History, Search, Server, Terminal, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { queries as queriesApi } from '../api/server'
+import { OSQUERY_LIBRARY } from '../lib/osquery'
 import { storage } from '../lib/storage'
-import { useSalt } from '../lib/session'
+import { useSalt, useSession } from '../lib/session'
 import { useSavedTargets } from '../lib/targets'
 
 interface Item {
@@ -21,13 +23,16 @@ export interface NavEntry {
   icon: LucideIcon
 }
 
-/** ⌘K / Ctrl+K launcher: pages, minions, saved targets, recent commands, jobs by jid. */
+/** ⌘K / Ctrl+K launcher: pages, minions, saved targets, osquery queries, recent commands, jobs by jid. */
 export function CommandPalette({ open, onClose, pages }: { open: boolean; onClose: () => void; pages: NavEntry[] }) {
   const salt = useSalt()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [minions, setMinions] = useState<string[]>([])
+  const [teamQueries, setTeamQueries] = useState<Array<{ name: string; sql: string }>>([])
+  const { session } = useSession()
+  const server = session?.mode === 'server'
   const listRef = useRef<HTMLDivElement>(null)
 
   // the palette is mounted fresh on every open, so query and selection start empty
@@ -37,7 +42,12 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
       .keys()
       .then((k) => setMinions([...k.minions].sort()))
       .catch(() => undefined)
-  }, [open, salt])
+    if (server)
+      queriesApi
+        .list()
+        .then((r) => setTeamQueries(r.queries))
+        .catch(() => undefined)
+  }, [open, salt, server])
 
   const savedTargets = useSavedTargets().targets
 
@@ -62,6 +72,14 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
       out.push({ id: `minion:${m}`, group: 'Minions', label: m, icon: Server, run: go(`/minions/${encodeURIComponent(m)}`) })
     }
 
+    // osquery queries only when asked for, so they don't crowd the list
+    if (q) {
+      const named = [...teamQueries.map((x) => ({ ...x, hint: 'saved' })), ...OSQUERY_LIBRARY.map((x) => ({ name: x.name, sql: x.sql, hint: 'library' }))]
+      for (const x of named.filter((x) => fuzzy(`${x.name} query osquery`)).slice(0, 5)) {
+        out.push({ id: `query:${x.hint}:${x.name}`, group: 'Queries', label: x.name, hint: x.hint, icon: Database, run: go(`/query?${new URLSearchParams({ sql: x.sql })}`) })
+      }
+    }
+
     const history = storage.get<Array<{ tgt: string; tgt_type: string; fun: string; args: string }>>('salt-shaker.run.history') ?? []
     for (const [i, h] of history.entries()) {
       if (fuzzy(`${h.fun} ${h.args} ${h.tgt}`) && out.filter((x) => x.group === 'Recent commands').length < 5) {
@@ -84,7 +102,7 @@ export function CommandPalette({ open, onClose, pages }: { open: boolean; onClos
     }
     if (q && /\.sls$|^\w+\//.test(q)) out.push({ id: 'file', group: 'Actions', label: `Browse states for “${query.trim()}”`, icon: FileCode2, run: go('/files') })
     return out
-  }, [query, minions, pages, navigate, onClose, savedTargets])
+  }, [query, minions, pages, navigate, onClose, savedTargets, teamQueries])
 
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })

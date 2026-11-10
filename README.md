@@ -27,7 +27,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Schedules:** nightly compliance checks, weekly patch or vulnerability scans or any function, on a cron schedule.
 - **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, fixable critical or high vulnerabilities, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
-- **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
+- **⌘K / Ctrl+K** jumps to any page, minion, saved target, osquery query or recent command.
 - **Demo mode:** a simulated master in the browser, for trying it out.
 
 <table>

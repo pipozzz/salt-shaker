@@ -208,6 +208,29 @@ test('grouped osquery rows put what only a few minions have first', async ({ pag
   await expect(page.getByText('Query edited since')).toHaveCount(0)
 })
 
+test('a query opens from ⌘K or a link, and its results sort by column', async ({ page }) => {
+  await openDemo(page)
+  await page.keyboard.press('ControlOrMeta+k')
+  await page.getByPlaceholder(/Jump to a page or minion/).fill('ssh keys')
+  await page.getByRole('button', { name: /Authorized SSH keys/ }).click()
+  await expect(page).toHaveURL(/\/query$/)
+  await expect(page.getByLabel('SQL')).toHaveValue(/FROM users u CROSS JOIN authorized_keys/)
+
+  // a shared link brings the query and the target
+  await page.goto(`/query?${new URLSearchParams({ sql: 'SELECT name, port FROM listening_ports;', tgt: 'web-*', tgt_type: 'glob' })}`)
+  await expect(page.getByLabel('SQL')).toHaveValue('SELECT name, port FROM listening_ports;')
+  await expect(page.getByLabel('Target')).toHaveValue('web-*')
+  await page.getByRole('button', { name: 'Run query' }).click()
+  await expect(page.getByRole('button', { name: 'Run query' })).toBeVisible()
+
+  // numbers sort as numbers: 22 before 443, and 8000 last
+  await page.getByRole('button', { name: 'port', exact: true }).click()
+  const ports = page.getByRole('row').locator('td:nth-child(3)')
+  await expect(ports).toHaveText(['22', '22', '80', '80', '443', '443', '8000'])
+  await page.getByRole('button', { name: 'port', exact: true }).click()
+  await expect(ports.first()).toHaveText('8000')
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

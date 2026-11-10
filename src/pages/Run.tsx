@@ -1,3 +1,4 @@
+import { useCanSchedule } from '../lib/automation'
 import clsx from 'clsx'
 import { CalendarClock, CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
@@ -9,7 +10,7 @@ import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, Modal, PageHeader, PermNote } from '../components/ui'
 import { confirmLevel } from '../lib/risk'
 import { useStoredState } from '../lib/hooks'
-import { useCan, useSalt, useSession } from '../lib/session'
+import { useCan, useSalt } from '../lib/session'
 import { useJob } from '../lib/useJob'
 
 const PRESETS: Array<{ label: string; fun: string; args?: string; danger?: boolean }> = [
@@ -58,9 +59,8 @@ export function RunPage() {
 
   const can = useCan()
   const navigate = useNavigate()
-  // schedules are kept by the server and managed by admins
-  const { session } = useSession()
-  const canSchedule = session?.mode === 'server' && session.eauth === 'admin'
+  // schedules are kept by the server and managed by admins (the demo has its own)
+  const canSchedule = useCanSchedule()
   const schedule = () => navigate(`/schedules?${new URLSearchParams({ fun: fun.trim(), args: args.trim(), tgt: tgt.trim(), tgt_type: tgtType })}`)
   const allowed = !fun.trim() || can('local', fun.trim())
   const isWrite = /^state\.(apply|highstate|sls)$/.test(fun) && !/test=(True|true)/.test(args)

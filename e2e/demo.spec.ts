@@ -247,6 +247,38 @@ test('a query opens from ⌘K or a link, and its results sort by column', async 
   await expect(ports.first()).toHaveText('8000')
 })
 
+test('the demo has schedules, and a query can be watched from the Query page', async ({ page }) => {
+  await openDemo(page, '/schedules')
+  await expect(page.getByText('Nightly compliance')).toBeVisible()
+  await expect(page.getByText('+1 on 1 minion')).toBeVisible()
+
+  // Watch… on the Query page opens a new osquery schedule with that query and target
+  await page.goto('/query')
+  await page.getByRole('button', { name: /Listening ports/ }).click()
+  await page.getByRole('button', { name: 'Watch…' }).click()
+  await expect(page).toHaveURL(/\/schedules/)
+  await expect(page.getByRole('heading', { name: 'New schedule' })).toBeVisible()
+  await expect(page.getByLabel('Name')).toHaveValue('Listening ports')
+  await expect(page.getByLabel('What to run')).toHaveValue('osquery')
+  await expect(page.getByLabel('Query', { exact: true })).toHaveValue(/FROM listening_ports/)
+
+  // the same rule as the server: one SELECT only
+  await page.getByLabel('Query', { exact: true }).fill('DELETE FROM users')
+  await expect(page.getByText('Only SELECT queries can run here')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  await page.getByLabel('Start from the library').selectOption({ label: 'Authorized SSH keys' })
+  await page.getByRole('button', { name: 'Create schedule' }).click()
+  await expect(page.getByText('Listening ports', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Run now' }).first().click()
+})
+
+test('the demo has notification channels to try', async ({ page }) => {
+  await openDemo(page, '/notifications')
+  await expect(page.getByText('Ops Slack')).toBeVisible()
+  await page.getByRole('button', { name: 'Test' }).first().click()
+  await expect(page.getByText('Test message sent')).toBeVisible()
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

@@ -72,7 +72,12 @@ export function Layout() {
           { to: '/users', label: 'Users', icon: Users },
           { to: '/system', label: 'System', icon: Gauge },
         ]
-      : []),
+      : session?.mode === 'demo'
+        ? [
+            { to: '/schedules', label: 'Schedules', icon: CalendarClock },
+            { to: '/notifications', label: 'Notifications', icon: BellRing },
+          ]
+        : []),
   ]
   const pending = usePendingKeys()
 

@@ -1,3 +1,4 @@
+import { useCanSchedule } from '../lib/automation'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, BookOpen, CalendarClock, Check, Database, Link2, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -26,7 +27,7 @@ export function QueryPage() {
   const job = useJob()
   const navigate = useNavigate()
   // schedules are for admins; a scheduled query alerts when its rows change
-  const canSchedule = server && session.eauth === 'admin'
+  const canSchedule = useCanSchedule()
   const install = useJob()
   const [tgt, setTgt] = useStoredState('salt-shaker.query.tgt', '*')
   const [tgtType, setTgtType] = useStoredState<TargetType>('salt-shaker.query.tgtType', 'glob')

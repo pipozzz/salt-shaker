@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Demo**
+
+- The demo has **Schedules** and **Notifications** too, with a few made up to try: a nightly compliance check, a weekly patch scan, a vulnerability scan and a watched osquery query. They're kept in the browser; nothing runs on a schedule and nothing is sent.
+
 **Vulnerabilities**
 
 - **Installed packages** searches the package inventories across the fleet: each installed version of a package with the minions that have it, from the latest scans and without running anything on the minions.

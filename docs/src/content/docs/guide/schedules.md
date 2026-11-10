@@ -8,6 +8,8 @@ Both pages are for admins and need the server.
 
 ## Schedules
 
+Schedules and notifications need the server, and only admins manage them. The demo has a few to try, kept in the browser.
+
 **Schedules** runs jobs on a cron schedule:
 
 - **Compliance check**: `state.apply test=True`, the same as the [Compliance](/salt-shaker/guide/compliance/) page.

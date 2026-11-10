@@ -15,6 +15,8 @@ npm run dev
 
 Open <http://localhost:5173/?demo>.
 
+The demo has made-up data for the pages that need the server, too: vulnerabilities, schedules and notification channels. They live in the browser and are gone on reload; nothing runs on a schedule and nothing is sent.
+
 ## Full local lab
 
 The `lab/` directory has a Docker Compose setup with a Salt master running salt-api, three minions (`web-01`, `web-02`, `db-01`) and the Salt Shaker container.

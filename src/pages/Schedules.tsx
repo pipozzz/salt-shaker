@@ -1,9 +1,10 @@
+import { useAutomationApi } from '../lib/automation'
 import { OSQUERY_LIBRARY, checkQuery } from '../lib/osquery'
 import { CalendarClock, ExternalLink, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatArgs, parseArgs } from '../api/salt'
-import { automation, type Schedule, type ScheduleInput, type ScheduleKind, type ScheduleRun } from '../api/server'
+import { type Schedule, type ScheduleInput, type ScheduleKind, type ScheduleRun } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch, type Tone } from '../components/ui'
@@ -123,8 +124,9 @@ function RecentRuns({ s }: { s: Schedule }) {
 }
 
 export function SchedulesPage() {
-  const list = useAsync(() => automation.schedules(), [])
-  const meta = useAsync(() => automation.meta(), [])
+  const api = useAutomationApi()
+  const list = useAsync(() => api.schedules(), [])
+  const meta = useAsync(() => api.meta(), [])
   // "Schedule…" on the Run page opens a new schedule for that function and target
   const [params, setParams] = useSearchParams()
   const fromRun = params.get('fun')
@@ -195,7 +197,7 @@ export function SchedulesPage() {
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
             {list.data.schedules.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                <Switch checked={s.enabled} label={`Enable ${s.name}`} disabled={busy === `toggle:${s.id}`} onChange={(v) => act(`toggle:${s.id}`, () => automation.updateSchedule(s.id, { enabled: v }))} />
+                <Switch checked={s.enabled} label={`Enable ${s.name}`} disabled={busy === `toggle:${s.id}`} onChange={(v) => act(`toggle:${s.id}`, () => api.updateSchedule(s.id, { enabled: v }))} />
                 <div className="min-w-48 flex-1">
                   <p className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{s.name}</span>
@@ -245,7 +247,7 @@ export function SchedulesPage() {
                     loading={busy === `run:${s.id}`}
                     onClick={() =>
                       act(`run:${s.id}`, async () => {
-                        const { jid } = await automation.runSchedule(s.id)
+                        const { jid } = await api.runSchedule(s.id)
                         setStarted((m) => ({ ...m, [s.id]: jid }))
                       })
                     }
@@ -276,7 +278,7 @@ export function SchedulesPage() {
             icon={<Trash2 className="size-4" />}
             loading={busy === 'delete'}
             onClick={async () => {
-              await act('delete', () => automation.deleteSchedule(removing!.id))
+              await act('delete', () => api.deleteSchedule(removing!.id))
               setRemoving(null)
             }}
           >
@@ -299,6 +301,7 @@ interface Draft {
 }
 
 function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule: Schedule | null; draft?: Draft | null; kinds?: Record<ScheduleKind, string>; onClose: () => void; onSaved: () => void }) {
+  const api = useAutomationApi()
   const [name, setName] = useState(schedule?.name ?? (draft ? (draft.sql !== undefined ? draft.name || 'Watch query' : `${draft.fun} on ${draft.tgt}`) : ''))
   const [kind, setKind] = useState<ScheduleKind>(schedule?.kind ?? (draft ? (draft.sql !== undefined ? 'osquery' : 'function') : 'compliance'))
   const [sql, setSql] = useState(schedule?.args?.sql ?? draft?.sql ?? OSQUERY_LIBRARY[0].sql)
@@ -328,8 +331,8 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
       ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : kind === 'osquery' ? { args: { sql: sql.trim() } } : {}),
     }
     try {
-      if (schedule) await automation.updateSchedule(schedule.id, input)
-      else await automation.createSchedule(input)
+      if (schedule) await api.updateSchedule(schedule.id, input)
+      else await api.createSchedule(input)
       onSaved()
       onClose()
     } catch (err) {

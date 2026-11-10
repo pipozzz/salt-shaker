@@ -1,6 +1,7 @@
+import { useAutomationApi } from '../lib/automation'
 import { BellRing, Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { automation, type Channel, type NotifyEvent } from '../api/server'
+import { type Channel, type NotifyEvent } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { relTime } from '../lib/format'
@@ -23,8 +24,9 @@ const EVENT_SHORT: Record<NotifyEvent, string> = {
 }
 
 export function NotificationsPage() {
-  const list = useAsync(() => automation.channels(), [])
-  const meta = useAsync(() => automation.meta(), [])
+  const api = useAutomationApi()
+  const list = useAsync(() => api.channels(), [])
+  const meta = useAsync(() => api.meta(), [])
   const [editing, setEditing] = useState<Channel | 'new' | null>(null)
   const [removing, setRemoving] = useState<Channel | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -76,7 +78,7 @@ export function NotificationsPage() {
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
             {list.data.channels.map((ch) => (
               <li key={ch.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                <Switch checked={ch.enabled} label={`Enable ${ch.name}`} disabled={busy === `toggle:${ch.id}`} onChange={(v) => act(`toggle:${ch.id}`, () => automation.updateChannel(ch.id, { enabled: v }))} />
+                <Switch checked={ch.enabled} label={`Enable ${ch.name}`} disabled={busy === `toggle:${ch.id}`} onChange={(v) => act(`toggle:${ch.id}`, () => api.updateChannel(ch.id, { enabled: v }))} />
                 <div className="min-w-48 flex-1">
                   <p className="flex items-center gap-2">
                     <span className="font-medium">{ch.name}</span>
@@ -111,7 +113,7 @@ export function NotificationsPage() {
                     loading={busy === `test:${ch.id}`}
                     onClick={() =>
                       act(`test:${ch.id}`, async () => {
-                        await automation.testChannel(ch.id)
+                        await api.testChannel(ch.id)
                         setTested((m) => ({ ...m, [ch.id]: 'Test message sent' }))
                       })
                     }
@@ -142,7 +144,7 @@ export function NotificationsPage() {
             icon={<Trash2 className="size-4" />}
             loading={busy === 'delete'}
             onClick={async () => {
-              await act('delete', () => automation.deleteChannel(removing!.id))
+              await act('delete', () => api.deleteChannel(removing!.id))
               setRemoving(null)
             }}
           >
@@ -155,6 +157,7 @@ export function NotificationsPage() {
 }
 
 function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel | null; events?: Record<NotifyEvent, string>; onClose: () => void; onSaved: () => void }) {
+  const api = useAutomationApi()
   const [name, setName] = useState(channel?.name ?? '')
   const [kind, setKind] = useState<Channel['kind']>(channel?.kind ?? 'slack')
   const [url, setUrl] = useState('')
@@ -167,8 +170,8 @@ function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel 
     setBusy(true)
     setError(null)
     try {
-      if (channel) await automation.updateChannel(channel.id, { name: name.trim(), events: [...chosen], ...(url.trim() ? { url: url.trim() } : {}) })
-      else await automation.createChannel({ name: name.trim(), kind, url: url.trim(), events: [...chosen] })
+      if (channel) await api.updateChannel(channel.id, { name: name.trim(), events: [...chosen], ...(url.trim() ? { url: url.trim() } : {}) })
+      else await api.createChannel({ name: name.trim(), kind, url: url.trim(), events: [...chosen] })
       onSaved()
       onClose()
     } catch (err) {

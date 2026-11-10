@@ -400,6 +400,16 @@ function startJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwa
   return job
 }
 
+/**
+ * Starts a job as local_async would, for the demo's schedules: `when` in the past with `instant`
+ * records an earlier run, otherwise it runs now and its returns stream in.
+ */
+export function demoJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwarg: Record<string, unknown>, user: string, when = new Date(), instant = false) {
+  const job = startJob(tgt, tgtType, fun, arg, kwarg, user, when, instant)
+  if (instant) jobs.sort((a, b) => b.jid.localeCompare(a.jid))
+  return job ? { jid: job.jid, minions: job.minions } : null
+}
+
 // seed history
 ;(() => {
   const now = Date.now()

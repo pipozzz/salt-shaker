@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Demo**
+
+- The demo's schedules run real jobs on the simulated master: their past runs and **Run now** are in the job history, and the links to them open the job.
+
 ## 1.11.0
 
 **Demo**

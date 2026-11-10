@@ -251,6 +251,11 @@ test('the demo has schedules, and a query can be watched from the Query page', a
   await openDemo(page, '/schedules')
   await expect(page.getByText('Nightly compliance')).toBeVisible()
   await expect(page.getByText('+1 on 1 minion')).toBeVisible()
+  // its runs are real jobs of the simulated master
+  await page.getByRole('link', { name: /updates available \(5 minions with 6 packages to update\)/ }).last().click()
+  await expect(page).toHaveURL(/\/jobs\/\d{20}$/)
+  await expect(page.getByText('pkg.list_upgrades').first()).toBeVisible()
+  await expect(page.getByText('schedule:Weekly patch scan').first()).toBeVisible()
 
   // Watch… on the Query page opens a new osquery schedule with that query and target
   await page.goto('/query')

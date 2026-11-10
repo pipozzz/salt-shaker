@@ -1,5 +1,7 @@
 import { Cron } from 'croner'
-import { checkQuery, OSQUERY_LIBRARY } from '../lib/osquery'
+import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
+import { checkQuery, osqueryCall, OSQUERY_LIBRARY } from '../lib/osquery'
+import { demoJob } from './mock'
 import type { automation, AutomationMeta, Channel, NotifyEvent, Schedule, ScheduleInput, ScheduleKind, ScheduleRun } from './server'
 
 /*
@@ -28,70 +30,89 @@ const EVENTS: Record<NotifyEvent, string> = {
 
 const delay = <T>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 120))
 const fail = (message: string) => Promise.reject(new Error(message))
-const jidAt = (d: Date) => d.toISOString().replace(/\D/g, '').slice(0, 14) + String(d.getMilliseconds()).padStart(3, '0') + '000'
+
+type Kind = Pick<Schedule, 'kind' | 'fun' | 'args'>
+
+/** What a schedule runs, as the server's lowstateFor builds it. */
+function call(s: Kind): [fun: string, arg: unknown[], kwarg: Record<string, unknown>] {
+  if (s.kind === 'compliance') return ['state.apply', [], { test: true }]
+  if (s.kind === 'patches') return ['pkg.list_upgrades', [], { refresh: true }]
+  if (s.kind === 'vulns') return ['cmd.run', [INVENTORY_SCRIPT], { ...INVENTORY_KWARG }]
+  if (s.kind === 'osquery') {
+    const c = osqueryCall(s.args?.sql ?? 'SELECT 1;')
+    return ['cmd.run', c.arg, c.kwarg]
+  }
+  return [s.fun ?? 'test.ping', s.args?.arg ?? [], s.args?.kwarg ?? {}]
+}
+
+/** Runs it on the simulated master, so its jobs are in the history like the server's would be. */
+const start = (s: Kind & { name: string; target: string; targetType: string }, when?: Date, instant?: boolean) => {
+  const [fun, arg, kwarg] = call(s)
+  return demoJob(s.target, s.targetType, fun, arg, kwarg, `schedule:${s.name}`, when, instant)
+}
 
 const next = (cron: string, from = new Date()) => new Cron(cron, { paused: true }).nextRun(from)
 
-/** the last ten runs, one per cron slot before now */
-function history(cron: string, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string): ScheduleRun[] {
-  const c = new Cron(cron, { paused: true })
+type Seed = Kind & { name: string; target: string; targetType: string; cron: string }
+
+/** the last ten runs, one per cron slot before now, each a job in the demo's history */
+function history(s: Seed, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string): ScheduleRun[] {
+  const c = new Cron(s.cron, { paused: true })
   const slots: Date[] = []
   const t = new Date(Date.now() - 40 * 86400_000)
   for (let d = c.nextRun(t); d && d < new Date(); d = c.nextRun(d)) slots.push(d)
-  return slots.slice(-10).map((d, i) => ({ jid: jidAt(d), startedAt: d.toISOString(), status: status(i), detail: detail(i) }))
+  return slots.slice(-10).flatMap((d, i) => {
+    const job = start(s, d, true)
+    return job ? [{ jid: job.jid, startedAt: d.toISOString(), status: status(i), detail: detail(i) }] : []
+  })
 }
 
 let id = 0
 const now = Date.now()
 const schedules: Array<Omit<Schedule, 'nextRunAt' | 'cronError'>> = []
-function seed(s: Omit<Schedule, 'id' | 'nextRunAt' | 'cronError' | 'createdBy' | 'lastRunAt' | 'lastJid' | 'enabled'> & { enabled?: boolean }) {
-  const last = s.recentRuns[s.recentRuns.length - 1]
-  schedules.push({ enabled: true, ...s, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
+function seed(s: Seed & Pick<Schedule, 'lastSummary'>, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string) {
+  const recentRuns = history(s, status, detail)
+  const last = recentRuns[recentRuns.length - 1]
+  schedules.push({ enabled: true, ...s, recentRuns, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
 }
-seed({
-  name: 'Nightly compliance',
-  kind: 'compliance',
-  fun: null,
-  args: null,
-  target: '*',
-  targetType: 'glob',
-  cron: '0 2 * * *',
-  lastSummary: { ok: 4, drift: 1, error: 0, noreturn: 1 },
-  recentRuns: history('0 2 * * *', (i) => (i === 6 ? 'failed' : i > 7 ? 'changed' : 'ok'), (i) => (i > 7 ? '4 ok · 1 drifted · 0 errors · 1 no return' : i === 6 ? '4 ok · 0 drifted · 1 error' : '5 ok · 0 drifted · 0 errors')),
-})
-seed({
-  name: 'Weekly patch scan',
-  kind: 'patches',
-  fun: null,
-  args: null,
-  target: '*',
-  targetType: 'glob',
-  cron: '0 6 * * 1',
-  lastSummary: { needUpdates: 5, packages: 6, scanned: 5 },
-  recentRuns: history('0 6 * * 1', () => 'changed', () => '5 minions with 6 packages to update'),
-})
-seed({
-  name: 'Vulnerability scan',
-  kind: 'vulns',
-  fun: null,
-  args: null,
-  target: '*',
-  targetType: 'glob',
-  cron: '30 3 * * *',
-  lastSummary: { scanned: 6, notCovered: 0, affected: 6, critical: 1, high: 2, fixable: 6, noreturn: 0 },
-  recentRuns: history('30 3 * * *', () => 'ok', () => '6 ok · 0 failed'),
-})
-seed({
-  name: 'Watch SSH keys',
-  kind: 'osquery',
-  fun: null,
-  args: { sql: OSQUERY_LIBRARY.find((q) => q.name === 'Authorized SSH keys')!.sql },
-  target: 'web-*',
-  targetType: 'glob',
-  cron: '0 * * * *',
-  lastSummary: { baseline: false, minions: 2, rows: 3, added: 1, removed: 0, changedMinions: 1, missing: 0, failed: 0, tooLarge: 0, noreturn: 0, examples: [] },
-  recentRuns: history('0 * * * *', () => 'ok', () => '2 ok · 0 failed'),
-})
+seed(
+  { name: 'Nightly compliance', kind: 'compliance', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 2 * * *', lastSummary: { ok: 4, drift: 1, error: 0, noreturn: 1 } },
+  (i) => (i === 6 ? 'failed' : i > 7 ? 'changed' : 'ok'),
+  (i) => (i > 7 ? '4 ok · 1 drifted · 0 errors · 1 no return' : i === 6 ? '4 ok · 0 drifted · 1 error' : '5 ok · 0 drifted · 0 errors'),
+)
+seed(
+  { name: 'Weekly patch scan', kind: 'patches', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 6 * * 1', lastSummary: { needUpdates: 5, packages: 6, scanned: 5 } },
+  () => 'changed',
+  () => '5 minions with 6 packages to update',
+)
+seed(
+  {
+    name: 'Vulnerability scan',
+    kind: 'vulns',
+    fun: null,
+    args: null,
+    target: '*',
+    targetType: 'glob',
+    cron: '30 3 * * *',
+    lastSummary: { scanned: 6, notCovered: 0, affected: 6, critical: 1, high: 2, fixable: 6, noreturn: 0 },
+  },
+  () => 'ok',
+  () => '6 ok · 0 failed',
+)
+seed(
+  {
+    name: 'Watch SSH keys',
+    kind: 'osquery',
+    fun: null,
+    args: { sql: OSQUERY_LIBRARY.find((q) => q.name === 'Authorized SSH keys')!.sql },
+    target: 'web-*',
+    targetType: 'glob',
+    cron: '0 * * * *',
+    lastSummary: { baseline: false, minions: 2, rows: 3, added: 1, removed: 0, changedMinions: 1, missing: 0, failed: 0, tooLarge: 0, noreturn: 0, examples: [] },
+  },
+  () => 'ok',
+  () => '2 ok · 0 failed',
+)
 
 const channels: Channel[] = [
   { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'job_failed'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
@@ -148,10 +169,12 @@ export const demoAutomation: typeof automation = {
     const s = schedules.find((x) => x.id === sid)
     if (!s) return fail('Not found')
     const at = new Date()
-    const jid = jidAt(at)
+    const job = start(s)
+    if (!job) return fail('No minions matched the target')
+    const jid = job.jid
     s.lastRunAt = at.toISOString()
     s.lastJid = jid
-    s.recentRuns = [...s.recentRuns, { jid, startedAt: at.toISOString(), status: 'ok' as const, detail: 'run from the demo' }].slice(-10)
+    s.recentRuns = [...s.recentRuns, { jid, startedAt: at.toISOString(), status: 'ok' as const, detail: `${job.minions.length} minions` }].slice(-10)
     return delay({ jid })
   },
   channels: () => delay({ channels: channels.map((c) => ({ ...c })) }),

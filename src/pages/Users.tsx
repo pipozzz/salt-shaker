@@ -1,6 +1,7 @@
 import { Ban, KeyRound, Plus, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { ROLES, users, type Role, type UserRow } from '../api/server'
+import { demoUsers } from '../api/demo-admin'
+import { ROLES, users as serverUsers, type Role, type UserRow } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSession } from '../lib/session'
@@ -14,9 +15,16 @@ const ROLE_INFO: Record<Role, { tone: Tone; text: string }> = {
 }
 
 /** Local users get a synthetic email; anyone else came in through SSO. */
+/** the server's accounts, or the demo's made-up team */
+function useUsersApi() {
+  const { session } = useSession()
+  return session?.mode === 'demo' ? demoUsers : serverUsers
+}
+
 const isSso = (u: UserRow) => !u.email.endsWith('@users.salt-shaker.invalid')
 
 export function UsersPage() {
+  const users = useUsersApi()
   const { session, server } = useSession()
   const rolesFromIdp = !!server?.sso?.rolesFromIdp
   const list = useAsync(() => users.list(), [])
@@ -185,6 +193,7 @@ export function UsersPage() {
 }
 
 function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const users = useUsersApi()
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
@@ -246,6 +255,7 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
 }
 
 function ResetPasswordModal({ user, onClose }: { user: UserRow | null; onClose: () => void }) {
+  const users = useUsersApi()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)

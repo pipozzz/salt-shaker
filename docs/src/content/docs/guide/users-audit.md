@@ -8,6 +8,8 @@ sidebar: { order: 9 }
 
 Admins create and manage accounts on the **Users** page. Each account has one [role](/salt-shaker/reference/roles/): *admin*, *operator*, *viewer* or *none*. No Linux accounts are needed on the master.
 
+![Users](../../../../screenshots/users.png)
+
 With [single sign-on](/salt-shaker/deploy/sso/), users are created on their first sign-in and marked with the provider's name. They have no password here. When roles come from the provider's groups, they can't be changed on this page.
 
 To stop someone from signing in, give them the *none* role, disable them, or delete them.
@@ -19,6 +21,8 @@ The first admin is created on the first visit to a fresh install.
 ## Audit log
 
 The **Audit log** records every change, plus every denied attempt (the demo has one too, of what you do in it), with who, what, where (client IP) and the resulting jid.
+
+![Audit log](../../../../screenshots/audit.png)
 
 Besides Salt calls, it has the console's own changes: schedules and notification channels (`schedule.*`, `notification.*`), and vulnerabilities accepted or withdrawn (`vulns.accept` with the reason and duration, `vulns.unaccept`).
 

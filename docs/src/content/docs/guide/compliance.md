@@ -11,6 +11,8 @@ sidebar: { order: 2 }
 - **Errors**: states failed to render or run.
 - **No return**: the minion didn't answer.
 
+![Compliance](../../../../screenshots/compliance.png)
+
 **Remediate** opens [Run](/salt-shaker/guide/run/) with `state.apply` prefilled for just the drifted minions, so you can review and start it.
 
 With the server, past checks are kept, so you can follow drift over time.

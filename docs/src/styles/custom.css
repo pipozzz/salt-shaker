@@ -1,0 +1,37 @@
+/* The landing page's hero is a wide screenshot: show all of it, sharp, instead of a square crop. */
+.hero .hero-html {
+  min-width: 0;
+}
+.hero .hero-html img {
+  width: min(100%, 40rem);
+  height: auto;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.35);
+}
+
+/* Screenshots in the guides */
+.sl-markdown-content img {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+}
+
+/* The landing page's gallery */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.5rem;
+}
+.gallery figure {
+  margin: 0;
+}
+.gallery img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+}
+.gallery figcaption {
+  margin-top: 0.4rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-2);
+}

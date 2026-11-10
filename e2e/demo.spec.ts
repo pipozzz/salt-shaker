@@ -331,6 +331,20 @@ test('the demo audits what is done in it, and what was denied', async ({ page })
   expect(lines.slice(1).every((l) => l.includes(',denied,'))).toBe(true)
 })
 
+test('the demo has a team to manage and a System page', async ({ page }) => {
+  await openDemo(page, '/users')
+  await expect(page.getByText('Vic Viewer')).toBeVisible()
+  await page.getByLabel('Role of vic').selectOption('operator')
+  await expect(page.getByLabel('Role of vic')).toHaveValue('operator')
+  // and it's in the audit log
+  await page.getByRole('link', { name: 'Audit log' }).click()
+  await expect(page.getByRole('button', { name: /demo ok user\.set_role → vic/ })).toBeVisible()
+
+  await page.getByRole('link', { name: 'System' }).click()
+  await expect(page.getByText('Connected').first()).toBeVisible()
+  await expect(page.getByText('salt-master.lab.internal').first()).toBeVisible()
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

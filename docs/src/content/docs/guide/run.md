@@ -8,6 +8,8 @@ sidebar: { order: 5 }
 
 **Run** executes any execution module against any target type (glob, PCRE, list, grain, pillar, compound, nodegroup).
 
+![Run](../../../../screenshots/run.png)
+
 - Before you run, you see which minions the target matches.
 - Results stream in live. State output is rendered with diffs.
 - Risky commands on many minions need an explicit confirmation.

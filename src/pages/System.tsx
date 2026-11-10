@@ -2,14 +2,17 @@ import clsx from 'clsx'
 import { RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { demoSystem } from '../api/demo-admin'
 import { system, type SystemStatus } from '../api/server'
+import { useSession } from '../lib/session'
 import { Badge, Button, Card, CardHeader, ErrorBox, PageHeader, Spinner, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { relTime } from '../lib/format'
 
 /** For admins: one place to see whether salt-api, the event bus, the database and notifications work. */
 export function SystemPage() {
-  const { data, error, loading, reload } = useAsync(system, [])
+  const { session } = useSession()
+  const { data, error, loading, reload } = useAsync(session?.mode === 'demo' ? demoSystem : system, [])
   return (
     <>
       <PageHeader

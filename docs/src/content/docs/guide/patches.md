@@ -8,6 +8,8 @@ sidebar: { order: 3 }
 
 You can upgrade one package on every minion where it's pending, or everything on one minion.
 
+![Patches](../../../../screenshots/patches.png)
+
 ## Security fixes
 
 With the server or in the demo, upgrades that fix a vulnerability from the latest [vulnerability report](/salt-shaker/guide/vulnerabilities/) are marked in the **Fixes** column with the worst severity and the number of vulnerabilities. They're sorted to the top, and **Fixes vulnerabilities** shows only them. A badge links to the vulnerability on the Vulnerabilities page.

@@ -76,6 +76,8 @@ export function Layout() {
         ? [
             { to: '/schedules', label: 'Schedules', icon: CalendarClock },
             { to: '/notifications', label: 'Notifications', icon: BellRing },
+            { to: '/users', label: 'Users', icon: Users },
+            { to: '/system', label: 'System', icon: Gauge },
           ]
         : []),
   ]

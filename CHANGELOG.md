@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Demo**
+
+- The demo has **Users** (a made-up team with every role, to try role changes and locking accounts) and a **System** page, so every page can be tried without a server.
+
+**Docs**
+
+- Screenshots for Compliance, Patches, Run, Users and the audit log, a gallery on the landing page, and a sharp, uncropped picture at the top of it.
+
 ## 1.13.0
 
 **Notifications**

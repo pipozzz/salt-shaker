@@ -10,6 +10,7 @@ export default defineConfig({
       title: 'Salt Shaker',
       description: 'A web UI for SaltStack on top of salt-api.',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/pipozzz/salt-shaker' }],
+      customCss: ['./src/styles/custom.css'],
       editLink: { baseUrl: 'https://github.com/pipozzz/salt-shaker/edit/main/docs/' },
       sidebar: [
         { label: 'Start here', items: [{ autogenerate: { directory: 'start' } }] },

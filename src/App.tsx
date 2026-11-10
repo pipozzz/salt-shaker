@@ -56,11 +56,11 @@ function Gate() {
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />
         <Route path="events" element={<EventsPage />} />
-        {session.mode === 'server' && session.eauth === 'admin' && <Route path="users" element={<UsersPage />} />}
+        {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="users" element={<UsersPage />} />}
         {/* the demo keeps made-up schedules and channels in memory */}
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="schedules" element={<SchedulesPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="notifications" element={<NotificationsPage />} />}
-        {session.mode === 'server' && session.eauth === 'admin' && <Route path="system" element={<SystemPage />} />}
+        {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="system" element={<SystemPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator'))) && <Route path="audit" element={<AuditPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

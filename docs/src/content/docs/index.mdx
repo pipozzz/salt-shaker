@@ -5,7 +5,8 @@ template: splash
 hero:
   tagline: A web UI for SaltStack that works with your master through salt-api. One container, with its own users, roles and audit log.
   image:
-    file: ../../../screenshots/minions.png
+    # full size, not the 400px Starlight makes of a file; a copy of screenshots/minions.png
+    html: '<img src="/salt-shaker/hero-minions.png" alt="The Minions page" width="1440" height="900" />'
   actions:
     - text: Try it
       link: /salt-shaker/start/quickstart/
@@ -16,6 +17,15 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components'
+import { Image } from 'astro:assets'
+import compliance from '../../../screenshots/compliance.png'
+import vulnerabilities from '../../../screenshots/vulnerabilities.png'
+import query from '../../../screenshots/query.png'
+import patches from '../../../screenshots/patches.png'
+import run from '../../../screenshots/run.png'
+import schedules from '../../../screenshots/schedules.png'
+import audit from '../../../screenshots/audit.png'
+import dark from '../../../screenshots/minions-dark.png'
 
 <CardGrid>
   <Card title="Fleet at a glance" icon="laptop">
@@ -40,3 +50,19 @@ import { Card, CardGrid } from '@astrojs/starlight/components'
     Nightly compliance checks, patch and vulnerability scans and watched osquery queries, with alerts to Slack, Microsoft Teams or any webhook.
   </Card>
 </CardGrid>
+
+## A look around
+
+Everything here is the [demo](/salt-shaker/start/quickstart/), which runs in your browser with a simulated master.
+
+<div class="gallery">
+  <figure><a href="/salt-shaker/guide/compliance/"><Image src={compliance} alt="Compliance: minions grouped by drift" /></a><figcaption>Compliance: what would change, and one click to remediate</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/vulnerabilities/"><Image src={vulnerabilities} alt="Vulnerabilities with a 90-day trend" /></a><figcaption>Vulnerabilities from OSV.dev, with a 90-day trend</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/patches/"><Image src={patches} alt="Patches with security fixes marked" /></a><figcaption>Patches, with the upgrades that fix something marked</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/query/"><Image src={query} alt="An osquery query across the fleet" /></a><figcaption>One osquery query, every minion's answer in one table</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/run/"><Image src={run} alt="A dry-run highstate with diffs" /></a><figcaption>Run anything, with state output and diffs</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/schedules/"><Image src={schedules} alt="Schedules with their recent runs" /></a><figcaption>Schedules, their last runs, and what a watched query found</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/users-audit/#audit-log"><Image src={audit} alt="The audit log" /></a><figcaption>The audit log, denied attempts included</figcaption></figure>
+  <figure><a href="/salt-shaker/guide/minions/"><Image src={dark} alt="Dark mode" /></a><figcaption>Dark mode</figcaption></figure>
+</div>
+

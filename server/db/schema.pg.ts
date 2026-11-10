@@ -206,3 +206,12 @@ export const vulnDaily = pgTable('vuln_daily', {
   minions: integer('minions').notNull(),
   affected: integer('affected').notNull(),
 })
+
+/** osquery queries the team saved, offered on the Query page next to the built-in library. */
+export const savedQuery = pgTable('saved_query', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  sql: text('sql').notNull(),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})

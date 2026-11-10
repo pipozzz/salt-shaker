@@ -156,6 +156,37 @@ test('accepting the risk of a vulnerability takes it out of the list until withd
   await expect(page.getByRole('button', { name: 'Show minions with DEMO-2025-0912' })).toBeVisible()
 })
 
+test('osquery answers in one table, and installs where it is missing', async ({ page }) => {
+  await openDemo(page, '/query')
+  await page.getByRole('button', { name: /Listening ports/ }).click()
+  await page.getByRole('button', { name: 'Run query' }).click()
+  await expect(page.getByRole('row', { name: /web-01 nginx 443/ })).toBeVisible()
+  await expect(page.getByText(/osquery is not installed on worker-01/)).toBeVisible()
+
+  await page.getByPlaceholder('Filter rows…').fill('postgres')
+  await expect(page.getByRole('row', { name: /db-01 postgres 5432/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /nginx/ })).toHaveCount(0)
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  const lines = (await readFile(await (await download).path(), 'utf8')).trim().split('\r\n')
+  expect(lines).toEqual(['minion,name,port,protocol,address,pid,path', 'db-01,postgres,5432,6,10.0.2.21,1530,/usr/lib/postgresql/15/bin/postgres'])
+
+  await page.getByPlaceholder('Filter rows…').fill('')
+
+  // only one SELECT runs
+  await page.getByLabel('SQL').fill('DELETE FROM users')
+  await expect(page.getByText('Only SELECT queries can run here')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Run query' })).toBeDisabled()
+  await page.getByRole('button', { name: /Listening ports/ }).click()
+
+  await page.getByRole('button', { name: 'Install osquery…' }).click()
+  await page.getByRole('button', { name: 'Install on 1 minion' }).click()
+  await expect(page.getByText('Installed on 1 of 1.')).toBeVisible()
+  await page.getByRole('button', { name: 'Run the query again' }).click()
+  await expect(page.getByRole('row', { name: /worker-01 sshd 22/ })).toBeVisible()
+  await expect(page.getByText(/osquery is not installed/)).toHaveCount(0)
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

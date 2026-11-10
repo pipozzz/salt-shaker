@@ -373,6 +373,20 @@ export const targets = {
   remove: (id: number) => send('DELETE', `/api/targets/${id}`),
 }
 
+export interface SavedQuery {
+  id: number
+  name: string
+  sql: string
+  createdBy: string | null
+}
+
+/** osquery queries saved for the team */
+export const queries = {
+  list: () => request<{ queries: SavedQuery[] }>('/api/queries'),
+  save: (q: { name: string; sql: string }) => send<{ query: SavedQuery }>('POST', '/api/queries', q),
+  remove: (id: number) => send('DELETE', `/api/queries/${id}`),
+}
+
 export const automation = {
   meta: () => request<AutomationMeta>('/api/automation/meta'),
   schedules: () => request<{ schedules: Schedule[] }>('/api/schedules'),

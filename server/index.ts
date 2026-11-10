@@ -23,6 +23,7 @@ import { systemStatus } from './system'
 import { OsvClient, VulnService } from './vulns'
 import { automationRoutes } from './routes/automation'
 import { targetRoutes } from './routes/targets'
+import { queryRoutes } from './routes/queries'
 import { vulnRoutes } from './routes/vulns'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
@@ -378,6 +379,7 @@ scheduler.vulns = vulns
 scheduler.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 app.route('/api', targetRoutes({ db, schema }))
+app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', vulnRoutes({ vulns, audit }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 

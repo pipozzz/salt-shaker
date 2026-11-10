@@ -208,3 +208,12 @@ export const vulnDaily = sqliteTable('vuln_daily', {
   minions: integer('minions').notNull(),
   affected: integer('affected').notNull(),
 })
+
+/** osquery queries the team saved, offered on the Query page next to the built-in library. */
+export const savedQuery = sqliteTable('saved_query', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  sql: text('sql').notNull(),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})

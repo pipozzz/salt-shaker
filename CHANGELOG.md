@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Query**
+
+- New **Query** page: run an [osquery](https://osquery.io) SQL query on a target and see every minion's rows in one table, filter them and export them as CSV. A library has ready-made queries (listening ports, logged-in users, SSH keys, SUID binaries, cron jobs, kernel modules, processes, OS); with the server, operators and admins save queries for the team. Only one SELECT runs at a time, through `cmd.run`.
+- Minions without osquery are listed with **Install osquery…**, which adds the official `pkg.osquery.io` repository and installs it with apt or dnf/yum.
+
 **Vulnerabilities**
 
 - A **Last 90 days** chart on the Vulnerabilities page shows how the critical, high and fixable vulnerabilities changed, from totals the server keeps for every day.

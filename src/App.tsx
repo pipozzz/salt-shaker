@@ -17,6 +17,7 @@ import { MinionsPage } from './pages/Minions'
 import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
+import { QueryPage } from './pages/Query'
 import { AuditPage } from './pages/Audit'
 import { UsersPage } from './pages/Users'
 import { NotificationsPage } from './pages/Notifications'
@@ -49,6 +50,7 @@ function Gate() {
         {session.mode !== 'live' && <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />}
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
+        <Route path="query" element={<QueryPage />} />
         <Route path="orchestrate" element={<OrchestratePage />} />
         <Route path="jobs" element={<JobsSwitch />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />

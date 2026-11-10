@@ -1,3 +1,5 @@
+import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
+import { demoOsquery } from './demo-osquery'
 import { SaltError, type FileTree, type Grains, type JobSummary, type KeyList, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /**
@@ -255,6 +257,7 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
     }
     case 'cmd.run': {
       const cmd = String(arg[0] ?? '')
+      if (cmd.startsWith('osqueryi') || cmd.includes(OSQUERY_INSTALL_MARKER)) return demoOsquery(id, String(g.os), String(g.osrelease), cmd, String(kwarg.stdin ?? ''))
       if (cmd.startsWith('uptime')) return ` ${new Date().toTimeString().slice(0, 8)} up ${rand(2, 90)} days,  ${rand(0, 23)}:${String(rand(0, 59)).padStart(2, '0')},  0 users,  load average: 0.${rand(0, 99)}, 0.${rand(0, 99)}, 0.${rand(0, 99)}`
       if (cmd.startsWith('hostname')) return id
       if (cmd.startsWith('df')) return `Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        78G   ${rand(9, 60)}G   ${rand(10, 60)}G  ${rand(12, 80)}% /\ntmpfs           2.0G     0  2.0G   0% /dev/shm`

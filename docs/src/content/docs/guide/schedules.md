@@ -1,7 +1,7 @@
 ---
 title: Schedules & Notifications
 description: Run checks on a schedule and send alerts to Slack, Microsoft Teams or a webhook.
-sidebar: { order: 7 }
+sidebar: { order: 8 }
 ---
 
 Both pages are for admins and need the server.

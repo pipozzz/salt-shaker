@@ -1,7 +1,7 @@
 ---
 title: Users & Audit log
 description: Manage accounts and review who did what.
-sidebar: { order: 8 }
+sidebar: { order: 9 }
 ---
 
 ## Users

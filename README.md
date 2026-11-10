@@ -17,6 +17,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Vulnerabilities:** known CVEs in the installed packages, from the distributions' security trackers via OSV.dev, with the fixed version and a one-click upgrade.
 - **Enrollment:** accept or reject keys after checking fingerprints. Generates bootstrap commands, including **pre-seeded keys**, so a new minion is trusted on first contact.
 - **Run:** any execution module against any target type. You see which minions the target matches before you run. Results stream in live, and state output is rendered with diffs. Risky commands on many minions need an explicit confirmation.
+- **Query:** ask minions questions in SQL with osquery (ports, users, SSH keys, processes…) and get one table across the fleet, with a library of ready-made queries, team-saved queries and CSV export. Installs osquery where it's missing.
 - **Orchestrate:** runs `state.orchestrate` files, with dry-run and pillar overrides, and shows step-by-step results with per-minion output.
 - **Jobs:** full results and *run again*. With the server, jobs are recorded from the event bus and kept for 90 days by default (the master keeps them about 24 hours). That includes jobs run from the salt CLI, along with who ran them.
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.

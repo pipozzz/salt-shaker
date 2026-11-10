@@ -145,3 +145,35 @@ export function vulnMessage(name: string, target: string, v: { scanned: number; 
     path: '/vulnerabilities',
   }
 }
+
+interface AcceptanceLine {
+  vulnId: string
+  note: string
+  acceptedBy: string | null
+  expiresAt: Date | null
+  severity: string | null
+  minions: number
+}
+
+const acceptanceLine = (a: AcceptanceLine) =>
+  `${a.vulnId} (${[a.severity, `${minions(a.minions)}`].filter(Boolean).join(', ')}): "${a.note}", accepted by ${a.acceptedBy ?? 'someone'}${a.expiresAt ? `, ends ${a.expiresAt.toISOString().slice(0, 10)}` : ''}`
+
+/** One message for the acceptances about to end, one for those that ended (they count again). */
+export function acceptanceMessages(soon: AcceptanceLine[], ended: AcceptanceLine[]): Message[] {
+  const out: Message[] = []
+  if (soon.length)
+    out.push({
+      title: soon.length === 1 ? `Risk acceptance of ${soon[0].vulnId} ends within 3 days` : `${soon.length} risk acceptances end within 3 days`,
+      lines: [...soon.map(acceptanceLine), 'Accept it again to extend it, or plan the upgrade.'],
+      severity: 'warning',
+      path: '/vulnerabilities?view=accepted',
+    })
+  if (ended.length)
+    out.push({
+      title: ended.length === 1 ? `Risk acceptance of ${ended[0].vulnId} ended; it counts again` : `${ended.length} risk acceptances ended; they count again`,
+      lines: ended.map(acceptanceLine),
+      severity: ended.some((a) => a.severity === 'critical' || a.severity === 'high') ? 'error' : 'warning',
+      path: '/vulnerabilities',
+    })
+  return out
+}

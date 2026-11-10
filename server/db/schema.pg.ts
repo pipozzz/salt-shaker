@@ -192,6 +192,9 @@ export const vulnAcceptance = pgTable('vuln_acceptance', {
   acceptedBy: text('accepted_by'),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
+  // when the "ends soon" and "ended" notifications went out, so each goes out once
+  warnedAt: timestamp('warned_at', { withTimezone: true }),
+  endedNotifiedAt: timestamp('ended_notified_at', { withTimezone: true }),
 })
 
 /** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */

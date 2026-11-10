@@ -8,6 +8,7 @@ export const EVENTS = {
   patches: 'A scheduled patch scan found upgrades',
   vulns: 'A scheduled vulnerability scan found critical or high vulnerabilities with a fix',
   osquery: "A scheduled osquery query's results changed since its last run",
+  acceptance: 'An accepted vulnerability risk ends within 3 days, or has ended',
   schedule: 'Any scheduled run finished',
   job_failed: 'A job failed on any minion',
   pending_key: 'A new minion is waiting for key approval',

@@ -22,6 +22,7 @@ const EVENTS: Record<NotifyEvent, string> = {
   patches: 'A scheduled patch scan found upgrades',
   vulns: 'A scheduled vulnerability scan found critical or high vulnerabilities with a fix',
   osquery: "A scheduled osquery query's results changed since its last run",
+  acceptance: 'An accepted vulnerability risk ends within 3 days, or has ended',
   schedule: 'Any scheduled run finished',
   job_failed: 'A job failed on any minion',
   pending_key: 'A new minion is waiting for key approval',
@@ -115,7 +116,7 @@ seed(
 )
 
 const channels: Channel[] = [
-  { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'job_failed'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
+  { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'acceptance', 'job_failed'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
   { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null },
 ]
 

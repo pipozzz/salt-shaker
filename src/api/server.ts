@@ -300,7 +300,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 // ---- automation (admin) ----
 
 export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
 
 export interface Schedule {
   id: number

@@ -194,6 +194,9 @@ export const vulnAcceptance = sqliteTable('vuln_acceptance', {
   acceptedBy: text('accepted_by'),
   acceptedAt: integer('accepted_at', { mode: 'timestamp_ms' }).notNull(),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+  // when the "ends soon" and "ended" notifications went out, so each goes out once
+  warnedAt: integer('warned_at', { mode: 'timestamp_ms' }),
+  endedNotifiedAt: integer('ended_notified_at', { mode: 'timestamp_ms' }),
 })
 
 /** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */

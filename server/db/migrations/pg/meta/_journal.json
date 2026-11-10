@@ -71,6 +71,13 @@
       "when": 1794297797511,
       "tag": "0009_saved_query",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794314726638,
+      "tag": "0010_acceptance_notices",
+      "breakpoints": true
     }
   ]
 }

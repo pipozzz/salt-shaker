@@ -7,7 +7,7 @@ import { osqueryDiff, osqueryMessage } from './osquery'
 import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
-import { complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
+import { acceptanceMessages, complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
 import { vulnScanSummary, type VulnService } from './vulns'
 
 export const SCHEDULE_KINDS = {
@@ -51,6 +51,7 @@ export function lowstateFor(s: Pick<ScheduleRow, 'id' | 'name' | 'kind' | 'fun' 
 }
 
 const TICK_MS = 20_000
+const ACCEPTANCE_CHECK_MS = 5 * 60_000
 // give slow highstates time to finish before summarizing what came back
 const RESULT_DEADLINE_MS = 15 * 60_000
 
@@ -113,6 +114,7 @@ export class Scheduler {
         if (claimed.length) await this.run({ ...s, lastRunAt: now })
       }
       await this.collect()
+      await this.checkAcceptances()
     } catch (e) {
       console.warn('scheduler: tick failed', e)
     } finally {
@@ -157,6 +159,16 @@ export class Scheduler {
       .values({ jid, fun: low.fun, args: JSON.stringify(args), target: low.tgt, targetType: low.tgt_type, shakerUser: who, minions: JSON.stringify(minions), dryRun: isDryRun(args), startedAt: new Date() })
       .onConflictDoNothing()
     await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
+  }
+
+  private acceptancesCheckedAt = 0
+
+  /** Announces accepted risks that end soon or have ended; every few minutes is plenty. */
+  async checkAcceptances(force = false) {
+    if (!this.vulns || (!force && Date.now() - this.acceptancesCheckedAt < ACCEPTANCE_CHECK_MS)) return
+    this.acceptancesCheckedAt = Date.now()
+    const { soon, ended } = await this.vulns.acceptanceNotices()
+    for (const msg of acceptanceMessages(soon, ended)) await this.notifier.emit('acceptance', msg)
   }
 
   /** The returns of the schedule's run before `jid`, to compare a query's rows with. */

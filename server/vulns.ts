@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, like, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, like, sql } from 'drizzle-orm'
 import { INVENTORY_MARKER } from '../src/lib/inventory'
 import { compareVersions } from '../src/lib/pkgversion'
 import type { Db, Schema } from './db'
@@ -239,6 +239,11 @@ export interface Acceptance {
   expiresAt: Date | null
 }
 
+export type AcceptanceNotice = Acceptance & { severity: Severity | null; minions: number }
+
+/** how long before an acceptance ends that it's announced */
+export const ACCEPTANCE_WARNING_MS = 3 * 86400_000
+
 /** The report without the accepted vulnerabilities. */
 export function withoutAccepted(report: VulnReport, accepted: Map<string, Acceptance>): VulnReport {
   if (!accepted.size) return report
@@ -409,7 +414,46 @@ export class VulnService {
   /** Accepts the risk of a vulnerability on every minion, replacing an earlier acceptance. */
   async accept(a: Acceptance) {
     const t = this.schema.vulnAcceptance
-    await this.db.insert(t).values(a).onConflictDoUpdate({ target: t.vulnId, set: { note: a.note, acceptedBy: a.acceptedBy, acceptedAt: a.acceptedAt, expiresAt: a.expiresAt } })
+    await this.db.insert(t).values(a).onConflictDoUpdate({ target: t.vulnId, set: { note: a.note, acceptedBy: a.acceptedBy, acceptedAt: a.acceptedAt, expiresAt: a.expiresAt, warnedAt: null, endedNotifiedAt: null } })
+  }
+
+  /**
+   * Acceptances ending within three days, and those that have ended, that nobody was told about
+   * yet. Each is claimed in the database first, so it's announced once, by one server instance.
+   */
+  async acceptanceNotices(): Promise<{ soon: AcceptanceNotice[]; ended: AcceptanceNotice[] }> {
+    const t = this.schema.vulnAcceptance
+    const now = new Date(this.now())
+    const rows = await this.db.select().from(t).where(isNotNull(t.expiresAt))
+    const soon: Acceptance[] = []
+    const ended: Acceptance[] = []
+    for (const r of rows) {
+      const left = +r.expiresAt! - +now
+      if (left <= 0 && !r.endedNotifiedAt) {
+        const claimed = await this.db.update(t).set({ endedNotifiedAt: now }).where(and(eq(t.vulnId, r.vulnId), isNull(t.endedNotifiedAt))).returning({ id: t.vulnId })
+        if (claimed.length) ended.push(r)
+      } else if (left > 0 && left <= ACCEPTANCE_WARNING_MS && !r.warnedAt) {
+        const claimed = await this.db.update(t).set({ warnedAt: now }).where(and(eq(t.vulnId, r.vulnId), isNull(t.warnedAt))).returning({ id: t.vulnId })
+        if (claimed.length) soon.push(r)
+      }
+    }
+    if (!soon.length && !ended.length) return { soon: [], ended: [] }
+    // what each one covers, from the report with the accepted ones in it
+    const all = this.report
+    const where = (id: string) => {
+      let severity: Severity | null = null
+      let minions = 0
+      for (const m of all?.minions ?? []) {
+        const f = m.findings.find((x) => x.vuln.id === id)
+        if (f) {
+          severity = f.vuln.severity
+          minions++
+        }
+      }
+      return { severity, minions }
+    }
+    const notice = (a: Acceptance): AcceptanceNotice => ({ ...a, ...where(a.vulnId) })
+    return { soon: soon.map(notice), ended: ended.map(notice) }
   }
 
   async unaccept(vulnId: string): Promise<boolean> {

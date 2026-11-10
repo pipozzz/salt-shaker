@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Vulnerabilities**
+
+- A new **Risk acceptances** notification says when an accepted risk ends within 3 days, and again when it has ended and the vulnerability counts again. Accepting it again starts over.
+
 **Query**
 
 - A watched query's schedule lists what changed in its last run (**What changed in the last run**), and **Query** on a minion's page opens the Query page on that minion.

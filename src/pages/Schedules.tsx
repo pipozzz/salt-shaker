@@ -183,7 +183,7 @@ export function SchedulesPage() {
         title="Schedules"
         description={
           <>
-            Compliance checks, patch scans or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
+            Compliance checks, patch and vulnerability scans, watched osquery queries or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
             <Link to="/notifications" className="text-accent-700 hover:underline dark:text-accent-400">
               Notifications
             </Link>

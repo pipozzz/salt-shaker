@@ -4,11 +4,11 @@ description: Run checks on a schedule and send alerts to Slack, Microsoft Teams 
 sidebar: { order: 8 }
 ---
 
-Both pages are for admins and need the server.
+Both pages need the server, and only admins manage them; the demo has a few to try, kept in the browser.
+
+![Schedules](../../../../screenshots/schedules.png)
 
 ## Schedules
-
-Schedules and notifications need the server, and only admins manage them. The demo has a few to try, kept in the browser.
 
 **Schedules** runs jobs on a cron schedule:
 

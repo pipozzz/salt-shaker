@@ -34,6 +34,10 @@ The [Minions](/salt-shaker/guide/minions/) list gets a **Vulnerabilities** colum
 
 The rating is the distribution's own when it has one: Ubuntu's priority, the Red Hat style rating of AlmaLinux and Rocky Linux advisories, or Debian's urgency. Distributions rate a CVE for how the package is built and used there, so it can be lower than the CVSS score; Debian, for instance, marks disputed issues *unimportant*. Without a distribution rating, the CVSS v3 base score decides (9.0 and up critical, 7.0 high, 4.0 medium). The score is shown next to the rating. *Unrated* means neither is known yet.
 
+### Trend
+
+With the server, the report's totals are kept for every day: distinct critical and high vulnerabilities, how many have a fix, and how many minions are affected. Once there are two days, **Last 90 days** charts them above the list; hover a day to see its numbers. Accepted vulnerabilities are left out, and a day when OSV.dev couldn't be reached isn't recorded.
+
 ## Accepting a risk
 
 Some vulnerabilities don't matter where you run the package: the service isn't exposed, or the fix comes with the next image rebuild. Open the vulnerability and choose **Accept risk…**, say why, and pick how long: 30 days, 90 days, a year or until withdrawn. Operators and admins can do this.

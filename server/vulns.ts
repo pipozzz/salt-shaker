@@ -244,6 +244,28 @@ export function withoutAccepted(report: VulnReport, accepted: Map<string, Accept
   return { ...report, minions: report.minions.map((m) => ({ ...m, findings: m.findings.filter((f) => !accepted.has(f.vuln.id)) })) }
 }
 
+export type VulnTotals = Record<Severity, number> & { fixable: number; minions: number; affected: number }
+
+/** Distinct vulnerabilities by severity and with a fix, and how many scanned minions have any. */
+export function vulnTotals(report: VulnReport): VulnTotals {
+  const seen = new Map<string, Severity>()
+  const fixable = new Set<string>()
+  let minions = 0
+  let affected = 0
+  for (const m of report.minions) {
+    if (m.error) continue
+    minions++
+    if (m.findings.length) affected++
+    for (const f of m.findings) {
+      seen.set(f.vuln.id, f.vuln.severity)
+      if (f.fixed) fixable.add(f.vuln.id)
+    }
+  }
+  const t = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0, fixable: fixable.size, minions, affected }
+  for (const sev of seen.values()) t[sev]++
+  return t
+}
+
 export interface VulnReport {
   builtAt: Date
   minions: MinionVulns[]
@@ -392,7 +414,31 @@ export class VulnService {
    */
   async get(waitMs = 20_000): Promise<{ report: VulnReport | null; all: VulnReport | null; accepted: Map<string, Acceptance>; updating: boolean }> {
     const [got, accepted] = await Promise.all([this.current(waitMs), this.accepted()])
-    return { ...got, all: got.report, report: got.report && withoutAccepted(got.report, accepted), accepted }
+    const report = got.report && withoutAccepted(got.report, accepted)
+    if (report) await this.record(report).catch((e) => console.warn('vulns: recording the daily totals failed', e))
+    return { ...got, all: got.report, report, accepted }
+  }
+
+  private recorded = ''
+
+  /** Keeps today's totals (UTC) for the trend; written only when they change. */
+  private async record(report: VulnReport) {
+    // an incomplete report (OSV unreachable) or one without inventories says nothing about the trend
+    if (report.error || !report.minions.length) return
+    const day = new Date(this.now()).toISOString().slice(0, 10)
+    const totals = vulnTotals(report)
+    const key = `${day}|${JSON.stringify(totals)}`
+    if (key === this.recorded) return
+    const t = this.schema.vulnDaily
+    await this.db.insert(t).values({ day, ...totals }).onConflictDoUpdate({ target: t.day, set: totals })
+    this.recorded = key
+  }
+
+  /** The daily totals of the last `days` days, oldest first. */
+  async trend(days: number): Promise<Array<VulnTotals & { day: string }>> {
+    const t = this.schema.vulnDaily
+    const since = new Date(this.now() - days * 86400_000).toISOString().slice(0, 10)
+    return this.db.select().from(t).where(gte(t.day, since)).orderBy(t.day)
   }
 
   private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {

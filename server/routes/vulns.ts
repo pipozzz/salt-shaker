@@ -155,6 +155,12 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
     return c.json({ ...status(got), minions: out })
   })
 
+  /** The report's daily totals (accepted vulnerabilities left out), oldest first: ?days=90 (at most 730). */
+  r.get('/vulns/trend', async (c) => {
+    const days = Math.min(Math.max(Number(c.req.query('days')) || 90, 1), 730)
+    return c.json({ days: await vulns.trend(days) })
+  })
+
   /** What was found on one minion. */
   r.get('/vulns/minions/:id', async (c) => {
     const got = await vulns.get()

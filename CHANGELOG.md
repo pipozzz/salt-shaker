@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Vulnerabilities**
+
+- A **Last 90 days** chart on the Vulnerabilities page shows how the critical, high and fixable vulnerabilities changed, from totals the server keeps for every day.
+
 ## 1.9.0
 
 **Vulnerabilities**

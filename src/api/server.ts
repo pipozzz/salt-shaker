@@ -479,6 +479,9 @@ export interface VulnAccepted extends VulnAcceptance {
   minions: number
 }
 
+/** The report's totals on one day (UTC): distinct vulnerabilities by severity, with a fix, and minions */
+export type VulnDay = Record<Severity, number> & { day: string; fixable: number; minions: number; affected: number }
+
 export const vulns = {
   // a short wait: while the server is still building, the page polls and shows the progress
   report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[]; accepted: VulnAccepted[] }>('/api/vulns?wait=3000'),
@@ -497,6 +500,7 @@ export const vulns = {
   byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[]; acceptance: VulnAcceptance | null }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
   /** accept the risk of a vulnerability, for `days` or until withdrawn */
   accept: (id: string, note: string, days: number | null) => post<{ accepted: VulnAcceptance & { id: string } }>('/api/vulns/accepted', { id, note, days }),
+  trend: (days = 90) => request<{ days: VulnDay[] }>(`/api/vulns/trend?days=${days}`),
   unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */
   fixes: (wait = 0) => request<VulnStatus & { minions: VulnFixes }>(`/api/vulns/fixes?wait=${wait}`),

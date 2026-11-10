@@ -193,3 +193,16 @@ export const vulnAcceptance = pgTable('vuln_acceptance', {
   acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
 })
+
+/** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */
+export const vulnDaily = pgTable('vuln_daily', {
+  day: text('day').primaryKey(),
+  critical: integer('critical').notNull(),
+  high: integer('high').notNull(),
+  medium: integer('medium').notNull(),
+  low: integer('low').notNull(),
+  unknown: integer('unknown').notNull(),
+  fixable: integer('fixable').notNull(),
+  minions: integer('minions').notNull(),
+  affected: integer('affected').notNull(),
+})

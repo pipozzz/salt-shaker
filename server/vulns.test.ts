@@ -283,6 +283,11 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     ])
     expect((await get('/vulns?only=minions&wait=0')).body.vulns).toEqual([])
 
+    // each day's totals are kept for the trend
+    const today = new Date(NOW).toISOString().slice(0, 10)
+    expect((await get('/vulns/trend')).body.days).toEqual([{ day: today, critical: 1, high: 0, medium: 0, low: 1, unknown: 0, fixable: 1, minions: 2, affected: 2 }])
+    expect((await get('/vulns/trend', '')).status).toBe(401)
+
     const web = await get('/vulns/minions/web')
     expect((web.body.findings as { id: string; fixed: string | null }[]).map((f) => [f.id, f.fixed])).toEqual([
       ['DEBIAN-CVE-2024-1', '3.0.15-1~deb12u1'],
@@ -321,6 +326,8 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     expect(after.body.accepted).toMatchObject([{ id: 'DEBIAN-CVE-2024-1', vuln: { severity: 'critical' }, packages: ['openssl'], minions: 1, note: 'behind a firewall', acceptedBy: 'ops' }])
     expect((after.body.minions as { minion: string; counts: { critical: number } }[]).find((m) => m.minion === 'web')!.counts.critical).toBe(0)
     expect((await get('/vulns/fixes')).body.minions).toEqual({})
+    // an accepted vulnerability leaves today's totals too
+    expect((await get('/vulns/trend')).body.days).toMatchObject([{ day: today, critical: 0, low: 1, fixable: 0 }])
     expect((await get('/vulns/by-id/DEBIAN-CVE-2024-1')).body.acceptance).toMatchObject({ note: 'behind a firewall', acceptedBy: 'ops' })
     expect(vulnScanSummary((await svc.get()).report!, '1', 2).critical).toBe(0)
     const del = (id: string, user: string) => app.request(`/api/vulns/accepted/${id}`, { method: 'DELETE', headers: { 'x-user': user } })

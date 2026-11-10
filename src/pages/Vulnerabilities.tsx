@@ -6,7 +6,8 @@ import { demoVulns } from '../api/demo-vulns'
 import { vulns as serverVulns, type Severity, type SeverityCounts, type Vuln, type VulnAccepted, type VulnFinding, type VulnMinion, type VulnSummary } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Select, Spinner, Stat, Tabs, type Tone } from '../components/ui'
+import { VulnTrend } from '../components/VulnTrend'
+import { Badge, Button, ButtonLink, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Select, Spinner, Stat, Tabs, type Tone } from '../components/ui'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { download, findingsCsv } from '../lib/export'
@@ -120,6 +121,7 @@ export function VulnerabilitiesPage() {
   // a finished scan brings new inventories
   const scanDone = !!scan.run?.done
   const report = useAsync(() => vulns.report(), [vulns, reloads, scanDone])
+  const trend = useAsync(() => vulns.trend(90).catch(() => ({ days: [] })), [vulns, reloads, scanDone])
   const data = report.data
   // the server keeps building in the background; ask again until it's done
   useEffect(() => {
@@ -277,6 +279,15 @@ export function VulnerabilitiesPage() {
             <Stat label="With a fix available" value={all.filter((v) => v.fixable > 0).length} icon={<Wrench />} tone="accent" hint={`of ${all.length} known`} />
             <Stat label="Minions affected" value={`${affected}/${scanned.length}`} icon={<Server />} tone="zinc" hint={data.minions.length > scanned.length ? `${data.minions.length - scanned.length} not covered` : undefined} />
           </div>
+
+          {(trend.data?.days.length ?? 0) >= 2 && (
+            <Card className="mb-6">
+              <CardHeader title="Last 90 days" subtitle="Distinct vulnerabilities each day, accepted ones left out" />
+              <div className="p-4">
+                <VulnTrend days={trend.data!.days} />
+              </div>
+            </Card>
+          )}
 
           <Card>
             <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800">

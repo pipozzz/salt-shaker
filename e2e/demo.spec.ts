@@ -126,6 +126,15 @@ test('vulnerabilities are listed by severity and a fix opens Run with the upgrad
   await expect(page.getByLabel('Arguments')).toHaveValue(`pkgs='["nginx","nginx-common"]' only_upgrade=True`)
 })
 
+test('the vulnerability trend shows each day on hover', async ({ page }) => {
+  await openDemo(page, '/vulnerabilities')
+  const chart = page.getByRole('img', { name: /^Vulnerabilities over \d+ days/ })
+  await expect(chart).toBeVisible()
+  const box = (await chart.boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.62, box.y + box.height / 2)
+  await expect(page.getByText(/\d+\/6 minions affected/)).toBeVisible()
+})
+
 test('accepting the risk of a vulnerability takes it out of the list until withdrawn', async ({ page }) => {
   await openDemo(page, '/vulnerabilities')
   await page.getByRole('button', { name: 'Show minions with DEMO-2025-0912' }).click()

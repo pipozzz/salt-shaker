@@ -195,3 +195,16 @@ export const vulnAcceptance = sqliteTable('vuln_acceptance', {
   acceptedAt: integer('accepted_at', { mode: 'timestamp_ms' }).notNull(),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
 })
+
+/** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */
+export const vulnDaily = sqliteTable('vuln_daily', {
+  day: text('day').primaryKey(),
+  critical: integer('critical').notNull(),
+  high: integer('high').notNull(),
+  medium: integer('medium').notNull(),
+  low: integer('low').notNull(),
+  unknown: integer('unknown').notNull(),
+  fixable: integer('fixable').notNull(),
+  minions: integer('minions').notNull(),
+  affected: integer('affected').notNull(),
+})

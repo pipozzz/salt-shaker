@@ -57,6 +57,13 @@
       "when": 1794232002286,
       "tag": "0007_vuln_acceptance",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794293954414,
+      "tag": "0008_vuln_daily",
+      "breakpoints": true
     }
   ]
 }

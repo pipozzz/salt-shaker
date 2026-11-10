@@ -1,5 +1,5 @@
 import type { FindingRow } from '../lib/export'
-import type { Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
+import type { Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
  * The demo's vulnerability report. The real one is built by the server from package inventories
@@ -173,6 +173,28 @@ export const demoVulns = {
       }
     }
     return delay({ ...status(), minions: out })
+  },
+  /** a made-up history ending in today's demo totals: a bad month, then patching catches up */
+  trend: (days = 90) => {
+    const today = DEMO.reduce((t, v) => ({ ...t, [v.severity]: t[v.severity] + 1, fixable: t.fixable + (v.hits.some((h) => h[2]) ? 1 : 0) }), { critical: 0, high: 0, medium: 0, low: 0, unknown: 0, fixable: 0 } as Record<Severity | 'fixable', number>)
+    const n = Math.min(days, 60)
+    const out: VulnDay[] = []
+    for (let i = n - 1; i >= 0; i--) {
+      // a wave of advisories three to five weeks ago, fixed over the following days
+      const wave = i > 35 ? 0 : i > 22 ? Math.round((35 - i) / 3) : Math.max(0, Math.round((i - 8) / 3))
+      out.push({
+        day: new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10),
+        critical: today.critical + (wave > 2 ? 1 : 0),
+        high: today.high + Math.ceil(wave / 2),
+        medium: today.medium + wave,
+        low: today.low,
+        unknown: today.unknown,
+        fixable: today.fixable + Math.ceil(wave * 0.8),
+        minions: 6,
+        affected: 6,
+      })
+    }
+    return delay({ days: out })
   },
   accept: (id: string, note: string, days: number | null) => {
     const at = new Date()

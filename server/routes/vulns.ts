@@ -155,6 +155,13 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
     return c.json({ ...status(got), minions: out })
   })
 
+  /** Where a package is installed: ?q=openssl (at least 2 characters), from the latest inventories. */
+  r.get('/vulns/packages', async (c) => {
+    const q = (c.req.query('q') ?? '').trim()
+    if (q.length < 2) return c.json({ error: 'Search for at least 2 characters' }, 400)
+    return c.json(await vulns.packages(q.slice(0, 100)))
+  })
+
   /** The report's daily totals (accepted vulnerabilities left out), oldest first: ?days=90 (at most 730). */
   r.get('/vulns/trend', async (c) => {
     const days = Math.min(Math.max(Number(c.req.query('days')) || 90, 1), 730)

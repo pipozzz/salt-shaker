@@ -1,5 +1,5 @@
 import type { FindingRow } from '../lib/export'
-import type { Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
+import type { InstalledPackage, PackageSearch, Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
  * The demo's vulnerability report. The real one is built by the server from package inventories
@@ -113,6 +113,16 @@ const SCANNED: Record<string, { os: string; ecosystem: string; packages: number;
   'worker-01': { os: 'ubuntu 22.04', ecosystem: 'Ubuntu:22.04:LTS', packages: 655, hoursAgo: 3 },
 }
 
+// packages every demo minion has, besides the vulnerable ones above: [name, Debian/Ubuntu version, RPM version]
+const COMMON: Array<[string, string, string, string[]]> = [
+  ['bash', '5.2.21-2ubuntu4', '5.1.8-9.el9', ['bash']],
+  ['coreutils', '9.4-3ubuntu6', '8.32-35.el9', ['coreutils']],
+  ['openssh', '1:9.6p1-3ubuntu13.5', '8.7p1-43.el9', ['openssh-client', 'openssh-server']],
+  ['python3.12', '3.12.3-1ubuntu0.3', '3.9.19-8.el9', ['python3.12', 'libpython3.12-minimal']],
+  ['systemd', '255.4-1ubuntu8.4', '252-46.el9', ['systemd', 'libsystemd0']],
+  ['zlib', '1:1.3.dfsg-3.1ubuntu2.1', '1.2.11-40.el9', ['zlib1g']],
+]
+
 const LEVELS: Severity[] = ['critical', 'high', 'medium', 'low', 'unknown']
 const RANK = Object.fromEntries(LEVELS.map((s, i) => [s, i])) as Record<Severity, number>
 const status = (): VulnStatus => ({ updating: false, progress: null, builtAt: new Date(Date.now() - 2 * 60_000).toISOString(), error: null, unchecked: 0 })
@@ -173,6 +183,24 @@ export const demoVulns = {
       }
     }
     return delay({ ...status(), minions: out })
+  },
+  packages: (q: string) => {
+    const needle = q.toLowerCase()
+    const groups = new Map<string, InstalledPackage>()
+    const add = (minion: string, name: string, version: string, binaries: string[]) => {
+      if (!name.toLowerCase().includes(needle) && !binaries.some((b) => b.toLowerCase().includes(needle))) return
+      const s = SCANNED[minion]
+      const g = groups.get(`${s.ecosystem}|${name}|${version}`) ?? { name, version, ecosystem: s.ecosystem, os: s.os, binaries, minions: [] }
+      g.minions.push(minion)
+      groups.set(`${s.ecosystem}|${name}|${version}`, g)
+    }
+    for (const minion of Object.keys(SCANNED).sort()) {
+      const rpm = SCANNED[minion].ecosystem.startsWith('Rocky')
+      for (const v of DEMO) for (const [m, version, , binaries] of v.hits) if (m === minion) add(minion, v.package, version, binaries)
+      for (const [name, deb, rpmVersion, binaries] of COMMON) add(minion, name, rpm ? rpmVersion : deb, rpm ? [name] : binaries)
+    }
+    const list = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name) || (a.os ?? '').localeCompare(b.os ?? '') || b.version.localeCompare(a.version))
+    return delay<PackageSearch>({ updating: false, total: list.length, minions: new Set(list.flatMap((g) => g.minions)).size, packages: list.slice(0, 200) })
   },
   /** a made-up history ending in today's demo totals: a bad month, then patching catches up */
   trend: (days = 90) => {

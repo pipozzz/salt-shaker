@@ -288,6 +288,17 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     expect((await get('/vulns/trend')).body.days).toEqual([{ day: today, critical: 1, high: 0, medium: 0, low: 1, unknown: 0, fixable: 1, minions: 2, affected: 2 }])
     expect((await get('/vulns/trend', '')).status).toBe(401)
 
+    // where a package is installed, by source or installed package name
+    expect((await get('/vulns/packages?q=bash')).body).toEqual({
+      updating: false,
+      total: 1,
+      minions: 2,
+      packages: [{ name: 'bash', version: '5.2.15-2', ecosystem: 'Debian:12', os: 'debian 12', binaries: ['bash'], minions: ['db', 'web'] }],
+    })
+    expect((await get('/vulns/packages?q=LIBSSL')).body.packages).toMatchObject([{ name: 'openssl', binaries: ['libssl3'], minions: ['web'] }])
+    expect((await get('/vulns/packages?q=a')).status).toBe(400)
+    expect((await get('/vulns/packages?q=bash', '')).status).toBe(401)
+
     const web = await get('/vulns/minions/web')
     expect((web.body.findings as { id: string; fixed: string | null }[]).map((f) => [f.id, f.fixed])).toEqual([
       ['DEBIAN-CVE-2024-1', '3.0.15-1~deb12u1'],

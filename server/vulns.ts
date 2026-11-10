@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, like, sql } from 'drizzle-orm'
 import { INVENTORY_MARKER } from '../src/lib/inventory'
+import { compareVersions } from '../src/lib/pkgversion'
 import type { Db, Schema } from './db'
 
 /*
@@ -266,6 +267,15 @@ export function vulnTotals(report: VulnReport): VulnTotals {
   return t
 }
 
+export interface InstalledPackage {
+  name: string
+  version: string
+  ecosystem: string | null
+  os: string | null
+  binaries: string[]
+  minions: string[]
+}
+
 export interface VulnReport {
   builtAt: Date
   minions: MinionVulns[]
@@ -438,6 +448,36 @@ export class VulnService {
     const t = this.schema.vulnDaily
     await this.db.insert(t).values({ day, ...totals }).onConflictDoUpdate({ target: t.day, set: totals })
     this.recorded = key
+  }
+
+  /**
+   * Installed packages whose name (source or installed package) contains `q`, from the same
+   * inventories as the report, one entry per package version with the minions that have it.
+   * Exact names come first, then by name and newest version.
+   */
+  async packages(q: string, limit = 200) {
+    const got = await this.get(0)
+    const needle = q.toLowerCase()
+    const groups = new Map<string, InstalledPackage>()
+    for (const m of got.all?.minions ?? []) {
+      const inv = this.parsed.get(`${m.jid}|${m.minion}`)?.inventory
+      if (!inv) continue
+      for (const p of inv.packages) {
+        if (!p.name.toLowerCase().includes(needle) && !p.binaries.some((b) => b.toLowerCase().includes(needle))) continue
+        const key = `${inv.ecosystem ?? m.os}|${p.name}|${p.version}`
+        const g = groups.get(key) ?? { name: p.name, version: p.version, ecosystem: inv.ecosystem, os: m.os, binaries: [], minions: [] }
+        for (const b of p.binaries) if (!g.binaries.includes(b)) g.binaries.push(b)
+        g.minions.push(m.minion)
+        groups.set(key, g)
+      }
+    }
+    const exact = (g: InstalledPackage) => (g.name.toLowerCase() === needle || g.binaries.some((b) => b.toLowerCase() === needle) ? 0 : 1)
+    const list = [...groups.values()].sort((a, b) => exact(a) - exact(b) || a.name.localeCompare(b.name) || (a.os ?? '').localeCompare(b.os ?? '') || compareVersions(a.ecosystem, b.version, a.version))
+    for (const g of list) {
+      g.minions.sort()
+      g.binaries.sort()
+    }
+    return { updating: got.updating, total: list.length, minions: new Set(list.flatMap((g) => g.minions)).size, packages: list.slice(0, limit) }
   }
 
   /** The daily totals of the last `days` days, oldest first. */

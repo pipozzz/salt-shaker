@@ -135,6 +135,22 @@ test('the vulnerability trend shows each day on hover', async ({ page }) => {
   await expect(page.getByText(/\d+\/6 minions affected/)).toBeVisible()
 })
 
+test('installed packages can be searched across the fleet', async ({ page }) => {
+  await openDemo(page, '/vulnerabilities')
+  await page.getByRole('button', { name: 'Installed packages' }).click()
+  await expect(page.getByText('Search the installed packages')).toBeVisible()
+  // the installed package name finds its source package
+  await page.getByPlaceholder(/Search installed packages/).fill('libssl')
+  await expect(page.getByText('2 versions on 3 minions')).toBeVisible()
+  const ubuntu = page.getByRole('row', { name: /3\.0\.13-0ubuntu3\.4/ })
+  await expect(ubuntu).toContainText('libssl3t64, openssl')
+  await expect(ubuntu).toContainText('2web-01web-02')
+  await expect(page).toHaveURL(/view=packages&q=libssl/)
+  await ubuntu.getByRole('link', { name: 'openssl', exact: true }).click()
+  await expect(page).toHaveURL(/\/vulnerabilities\?q=openssl$/)
+  await expect(page.getByRole('row', { name: /DEMO-2026-0101/ })).toBeVisible()
+})
+
 test('accepting the risk of a vulnerability takes it out of the list until withdrawn', async ({ page }) => {
   await openDemo(page, '/vulnerabilities')
   await page.getByRole('button', { name: 'Show minions with DEMO-2025-0912' }).click()

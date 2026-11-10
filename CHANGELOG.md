@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Vulnerabilities**
+
+- **Installed packages** searches the package inventories across the fleet: each installed version of a package with the minions that have it, from the latest scans and without running anything on the minions.
+
 ## 1.10.0
 
 **Query**

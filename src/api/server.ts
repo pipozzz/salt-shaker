@@ -485,6 +485,23 @@ export interface VulnAcceptance {
   expiresAt: string | null
 }
 
+/** One version of a package and the minions it's installed on. */
+export interface InstalledPackage {
+  name: string
+  version: string
+  ecosystem: string | null
+  os: string | null
+  binaries: string[]
+  minions: string[]
+}
+
+export interface PackageSearch {
+  updating: boolean
+  total: number
+  minions: number
+  packages: InstalledPackage[]
+}
+
 /** An accepted vulnerability; `vuln` is null when no minion has it any more. */
 export interface VulnAccepted extends VulnAcceptance {
   id: string
@@ -514,6 +531,8 @@ export const vulns = {
   byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[]; acceptance: VulnAcceptance | null }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
   /** accept the risk of a vulnerability, for `days` or until withdrawn */
   accept: (id: string, note: string, days: number | null) => post<{ accepted: VulnAcceptance & { id: string } }>('/api/vulns/accepted', { id, note, days }),
+  /** where packages whose name contains `q` are installed */
+  packages: (q: string) => request<PackageSearch>(`/api/vulns/packages?q=${encodeURIComponent(q)}`),
   trend: (days = 90) => request<{ days: VulnDay[] }>(`/api/vulns/trend?days=${days}`),
   unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */

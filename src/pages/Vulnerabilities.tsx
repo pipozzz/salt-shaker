@@ -100,7 +100,8 @@ export function VulnerabilitiesPage() {
   const [tgtType, setTgtType] = useState<TargetType>('glob')
   const [scanError, setScanError] = useState<Error | null>(null)
   const [params, setParams] = useSearchParams()
-  const view = params.get('view') === 'minions' ? 'minions' : params.get('view') === 'accepted' ? 'accepted' : 'vulns'
+  const VIEWS = ['minions', 'accepted', 'packages'] as const
+  const view = VIEWS.find((v) => v === params.get('view')) ?? 'vulns'
   const filter = FILTERS.find((f) => f === params.get('severity')) ?? 'all'
   const fixOnly = params.get('fix') === '1'
   const query = params.get('q') ?? ''
@@ -298,14 +299,15 @@ export function VulnerabilitiesPage() {
                 items={[
                   { value: 'vulns', label: 'By vulnerability' },
                   { value: 'minions', label: 'By minion' },
+                  { value: 'packages', label: 'Installed packages' },
                   ...(data.accepted.length || view === 'accepted' ? [{ value: 'accepted' as const, label: `Accepted (${data.accepted.length})${soon ? ` · ${soon} expiring` : ''}` }] : []),
                 ]}
               />
               <div className="relative min-w-48 flex-1">
                 <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-                <Input value={query} onChange={(e) => update({ q: e.target.value })} placeholder={view === 'vulns' ? 'Filter by CVE, package or text…' : view === 'accepted' ? 'Filter by id, package or reason…' : 'Filter minions…'} className="pl-9" />
+                <Input value={query} onChange={(e) => update({ q: e.target.value })} placeholder={view === 'vulns' ? 'Filter by CVE, package or text…' : view === 'accepted' ? 'Filter by id, package or reason…' : view === 'packages' ? 'Search installed packages, e.g. openssl…' : 'Filter minions…'} className="pl-9" />
               </div>
-              {view !== 'accepted' && (
+              {view !== 'accepted' && view !== 'packages' && (
                 <>
                   <Tabs value={filter} onChange={(f) => update({ severity: f === 'all' ? null : f })} items={FILTERS.map((f) => ({ value: f, label: f === 'all' ? 'All' : SEVERITY[f].label }))} />
                   <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -316,7 +318,9 @@ export function VulnerabilitiesPage() {
               )}
             </div>
 
-            {view === 'accepted' ? (
+            {view === 'packages' ? (
+              <PackageSearchView q={query.trim()} />
+            ) : view === 'accepted' ? (
               acceptedList.length ? (
                 <AcceptedTable list={acceptedList} canAccept={canAccept} onChanged={changed} />
               ) : (
@@ -337,7 +341,7 @@ export function VulnerabilitiesPage() {
             ) : (
               <Empty icon={<Server />} title="No minions match" />
             )}
-            {view !== 'accepted' && (view === 'vulns' ? list : minions).length > count && (
+            {(view === 'vulns' || view === 'minions') && (view === 'vulns' ? list : minions).length > count && (
               <div className="flex items-center justify-center gap-3 border-t border-zinc-100 p-3 text-sm dark:border-zinc-800">
                 <span className="text-zinc-500 dark:text-zinc-400">
                   Showing {count} of {(view === 'vulns' ? list : minions).length}
@@ -468,6 +472,78 @@ function Affected({ id, canUpgrade, canAccept, onChanged }: { id: string; canUpg
         </Button>
       )}
       <AcceptModal id={accepting ? id : null} onClose={() => setAccepting(false)} onDone={onChanged} />
+    </div>
+  )
+}
+
+/** Waits until the value stops changing for a moment, so typing doesn't send a request per key. */
+function useDebounced<T>(value: T, ms = 250) {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return v
+}
+
+/** Where packages are installed, from the same inventories as the report. */
+function PackageSearchView({ q }: { q: string }) {
+  const vulns = useVulnApi()
+  const term = useDebounced(q)
+  const found = useAsync(() => (term.length >= 2 ? vulns.packages(term) : Promise.resolve(null)), [vulns, term])
+  if (term.length < 2)
+    return (
+      <Empty icon={<Search />} title="Search the installed packages">
+        Type at least two letters of a package name to see which versions are installed where, from the latest inventories. Installed package names (e.g. libssl3) match too. On Debian, Ubuntu and Alpine the name and version are the source package's, as their security trackers use them.
+      </Empty>
+    )
+  if (found.error) return <div className="p-4"><ErrorBox error={found.error} /></div>
+  if (!found.data) return <Spinner />
+  const { packages, total, minions } = found.data
+  if (!packages.length) return <Empty icon={<Search />} title={`No installed package matches “${term}”`} />
+  return (
+    <div className="overflow-x-auto">
+      <p className="border-b border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+        {total} {total === 1 ? 'version' : 'versions'} on {minions} {minions === 1 ? 'minion' : 'minions'}
+        {total > packages.length && <> · showing the first {packages.length}; narrow the search</>}
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            <th className="py-2.5 pr-3 pl-4 font-medium">Package</th>
+            <th className="px-3 py-2.5 font-medium" title="The source package's version on Debian, Ubuntu and Alpine; a rebuilt binary can carry a suffix such as +b1">
+              Version
+            </th>
+            <th className="px-3 py-2.5 font-medium">OS</th>
+            <th className="px-3 py-2.5 pr-4 font-medium">Minions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+          {packages.map((p) => (
+            <tr key={`${p.ecosystem}|${p.name}|${p.version}`} className="align-top">
+              <td className="py-2.5 pr-3 pl-4">
+                <Link to={`/vulnerabilities?q=${encodeURIComponent(p.name)}`} className="font-mono font-medium hover:text-accent-600" title="Known vulnerabilities in this package">
+                  {p.name}
+                </Link>
+                {p.binaries.some((b) => b !== p.name) && <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{p.binaries.join(', ')}</div>}
+              </td>
+              <td className="px-3 py-2.5 font-mono text-xs">{p.version}</td>
+              <td className="px-3 py-2.5 text-xs whitespace-nowrap text-zinc-600 dark:text-zinc-400">{p.os}</td>
+              <td className="px-3 py-2.5 pr-4">
+                <span className="flex flex-wrap items-center gap-1" title={p.minions.join(', ')}>
+                  <Badge>{p.minions.length}</Badge>
+                  {p.minions.slice(0, 5).map((m) => (
+                    <Link key={m} to={`/minions/${encodeURIComponent(m)}?tab=vulns`} className="rounded bg-zinc-100 px-1.5 font-mono text-[11px] hover:text-accent-600 dark:bg-zinc-800">
+                      {m}
+                    </Link>
+                  ))}
+                  {p.minions.length > 5 && <span className="text-xs text-zinc-500 dark:text-zinc-400">+{p.minions.length - 5}</span>}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -187,6 +187,18 @@ test('osquery answers in one table, and installs where it is missing', async ({ 
   await expect(page.getByText(/osquery is not installed/)).toHaveCount(0)
 })
 
+test('grouped osquery rows put what only a few minions have first', async ({ page }) => {
+  await openDemo(page, '/query')
+  await page.getByRole('button', { name: /Authorized SSH keys/ }).click()
+  await page.getByRole('button', { name: 'Run query' }).click()
+  await expect(page.getByRole('button', { name: 'Run query' })).toBeVisible()
+  await page.getByLabel('Group identical rows').check()
+  await expect(page.getByText('5 rows from 4 of 6 minions, 2 distinct')).toBeVisible()
+  const rows = page.getByRole('row')
+  await expect(rows.nth(1)).toContainText('1web-02tmpadmin')
+  await expect(rows.nth(2)).toContainText('4db-01mon-01web-01+1deploy')
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

@@ -131,3 +131,23 @@ export const OSQUERY_LIBRARY: LibraryQuery[] = [
     sql: 'SELECT o.name, o.version, k.version AS kernel, u.days AS uptime_days\nFROM os_version o, kernel_info k, uptime u;',
   },
 ]
+
+export interface RowGroup {
+  row: OsqueryRow
+  minions: string[]
+}
+
+/**
+ * Rows that are the same apart from the minion, once each with the minions that have them, rarest
+ * first: what only a few minions have (an extra account, an odd port) is what usually matters.
+ */
+export function groupRows(rows: Array<OsqueryRow & { minion: string }>): RowGroup[] {
+  const groups = new Map<string, RowGroup>()
+  for (const { minion, ...row } of rows) {
+    const key = JSON.stringify(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)))
+    const g = groups.get(key) ?? { row, minions: [] }
+    if (!g.minions.includes(minion)) g.minions.push(minion)
+    groups.set(key, g)
+  }
+  return [...groups.values()].sort((a, b) => a.minions.length - b.minions.length || Object.values(a.row).join('\t').localeCompare(Object.values(b.row).join('\t')))
+}

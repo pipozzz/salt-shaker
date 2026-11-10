@@ -6,11 +6,15 @@ sidebar: { order: 6 }
 
 **Query** runs an [osquery](https://osquery.io) SQL query on a target and shows the answers of every minion as one table, with a `minion` column first. Ask about listening ports, users, SSH keys, processes, kernel modules, packages, files and [much more](https://osquery.io/schema/).
 
+![Query](../../../../screenshots/query.png)
+
 ## Running a query
 
 Pick a target, write a query or choose one from the **Library**, and **Run query** (or press ⌘/Ctrl + Enter). Filter the rows as they come in, and **Export CSV** downloads the rows the filter shows.
 
-Only one `SELECT` (or `WITH … SELECT`) runs at a time, and nothing on the minion changes. Each minion runs `osqueryi --json` through `cmd.run`, with the query on standard input, so it needs permission for `cmd.run`; viewers can't run queries. Every query is in the [audit log](/guide/users-audit/#audit-log) and the job history like any other call.
+**Group identical rows** shows each distinct row once, with how many minions have it and which, rarest first. What sets a few minions apart from the rest comes to the top: an extra account, an SSH key nobody expected, a port only one server listens on. The CSV export then has `count` and `minions` columns instead of `minion`.
+
+Only one `SELECT` (or `WITH … SELECT`) runs at a time, and nothing on the minion changes. Each minion runs `osqueryi --json` through `cmd.run`, with the query on standard input, so it needs permission for `cmd.run`; viewers can't run queries. Every query is in the [audit log](/salt-shaker/guide/users-audit/#audit-log) and the job history like any other call.
 
 The library has ready-made queries for listening ports, logged-in users, accounts with a login shell, authorized SSH keys, SUID binaries, cron jobs, kernel modules, the processes using the most memory, and the OS with its uptime.
 

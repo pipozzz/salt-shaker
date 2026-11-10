@@ -9,7 +9,7 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, PageHeader, Pe
 import { toCsv } from '../lib/csv'
 import { download } from '../lib/export'
 import { useAsync, useStoredState } from '../lib/hooks'
-import { OSQUERY_INSTALL_KWARG, OSQUERY_INSTALL_SCRIPT, OSQUERY_LIBRARY, checkQuery, osqueryCall, parseOsquery, type OsqueryRow } from '../lib/osquery'
+import { OSQUERY_INSTALL_KWARG, OSQUERY_INSTALL_SCRIPT, OSQUERY_LIBRARY, checkQuery, groupRows, osqueryCall, parseOsquery, type OsqueryRow } from '../lib/osquery'
 import { useCan, useSession } from '../lib/session'
 import { useJob } from '../lib/useJob'
 
@@ -31,6 +31,7 @@ export function QueryPage() {
   const [ran, setRan] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [filter, setFilter] = useState('')
+  const [grouped, setGrouped] = useStoredState('salt-shaker.query.grouped', false)
   const [count, setCount] = useState(PAGE)
   const [saving, setSaving] = useState<string | null>(null)
   const [reloads, setReloads] = useState(0)
@@ -90,7 +91,11 @@ export function QueryPage() {
   }
   const columns = ['minion', ...new Set(rows.flatMap((row) => Object.keys(row).filter((k) => k !== 'minion')))]
   const q = filter.toLowerCase()
-  const shown = q ? rows.filter((row) => Object.values(row).some((v) => v.toLowerCase().includes(q))) : rows
+  const matching = q ? rows.filter((row) => Object.values(row).some((v) => v.toLowerCase().includes(q))) : rows
+  // grouped: one line per distinct row, with the minions that have it in place of the minion column
+  const groups = grouped ? groupRows(matching) : []
+  const tableColumns = grouped ? ['minions', ...columns.slice(1)] : columns
+  const shown: Array<{ row: OsqueryRow; minions: string[] }> = grouped ? groups : matching.map(({ minion, ...row }) => ({ row, minions: [minion] }))
   const answered = r ? Object.keys(r.results).length - missing.length - failed.length : 0
   const noReturn = r?.done ? r.minions.filter((m) => !(m in r.results)) : []
 
@@ -105,7 +110,11 @@ export function QueryPage() {
 
   const exportCsv = () => {
     const name = `osquery-${new Date().toISOString().slice(0, 10)}.csv`
-    download(name, 'text/csv', toCsv([columns, ...shown.map((row) => columns.map((c) => row[c] ?? ''))]))
+    const rest = columns.slice(1)
+    const table = grouped
+      ? [['count', 'minions', ...rest], ...shown.map((g) => [String(g.minions.length), g.minions.join(' '), ...rest.map((c) => g.row[c] ?? '')])]
+      : [columns, ...shown.map((g) => [g.minions[0], ...rest.map((c) => g.row[c] ?? '')])]
+    download(name, 'text/csv', toCsv(table))
   }
 
   return (
@@ -232,12 +241,17 @@ export function QueryPage() {
           <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800">
             <span className="text-sm text-zinc-600 dark:text-zinc-400">
               <strong className="text-zinc-900 dark:text-zinc-100">{rows.length}</strong> {rows.length === 1 ? 'row' : 'rows'} from {answered} of {r.minions.length} {r.minions.length === 1 ? 'minion' : 'minions'}
+              {grouped && <>, {groups.length} distinct</>}
             </span>
             {ran !== null && ran !== sql && <Badge tone="amber">Query edited since</Badge>}
             <div className="relative min-w-48 flex-1">
               <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
               <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter rows…" className="pl-9" />
             </div>
+            <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" title="One line per distinct row with the minions that have it, rarest first">
+              <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-accent-600" />
+              Group identical rows
+            </label>
             <Button icon={<Download className="size-4" />} disabled={!shown.length} onClick={exportCsv}>
               Export CSV
             </Button>
@@ -254,7 +268,7 @@ export function QueryPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                    {columns.map((c) => (
+                    {tableColumns.map((c) => (
                       <th key={c} className="px-3 py-2.5 font-medium whitespace-nowrap first:pl-4 last:pr-4">
                         {c}
                       </th>
@@ -262,16 +276,22 @@ export function QueryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-                  {shown.slice(0, count).map((row, i) => (
+                  {shown.slice(0, count).map((g, i) => (
                     <tr key={i} className="align-top">
-                      {columns.map((c) => (
-                        <td key={c} className={clsx('max-w-md px-3 py-2 font-mono text-xs first:pl-4 last:pr-4', c === 'minion' && 'font-medium', (row[c] ?? '').length > 32 ? 'break-all' : 'whitespace-nowrap')}>
+                      {tableColumns.map((c) => (
+                        <td key={c} className={clsx('max-w-md px-3 py-2 font-mono text-xs first:pl-4 last:pr-4', (c === 'minion' || c === 'minions') && 'font-medium', (g.row[c] ?? '').length > 32 ? 'break-all' : 'whitespace-nowrap')}>
                           {c === 'minion' ? (
-                            <Link to={`/minions/${encodeURIComponent(row.minion)}`} className="hover:text-accent-600">
-                              {row.minion}
-                            </Link>
+                            <MinionLink id={g.minions[0]} />
+                          ) : c === 'minions' ? (
+                            <span className="flex flex-wrap items-center gap-1" title={g.minions.join(', ')}>
+                              <Badge tone={g.minions.length === 1 && answered > 2 ? 'amber' : 'zinc'}>{g.minions.length}</Badge>
+                              {g.minions.slice(0, 3).map((m) => (
+                                <MinionLink key={m} id={m} />
+                              ))}
+                              {g.minions.length > 3 && <span className="font-sans text-zinc-500 dark:text-zinc-400">+{g.minions.length - 3}</span>}
+                            </span>
                           ) : (
-                            row[c]
+                            g.row[c]
                           )}
                         </td>
                       ))}
@@ -364,5 +384,13 @@ export function QueryPage() {
         </Card>
       )}
     </>
+  )
+}
+
+function MinionLink({ id }: { id: string }) {
+  return (
+    <Link to={`/minions/${encodeURIComponent(id)}`} className="hover:text-accent-600">
+      {id}
+    </Link>
   )
 }

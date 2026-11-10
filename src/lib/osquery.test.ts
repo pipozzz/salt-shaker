@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkQuery, osqueryCall, parseOsquery } from './osquery'
+import { checkQuery, groupRows, osqueryCall, parseOsquery } from './osquery'
 
 describe('checkQuery', () => {
   it.each([
@@ -34,4 +34,17 @@ describe('parseOsquery', () => {
     expect(parseOsquery('Error: no such table: nope')).toEqual({ error: 'Error: no such table: nope' })
     expect(parseOsquery(false)).toEqual({ error: 'The minion did not run the query' })
   })
+})
+
+it('groups rows that only differ by minion, rarest first', () => {
+  const rows = [
+    { minion: 'web-01', username: 'deploy', shell: '/bin/bash' },
+    { minion: 'web-02', username: 'deploy', shell: '/bin/bash' },
+    { minion: 'web-02', username: 'tmpadmin', shell: '/bin/bash' },
+    { minion: 'db-01', shell: '/bin/bash', username: 'deploy' },
+  ]
+  expect(groupRows(rows)).toEqual([
+    { row: { username: 'tmpadmin', shell: '/bin/bash' }, minions: ['web-02'] },
+    { row: { username: 'deploy', shell: '/bin/bash' }, minions: ['web-01', 'web-02', 'db-01'] },
+  ])
 })

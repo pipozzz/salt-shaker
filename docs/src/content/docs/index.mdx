@@ -30,7 +30,13 @@ import { Card, CardGrid } from '@astrojs/starlight/components'
   <Card title="Users, roles, audit" icon="seti:lock">
     Local accounts or single sign-on, with roles from your IdP's groups. Every change is audited.
   </Card>
+  <Card title="Patches & vulnerabilities" icon="warning">
+    Pending upgrades across the fleet, and known CVEs in installed packages from OSV.dev. Upgrade just the security fixes, or accept a risk with a reason.
+  </Card>
+  <Card title="Query with osquery" icon="magnifier">
+    Ask every minion a question in SQL (ports, users, SSH keys, processes) and get one table back.
+  </Card>
   <Card title="Schedules & alerts" icon="setting">
-    Nightly compliance checks and patch scans, with alerts to Slack, Microsoft Teams or any webhook.
+    Nightly compliance checks, patch and vulnerability scans, with alerts to Slack, Microsoft Teams or any webhook.
   </Card>
 </CardGrid>

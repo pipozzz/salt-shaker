@@ -4,7 +4,7 @@ description: What Salt Shaker is and how it talks to your Salt master.
 sidebar: { order: 1 }
 ---
 
-Salt Shaker is a web UI for [SaltStack](https://saltproject.io). It talks to your master through **salt-api** (`rest_cherrypy`) and needs nothing installed on the minions.
+Salt Shaker is a web UI for [SaltStack](https://saltproject.io). It talks to your master through **salt-api** (`rest_cherrypy`) and needs nothing installed on the minions. (The optional [Query](/salt-shaker/guide/query/) page uses osquery, and can install it for you.)
 
 It runs in one of two modes:
 
@@ -28,3 +28,4 @@ Every request from a user is checked against their [role](/salt-shaker/reference
 - **Salt 3006 or newer** on the master, with salt-api (`rest_cherrypy`).
 - Docker, or Node.js 26 to run the server bundle yourself.
 - SQLite (built in) or PostgreSQL for the server's database.
+- For the [vulnerability check](/salt-shaker/guide/vulnerabilities/), outbound HTTPS from the server to `api.osv.dev` (or a mirror).

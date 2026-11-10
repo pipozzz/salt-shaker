@@ -13,8 +13,8 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 
 - **Minions:** status, OS, IPs, CPU/RAM and roles at a glance, read from the master's cache, so it stays fast with large fleets and shows offline minions too. A fleet breakdown flags minions running an older Salt than the master. Each minion's page shows its grains and compiled pillar.
 - **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions. Past checks are kept, so you can follow drift over time.
-- **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, or everything on a minion.
-- **Vulnerabilities:** known CVEs in the installed packages, from the distributions' security trackers via OSV.dev, with the fixed version and a one-click upgrade.
+- **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, everything on a minion, or just the upgrades that fix known vulnerabilities.
+- **Vulnerabilities:** known CVEs in the installed packages, from the distributions' security trackers via OSV.dev, with the fixed version and a one-click upgrade. A 90-day trend, CSV export, and risk acceptance with a reason and an expiry.
 - **Enrollment:** accept or reject keys after checking fingerprints. Generates bootstrap commands, including **pre-seeded keys**, so a new minion is trusted on first contact.
 - **Run:** any execution module against any target type. You see which minions the target matches before you run. Results stream in live, and state output is rendered with diffs. Risky commands on many minions need an explicit confirmation.
 - **Query:** ask minions questions in SQL with osquery (ports, users, SSH keys, processes…) and get one table across the fleet, with a library of ready-made queries, team-saved queries and CSV export. Installs osquery where it's missing.
@@ -25,7 +25,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
 - **Single sign-on:** OIDC with Keycloak, Entra ID, Google, Authentik, Okta and others. Roles can come from IdP groups and are refreshed on every sign-in.
 - **Schedules:** nightly compliance checks, weekly patch or vulnerability scans or any function, on a cron schedule.
-- **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, failed jobs and minions waiting for approval.
+- **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, fixable critical or high vulnerabilities, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
 - **⌘K / Ctrl+K** jumps to any page, minion, saved target or recent command.
 - **Demo mode:** a simulated master in the browser, for trying it out.
@@ -38,6 +38,14 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
   <tr>
     <td align="center">Enrollment</td>
     <td align="center">Dark mode</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/vulnerabilities.png" alt="Vulnerabilities" /></td>
+    <td><img src="docs/screenshots/query.png" alt="Query with osquery" /></td>
+  </tr>
+  <tr>
+    <td align="center">Vulnerabilities</td>
+    <td align="center">Query with osquery</td>
   </tr>
 </table>
 

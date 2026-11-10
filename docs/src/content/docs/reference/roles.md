@@ -12,6 +12,21 @@ description: What admins, operators and viewers can do, and the none role.
 
 A role the server doesn't know gets no permissions at all.
 
+## The console's own features
+
+Some features are the server's, not Salt calls. Who may use them:
+
+| Feature | admin | operator | viewer |
+| --- | --- | --- | --- |
+| Schedules and notification channels | manage | no | no |
+| Shared [saved targets](/salt-shaker/guide/run/) | save, remove any | save, remove own | use |
+| Team [saved queries](/salt-shaker/guide/query/#saved-queries) | save, remove any | save, remove own | see |
+| [Accept a vulnerability's risk](/salt-shaker/guide/vulnerabilities/#accepting-a-risk), withdraw it | yes | yes | no |
+| [Audit log](/salt-shaker/guide/users-audit/#audit-log) | see, export | see, export | no |
+| Users | manage | no | no |
+
+Running a [query](/salt-shaker/guide/query/) or a [vulnerability scan](/salt-shaker/guide/vulnerabilities/) is a `cmd.run` call, so it follows the Salt rules below: operators and admins can, viewers can't. Viewers still see the vulnerability report.
+
 The UI hides what a role can't do, and the server enforces it. Denied attempts are recorded in the [audit log](/salt-shaker/guide/users-audit/#audit-log).
 
 ## In eauth format

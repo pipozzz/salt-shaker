@@ -27,4 +27,6 @@ Open <http://localhost:8080>. The first visit asks you to create the admin accou
 
 The minion keys start out pending, so go to **Enrollment** and accept them. Then you're ready to run commands, check compliance and browse states.
 
+To try the [Query](/salt-shaker/guide/query/) page, run a query: the lab's minions don't have osquery yet, and **Install osquery…** sets it up on them (they need internet access).
+
 The lab also has a mock OIDC provider for trying [single sign-on](/salt-shaker/deploy/sso/#trying-it).

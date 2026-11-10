@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { VulnDay } from '../api/server'
 
 /*
@@ -12,8 +12,7 @@ const SERIES = [
   { key: 'fixable', label: 'With a fix', line: 'stroke-accent-600 dark:stroke-accent-400', dot: 'bg-accent-600 dark:bg-accent-400' },
 ] as const
 
-const W = 640
-const H = 140
+const H = 150
 const PAD = { top: 8, right: 8, bottom: 20, left: 32 }
 
 /** 0, a round step, and a top a little above the highest value */
@@ -26,6 +25,16 @@ const fmtDay = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString(
 
 export function VulnTrend({ days }: { days: VulnDay[] }) {
   const [hover, setHover] = useState<number | null>(null)
+  // drawn in real pixels at the container's width, so text and lines keep their size
+  const box = useRef<HTMLDivElement>(null)
+  const [W, setW] = useState(640)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setW(Math.max(240, Math.round(e.contentRect.width))))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const max = Math.max(1, ...days.flatMap((d) => SERIES.map((s) => d[s.key])))
   const yTicks = ticks(max)
   const top = yTicks[yTicks.length - 1]
@@ -53,8 +62,8 @@ export function VulnTrend({ days }: { days: VulnDay[] }) {
           </span>
         ))}
       </div>
-      <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label={`Vulnerabilities over ${days.length} days: ${SERIES.map((s) => `${s.label.toLowerCase()} ${first[s.key]} to ${last[s.key]}`).join(', ')}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <div className="relative" ref={box}>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block max-w-full" role="img" aria-label={`Vulnerabilities over ${days.length} days: ${SERIES.map((s) => `${s.label.toLowerCase()} ${first[s.key]} to ${last[s.key]}`).join(', ')}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
           {yTicks.map((t) => (
             <g key={t}>
               <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="stroke-zinc-200 dark:stroke-zinc-800" strokeWidth={1} />

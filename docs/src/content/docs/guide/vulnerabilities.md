@@ -6,6 +6,8 @@ sidebar: { order: 3 }
 
 **Vulnerabilities** shows which known vulnerabilities (CVEs and distribution advisories) affect the packages installed on your minions, and whether a fixed version is available. It needs the server; the demo shows made-up data.
 
+![Vulnerabilities](../../../../screenshots/vulnerabilities.png)
+
 ## How it works
 
 1. **A scan** lists each minion's installed packages. It runs a short shell script with `cmd.run` (`dpkg-query`, `rpm` or `apk`, read-only) and shows up in Jobs like any other job. Nothing is installed on the minions.
@@ -25,6 +27,7 @@ Each minion's latest successful inventory from the last 30 days counts, so scann
 - **By minion** shows each minion's counts per severity and how many have a fix; open a minion to see its list.
 - Filter by severity, search for a CVE, package or text, and tick **Fix available** to hide the ones nobody can fix yet. The filters are kept in the page address.
 - **Upgrade on N minions** opens [Run](/salt-shaker/guide/run/) with `pkg.install pkgs=[…] only_upgrade=True` for the minions that have a fix. Nothing runs until you start it there.
+- On [Patches](/salt-shaker/guide/patches/#security-fixes), the pending upgrades that fix something are marked, and **Upgrade security fixes** installs just those. After an upgrade there, the minions' inventory is refreshed, so the report catches up right away.
 
 **Export CSV** downloads every finding with the page's filters, one row per minion and package: the installed and fixed versions, the vulnerability and its CVEs, the severity and CVSS score, a summary and when the inventory was taken. Handy for a ticketing system or a report.
 
@@ -42,7 +45,7 @@ With the server, the report's totals are kept for every day: distinct critical a
 
 Some vulnerabilities don't matter where you run the package: the service isn't exposed, or the fix comes with the next image rebuild. Open the vulnerability and choose **Accept risk…**, say why, and pick how long: 30 days, 90 days, a year or until withdrawn. Operators and admins can do this.
 
-An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. When an acceptance expires, the vulnerability counts again. Accepting and withdrawing, and attempts by anyone not allowed to, are in the [audit log](/guide/users-audit/#audit-log).
+An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. When an acceptance expires, the vulnerability counts again. Accepting and withdrawing, and attempts by anyone not allowed to, are in the [audit log](/salt-shaker/guide/users-audit/#audit-log).
 
 ### Things to know
 

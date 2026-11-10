@@ -10,6 +10,9 @@ description: Sessions, passwords, reporting vulnerabilities and the license.
 - The user's own credentials and session never reach salt-api; the server uses its service account.
 - Webhook URLs for notifications are stored on the server and shown masked.
 - Pre-seeded enrollment shows a minion's private key once. Copy it over a trusted channel.
+- The vulnerability check sends OSV.dev the names and versions of installed packages, with the distribution, and nothing else: no host names, IPs or minion IDs. `OSV_API_URL` points it at a mirror instead.
+- The Query page runs only a single `SELECT`, through `cmd.run`, so it's audited and needs the same permission. osquery can read sensitive tables (e.g. `shadow`), which is why viewers can't run queries.
+- **Install osquery** makes the minions download the osquery package and its signing key from `pkg.osquery.io` over HTTPS; apt or dnf checks the package against that key.
 
 ## Reporting a vulnerability
 

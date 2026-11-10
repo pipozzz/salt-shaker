@@ -43,9 +43,9 @@ With the server, the report's totals are kept for every day: distinct critical a
 
 ## Accepting a risk
 
-Some vulnerabilities don't matter where you run the package: the service isn't exposed, or the fix comes with the next image rebuild. Open the vulnerability and choose **Accept risk…**, say why, and pick how long: 30 days, 90 days, a year or until withdrawn. Operators and admins can do this.
+Some vulnerabilities don't matter where you run the package: the service isn't exposed, or the fix comes with the next image rebuild. Open the vulnerability and choose **Accept risk…**, say why, and pick how long: 7 days, 30 days, 90 days, a year or until withdrawn. Operators and admins can do this.
 
-An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. When an acceptance expires, the vulnerability counts again. Accepting and withdrawing, and attempts by anyone not allowed to, are in the [audit log](/salt-shaker/guide/users-audit/#audit-log).
+An accepted vulnerability drops out of the counts, the Minions column, the CSV export, the scheduled scan alerts and Patches, on every minion. The **Accepted** tab lists them with the reason, who accepted them and until when; **Withdraw** brings one back. Acceptances ending within a week are flagged there and counted on the tab; accept again to extend one. When an acceptance expires, the vulnerability counts again. Accepting and withdrawing, and attempts by anyone not allowed to, are in the [audit log](/salt-shaker/guide/users-audit/#audit-log).
 
 ### Things to know
 

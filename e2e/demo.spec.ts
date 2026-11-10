@@ -141,15 +141,17 @@ test('accepting the risk of a vulnerability takes it out of the list until withd
   await page.getByRole('button', { name: 'Accept risk…' }).click()
   await expect(page.getByRole('button', { name: 'Accept risk', exact: true })).toBeDisabled()
   await page.getByPlaceholder(/The service isn't exposed/).fill('Only local users, none untrusted')
-  await page.getByRole('combobox').last().selectOption({ label: '30 days' })
+  await page.getByRole('combobox').last().selectOption({ label: '7 days' })
   await page.getByRole('button', { name: 'Accept risk', exact: true }).click()
   await expect(page.getByRole('button', { name: /minions with DEMO-2025-0912/ })).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Accepted (1)' }).click()
+  // a week or less to go is flagged
+  await page.getByRole('button', { name: 'Accepted (1) · 1 expiring' }).click()
   await expect(page).toHaveURL(/view=accepted/)
   const row = page.getByRole('row', { name: /DEMO-2025-0912/ })
   await expect(row).toContainText('Only local users, none untrusted')
   await expect(row).toContainText('demo')
+  await expect(row.getByText('expires in 7 days')).toBeVisible()
   await row.getByRole('button', { name: 'Withdraw' }).click()
   await expect(page.getByText('No accepted vulnerabilities')).toBeVisible()
   await page.getByRole('button', { name: 'By vulnerability' }).click()
@@ -197,6 +199,13 @@ test('grouped osquery rows put what only a few minions have first', async ({ pag
   const rows = page.getByRole('row')
   await expect(rows.nth(1)).toContainText('1web-02tmpadmin')
   await expect(rows.nth(2)).toContainText('4db-01mon-01web-01+1deploy')
+
+  // the results are still there after looking at a minion
+  await rows.nth(1).getByRole('link', { name: 'web-02' }).click()
+  await expect(page).toHaveURL(/\/minions\/web-02$/)
+  await page.goBack()
+  await expect(page.getByText('5 rows from 4 of 6 minions, 2 distinct')).toBeVisible()
+  await expect(page.getByText('Query edited since')).toHaveCount(0)
 })
 
 test('run previews the target and shows results', async ({ page }) => {

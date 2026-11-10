@@ -414,19 +414,25 @@ export class VulnService {
    */
   async get(waitMs = 20_000): Promise<{ report: VulnReport | null; all: VulnReport | null; accepted: Map<string, Acceptance>; updating: boolean }> {
     const [got, accepted] = await Promise.all([this.current(waitMs), this.accepted()])
-    const report = got.report && withoutAccepted(got.report, accepted)
-    if (report) await this.record(report).catch((e) => console.warn('vulns: recording the daily totals failed', e))
-    return { ...got, all: got.report, report, accepted }
+    if (!got.report) return { ...got, all: null, accepted }
+    // the filtered report and its totals are reused until the report or the acceptances change
+    const key = `${+got.report.builtAt}|${[...accepted.keys()].sort().join(',')}`
+    if (this.view?.key !== key || this.view.source !== got.report) {
+      const report = withoutAccepted(got.report, accepted)
+      this.view = { key, source: got.report, report, totals: vulnTotals(report) }
+    }
+    await this.record(this.view.report, this.view.totals).catch((e) => console.warn('vulns: recording the daily totals failed', e))
+    return { ...got, all: got.report, report: this.view.report, accepted }
   }
 
+  private view: { key: string; source: VulnReport; report: VulnReport; totals: VulnTotals } | null = null
   private recorded = ''
 
   /** Keeps today's totals (UTC) for the trend; written only when they change. */
-  private async record(report: VulnReport) {
+  private async record(report: VulnReport, totals: VulnTotals) {
     // an incomplete report (OSV unreachable) or one without inventories says nothing about the trend
     if (report.error || !report.minions.length) return
     const day = new Date(this.now()).toISOString().slice(0, 10)
-    const totals = vulnTotals(report)
     const key = `${day}|${JSON.stringify(totals)}`
     if (key === this.recorded) return
     const t = this.schema.vulnDaily

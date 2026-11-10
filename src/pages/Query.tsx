@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { BookOpen, Database, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
-import { useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { queries as queriesApi, type SavedQuery } from '../api/server'
 import type { TargetType } from '../api/types'
@@ -28,6 +28,8 @@ export function QueryPage() {
   const [tgt, setTgt] = useStoredState('salt-shaker.query.tgt', '*')
   const [tgtType, setTgtType] = useStoredState<TargetType>('salt-shaker.query.tgtType', 'glob')
   const [sql, setSql] = useStoredState('salt-shaker.query.sql', OSQUERY_LIBRARY[0].sql)
+  // the last query's job, so its results are still here after opening a minion and coming back
+  const [last, setLast] = useStoredState<{ jid: string; sql: string } | null>(`salt-shaker.query.last.${session?.mode}.${session?.apiUrl}`, null)
   const [ran, setRan] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [filter, setFilter] = useState('')
@@ -39,6 +41,15 @@ export function QueryPage() {
   const saved = useAsync(() => (server ? queriesApi.list().then((r) => r.queries) : Promise.resolve([] as SavedQuery[])), [server, reloads])
   const invalid = checkQuery(sql)
 
+  useEffect(() => {
+    if (!last || job.run) return
+    job
+      .load(last.jid)
+      .then(() => setRan(last.sql))
+      .catch(() => setLast(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const run = async (e?: FormEvent) => {
     e?.preventDefault()
     if (invalid) return
@@ -46,8 +57,9 @@ export function QueryPage() {
     setCount(PAGE)
     try {
       const call = osqueryCall(sql)
-      await job.start(tgt, tgtType, 'cmd.run', call.arg, call.kwarg)
+      const jid = await job.start(tgt, tgtType, 'cmd.run', call.arg, call.kwarg)
       setRan(sql)
+      setLast({ jid, sql })
     } catch (err) {
       setError(err as Error)
     }

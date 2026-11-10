@@ -155,6 +155,7 @@ export function VulnerabilitiesPage() {
     .sort((a, b) => worst(b.counts) - worst(a.counts) || a.minion.localeCompare(b.minion))
   const acceptedList = (data?.accepted ?? []).filter((a) => !q || a.id.toLowerCase().includes(q) || a.note.toLowerCase().includes(q) || a.packages.some((p) => p.toLowerCase().includes(q)))
   const changed = () => setReloads((n) => n + 1)
+  const soon = (data?.accepted ?? []).filter((a) => a.expiresAt && expiresSoon(a.expiresAt)).length
   const filterKey = `${view}|${filter}|${fixOnly}|${q}`
   const [paging, setPaging] = useState({ key: '', count: PAGE })
   const count = paging.key === filterKey ? paging.count : PAGE
@@ -297,7 +298,7 @@ export function VulnerabilitiesPage() {
                 items={[
                   { value: 'vulns', label: 'By vulnerability' },
                   { value: 'minions', label: 'By minion' },
-                  ...(data.accepted.length || view === 'accepted' ? [{ value: 'accepted' as const, label: `Accepted (${data.accepted.length})` }] : []),
+                  ...(data.accepted.length || view === 'accepted' ? [{ value: 'accepted' as const, label: `Accepted (${data.accepted.length})${soon ? ` · ${soon} expiring` : ''}` }] : []),
                 ]}
               />
               <div className="relative min-w-48 flex-1">
@@ -471,7 +472,12 @@ function Affected({ id, canUpgrade, canAccept, onChanged }: { id: string; canUpg
   )
 }
 
+const daysLeft = (at: string) => Math.max(1, Math.ceil((Date.parse(at) - Date.now()) / 86400_000))
+/** an acceptance ending within a week is worth a look before the vulnerability comes back */
+const expiresSoon = (at: string) => Date.parse(at) - Date.now() < 7 * 86400_000
+
 const DURATIONS = [
+  { days: 7, label: '7 days' },
   { days: 30, label: '30 days' },
   { days: 90, label: '90 days' },
   { days: 365, label: 'A year' },
@@ -585,7 +591,14 @@ function AcceptedTable({ list, canAccept, onChanged }: { list: VulnAccepted[] } 
               <td className="max-w-md px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">{a.note}</td>
               <td className="px-3 py-2.5 text-xs whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                 {a.acceptedBy ?? 'someone'}, {relTime(new Date(a.acceptedAt))}
-                <div>{a.expiresAt ? `until ${new Date(a.expiresAt).toLocaleDateString()}` : 'until withdrawn'}</div>
+                <div>
+                  {a.expiresAt ? `until ${new Date(a.expiresAt).toLocaleDateString()}` : 'until withdrawn'}
+                  {a.expiresAt && expiresSoon(a.expiresAt) && (
+                    <Badge tone="amber" className="ml-1.5" title="When it expires, the vulnerability counts again; accept it again to extend it">
+                      {daysLeft(a.expiresAt) <= 1 ? 'expires today' : `expires in ${daysLeft(a.expiresAt)} days`}
+                    </Badge>
+                  )}
+                </div>
               </td>
               <td className="px-3 py-2.5 pr-4 text-right">
                 {canAccept && (

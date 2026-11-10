@@ -78,6 +78,13 @@
       "when": 1794314726346,
       "tag": "0010_acceptance_notices",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794318228554,
+      "tag": "0011_webhook_secret",
+      "breakpoints": true
     }
   ]
 }

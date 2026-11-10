@@ -144,6 +144,8 @@ export const notificationChannel = pgTable('notification_channel', {
   url: text('url').notNull(),
   events: text('events').notNull(),
   enabled: boolean('enabled').notNull().default(true),
+  // JSON webhooks are signed with it (HMAC-SHA256), so the receiver can tell they're ours
+  secret: text('secret'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
   lastError: text('last_error'),

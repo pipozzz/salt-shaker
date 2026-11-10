@@ -30,6 +30,9 @@ const EVENTS: Record<NotifyEvent, string> = {
   minion_down: 'A minion stopped responding, or is back',
 }
 
+/** a made-up secret in the server's format; the demo sends nothing it could sign */
+const demoSecret = () => `whsec_${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b % 64]).join('')}`
+
 const delay = <T>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 120))
 const fail = (message: string) => Promise.reject(new Error(message))
 
@@ -118,7 +121,7 @@ seed(
 
 const channels: Channel[] = [
   { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'acceptance', 'job_failed'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
-  { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null },
+  { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null, signed: true },
 ]
 
 function view(s: (typeof schedules)[number]): Schedule {
@@ -190,9 +193,18 @@ export const demoAutomation: typeof automation = {
       const u = new URL(c.url)
       return `${u.protocol}//${u.host}/…${(u.pathname + u.search).slice(-4)}`
     })()
-    channels.push({ id: Math.max(0, ...channels.map((x) => x.id)) + 1, name: c.name.trim(), kind: c.kind as Channel['kind'], url: masked, events: c.events, enabled: true, lastSentAt: null, lastError: null })
+    const cid = Math.max(0, ...channels.map((x) => x.id)) + 1
+    channels.push({ id: cid, name: c.name.trim(), kind: c.kind as Channel['kind'], url: masked, events: c.events, enabled: true, lastSentAt: null, lastError: null, signed: c.kind === 'webhook' })
     recordDemoAudit({ username: 'demo', client: 'admin', fun: 'notification.create', target: c.name.trim(), args: JSON.stringify({ kind: c.kind, events: c.events }), outcome: 'ok' })
-    return delay(undefined)
+    return delay(c.kind === 'webhook' ? { id: cid, secret: demoSecret() } : { id: cid })
+  },
+  rotateSecret: (cid) => {
+    const c = channels.find((x) => x.id === cid)
+    if (!c) return fail('Not found')
+    if (c.kind !== 'webhook') return fail('Only JSON webhooks are signed')
+    c.signed = true
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'notification.rotate_secret', target: c.name, outcome: 'ok' })
+    return delay({ secret: demoSecret() })
   },
   updateChannel: (cid, changes) => {
     const c = channels.find((x) => x.id === cid)

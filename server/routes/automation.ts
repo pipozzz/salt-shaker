@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
-import { CHANNEL_KINDS, EVENTS, isEvent, type Notifier } from '../notify'
+import { CHANNEL_KINDS, EVENTS, isEvent, newWebhookSecret, type Notifier } from '../notify'
 import { recentScheduleRuns } from '../schedule-runs'
 import { dueAt, nextRun, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
 import { checkQuery } from '../../src/lib/osquery'
@@ -165,7 +165,8 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
 
   r.get('/notifications', async (c) => {
     const rows = await db.select().from(n).orderBy(asc(n.name))
-    return c.json({ channels: rows.map(({ url, ...ch }) => ({ ...ch, url: maskUrl(url), events: JSON.parse(ch.events) })) })
+    // the secret is shown once, when it's made; the list only says whether there is one
+    return c.json({ channels: rows.map(({ url, secret, ...ch }) => ({ ...ch, url: maskUrl(url), events: JSON.parse(ch.events), signed: !!secret })) })
   })
 
   r.post('/notifications', async (c) => {
@@ -174,10 +175,11 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     if (!(CHANNEL_KINDS as readonly string[]).includes(kind)) throw new BadRequest('Unknown channel kind')
     const url = str(body.url, 'Webhook URL', { max: 2000 })!
     validateUrl(url)
-    const values = { name: str(body.name, 'Name', { max: 80 })!, kind, url, events: readEvents(body.events), enabled: true, createdAt: new Date() }
+    const secret = kind === 'webhook' ? newWebhookSecret() : null
+    const values = { name: str(body.name, 'Name', { max: 80 })!, kind, url, events: readEvents(body.events), enabled: true, secret, createdAt: new Date() }
     const [row] = await db.insert(n).values(values).returning({ id: n.id })
     await audit({ ...who(c), client: 'admin', fun: 'notification.create', target: values.name, args: JSON.stringify({ kind, events: body.events }), outcome: 'ok' })
-    return c.json({ id: row.id })
+    return c.json({ id: row.id, ...(secret ? { secret } : {}) })
   })
 
   r.patch('/notifications/:id', async (c) => {
@@ -208,6 +210,18 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     return c.json({ ok: true })
   })
 
+  /** A new signing secret for a JSON webhook; the old one stops working right away. */
+  r.post('/notifications/:id/secret', async (c) => {
+    const id = Number(c.req.param('id'))
+    const [current] = await db.select().from(n).where(eq(n.id, id))
+    if (!current) return c.json({ error: 'Not found' }, 404)
+    if (current.kind !== 'webhook') throw new BadRequest('Only JSON webhooks are signed')
+    const secret = newWebhookSecret()
+    await db.update(n).set({ secret }).where(eq(n.id, id))
+    await audit({ ...who(c), client: 'admin', fun: 'notification.rotate_secret', target: current.name, outcome: 'ok' })
+    return c.json({ secret })
+  })
+
   r.post('/notifications/:id/test', async (c) => {
     const [ch] = await db.select().from(n).where(eq(n.id, Number(c.req.param('id'))))
     if (!ch) return c.json({ error: 'Not found' }, 404)
@@ -216,7 +230,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
       lines: [`Sent by ${who(c).username} to check the "${ch.name}" channel.`],
       severity: 'info',
       path: '/notifications',
-    })
+    }, ch.secret)
     return error ? c.json({ error }, 502) : c.json({ ok: true })
   })
 

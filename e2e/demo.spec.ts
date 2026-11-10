@@ -288,11 +288,28 @@ test('the demo has schedules, and a query can be watched from the Query page', a
   await page.getByRole('button', { name: 'Run now' }).first().click()
 })
 
-test('the demo has notification channels to try', async ({ page }) => {
+test('the demo has notification channels to try, and JSON webhooks get a signing secret', async ({ page }) => {
   await openDemo(page, '/notifications')
   await expect(page.getByText('Ops Slack')).toBeVisible()
   await page.getByRole('button', { name: 'Test' }).first().click()
   await expect(page.getByText('Test message sent')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add channel' }).click()
+  await page.getByLabel('Name').fill('SIEM')
+  await page.getByLabel('Format').selectOption('webhook')
+  await page.getByLabel('Webhook URL').fill('https://siem.example.com/ingest')
+  await page.getByRole('button', { name: 'Add channel' }).last().click()
+  await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
+  await expect(page.getByLabel('Signing secret')).toHaveText(/^whsec_[\w-]{32}$/)
+  await page.getByRole('button', { name: 'Done' }).click()
+  const siem = page.getByRole('listitem').filter({ hasText: 'SIEM' })
+  await expect(siem.getByText('signed', { exact: true })).toBeVisible()
+
+  // a new secret, after saying the old one stops working
+  await siem.getByRole('button', { name: 'New secret' }).click()
+  await expect(page.getByText('the old one stops working right away')).toBeVisible()
+  await page.getByRole('button', { name: 'Make a new secret' }).click()
+  await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
 })
 
 test('the demo audits what is done in it, and what was denied', async ({ page }) => {

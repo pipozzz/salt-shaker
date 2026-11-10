@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { Db, Schema } from './db'
 import type { JobRet } from './history'
@@ -60,6 +61,17 @@ const FAILURE_WINDOW_MS = 15_000
 // don't alert again about the same pending key for a while (minions re-knock every ~10s)
 const PENDING_KEY_QUIET_MS = 6 * 3600_000
 
+/** A new signing secret for a webhook channel. */
+export const newWebhookSecret = () => `whsec_${randomBytes(24).toString('base64url')}`
+
+/**
+ * The signature a JSON webhook carries: HMAC-SHA256 of "<timestamp>.<body>" with the channel's
+ * secret, hex encoded. The receiver recomputes it and checks the timestamp is recent.
+ */
+export function signWebhook(secret: string, timestamp: number, body: string) {
+  return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
+}
+
 export class Notifier {
   private db: Db
   private schema: Schema
@@ -80,19 +92,26 @@ export class Notifier {
     await Promise.all(
       channels
         .filter((ch) => (JSON.parse(ch.events) as string[]).includes(event))
-        .map((ch) => this.send(ch.id, ch.kind, ch.url, event, msg)),
+        .map((ch) => this.send(ch.id, ch.kind, ch.url, event, msg, ch.secret)),
     )
   }
 
   /** Posts one message to one channel and records the outcome on it. */
-  async send(id: number, kind: string, url: string, event: NotifyEvent, msg: Message): Promise<string | null> {
+  async send(id: number, kind: string, url: string, event: NotifyEvent, msg: Message, secret?: string | null): Promise<string | null> {
     const t = this.schema.notificationChannel
     let error: string | null = null
     try {
+      const body = JSON.stringify(payloadFor(kind, event, msg, this.publicUrl))
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'User-Agent': 'salt-shaker' }
+      if (secret && kind === 'webhook') {
+        const ts = Math.floor(Date.now() / 1000)
+        headers['X-Salt-Shaker-Timestamp'] = String(ts)
+        headers['X-Salt-Shaker-Signature'] = `sha256=${signWebhook(secret, ts, body)}`
+      }
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': 'salt-shaker' },
-        body: JSON.stringify(payloadFor(kind, event, msg, this.publicUrl)),
+        headers,
+        body,
         signal: AbortSignal.timeout(10_000),
       })
       if (!res.ok) error = `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`

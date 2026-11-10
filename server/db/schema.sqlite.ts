@@ -143,6 +143,8 @@ export const notificationChannel = sqliteTable('notification_channel', {
   url: text('url').notNull(),
   events: text('events').notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  // JSON webhooks are signed with it (HMAC-SHA256), so the receiver can tell they're ours
+  secret: text('secret'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
   lastError: text('last_error'),

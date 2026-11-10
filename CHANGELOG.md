@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Notifications**
+
+- Generic JSON webhooks are signed: each gets a secret when it's added (shown once), and every request carries `X-Salt-Shaker-Timestamp` and an HMAC-SHA256 `X-Salt-Shaker-Signature`, so the receiver can tell it's from Salt Shaker. **New secret** replaces it; webhooks added before stay unsigned until you click **Sign**. The docs show how to verify it in Node.js and Python.
+
 **Demo**
 
 - The demo has an **Audit log**: what you change in the demo (commands, schedules, channels, accepted risks), what its schedules start, and a few earlier entries including denied attempts, with the same filters and CSV export as the server's.

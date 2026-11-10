@@ -62,6 +62,42 @@ There are three formats:
 }
 ```
 
+### Signed webhooks
+
+Each generic JSON webhook gets a signing secret when it's added. It's shown once, then only as *signed*; **New secret** makes another, and the old one stops working right away. Webhooks added before 1.13 are *unsigned* until you click **Sign**.
+
+Every request carries two headers:
+
+- `X-Salt-Shaker-Timestamp`: when it was sent, in Unix seconds
+- `X-Salt-Shaker-Signature`: `sha256=` and the HMAC-SHA256 of `<timestamp>.<raw body>` with the secret, hex encoded
+
+The receiver recomputes the signature over the raw body, compares it in constant time, and rejects old timestamps (say, more than five minutes) so a captured request can't be replayed:
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
+function verify(secret, headers, rawBody) {
+  const ts = Number(headers['x-salt-shaker-timestamp'])
+  if (!ts || Math.abs(Date.now() / 1000 - ts) > 300) return false
+  const want = 'sha256=' + createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')
+  const got = String(headers['x-salt-shaker-signature'] ?? '')
+  return got.length === want.length && timingSafeEqual(Buffer.from(got), Buffer.from(want))
+}
+```
+
+```python
+import hashlib, hmac, time
+
+def verify(secret: str, headers: dict, raw_body: bytes) -> bool:
+    ts = headers.get("X-Salt-Shaker-Timestamp", "")
+    if not ts.isdigit() or abs(time.time() - int(ts)) > 300:
+        return False
+    want = "sha256=" + hmac.new(secret.encode(), f"{ts}.".encode() + raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(want, headers.get("X-Salt-Shaker-Signature", ""))
+```
+
+Slack and Teams webhooks aren't signed; their secret is the URL itself.
+
 The **Test** button sends a test message. If a channel fails, its last error is shown next to it.
 
 Webhook URLs contain secrets, so the UI only shows enough of them to recognize which is which. To change one, enter a new URL.

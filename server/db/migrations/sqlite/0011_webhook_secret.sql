@@ -1,0 +1,1 @@
+ALTER TABLE `notification_channel` ADD `secret` text;

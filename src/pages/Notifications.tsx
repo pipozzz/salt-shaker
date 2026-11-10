@@ -1,5 +1,5 @@
 import { useAutomationApi } from '../lib/automation'
-import { BellRing, Pencil, Plus, Send, Trash2 } from 'lucide-react'
+import { BellRing, Check, Copy, KeyRound, Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { type Channel, type NotifyEvent } from '../api/server'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
@@ -33,6 +33,9 @@ export function NotificationsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [tested, setTested] = useState<Record<number, string>>({})
+  // a signing secret is shown once: right after it's made
+  const [secret, setSecret] = useState<{ name: string; value: string } | null>(null)
+  const [rotating, setRotating] = useState<Channel | null>(null)
 
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key)
@@ -84,6 +87,16 @@ export function NotificationsPage() {
                   <p className="flex items-center gap-2">
                     <span className="font-medium">{ch.name}</span>
                     <Badge>{FORMAT[ch.kind]?.label ?? ch.kind}</Badge>
+                    {ch.kind === 'webhook' &&
+                      (ch.signed ? (
+                        <Badge tone="green" title="Requests carry an X-Salt-Shaker-Signature header the receiver can check">
+                          signed
+                        </Badge>
+                      ) : (
+                        <Badge tone="amber" title="Make a signing secret so the receiver can tell the requests are from Salt Shaker">
+                          unsigned
+                        </Badge>
+                      ))}
                   </p>
                   <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">{ch.url}</p>
                 </div>
@@ -121,6 +134,11 @@ export function NotificationsPage() {
                   >
                     Test
                   </Button>
+                  {ch.kind === 'webhook' && (
+                    <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => setRotating(ch)} title="Make a new signing secret">
+                      {ch.signed ? 'New secret' : 'Sign'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(ch)}>
                     Edit
                   </Button>
@@ -132,7 +150,43 @@ export function NotificationsPage() {
         )}
       </Card>
 
-      {editing && <ChannelModal channel={editing === 'new' ? null : editing} events={meta.data?.events} onClose={() => setEditing(null)} onSaved={list.reload} />}
+      {editing && (
+        <ChannelModal channel={editing === 'new' ? null : editing} events={meta.data?.events} onClose={() => setEditing(null)} onSaved={list.reload} onSecret={(name, value) => setSecret({ name, value })} />
+      )}
+
+      <Modal open={!!rotating} onClose={() => setRotating(null)} title={rotating?.signed ? 'New signing secret?' : 'Sign this webhook?'}>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {rotating?.signed ? (
+            <>
+              <strong>{rotating?.name}</strong> gets a new secret, and the old one stops working right away: update the receiver with the new one.
+            </>
+          ) : (
+            <>
+              Requests to <strong>{rotating?.name}</strong> will carry a signature the receiver can check with the secret shown next.
+            </>
+          )}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setRotating(null)}>Cancel</Button>
+          <Button
+            variant="primary"
+            icon={<KeyRound className="size-4" />}
+            loading={busy === 'rotate'}
+            onClick={async () => {
+              const ch = rotating!
+              await act('rotate', async () => {
+                const { secret: value } = await api.rotateSecret(ch.id)
+                setSecret({ name: ch.name, value })
+              })
+              setRotating(null)
+            }}
+          >
+            {rotating?.signed ? 'Make a new secret' : 'Make a secret'}
+          </Button>
+        </div>
+      </Modal>
+
+      {secret && <SecretModal name={secret.name} value={secret.value} onClose={() => setSecret(null)} />}
 
       <Modal open={!!removing} onClose={() => setRemoving(null)} title="Delete channel?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -157,7 +211,43 @@ export function NotificationsPage() {
   )
 }
 
-function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel | null; events?: Record<NotifyEvent, string>; onClose: () => void; onSaved: () => void }) {
+/** Shows a webhook's signing secret, once, with how the receiver checks it. */
+function SecretModal({ name, value, onClose }: { name: string; value: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+    } catch {
+      // select it by hand
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={`Signing secret for ${name}`}>
+      <div className="space-y-3 text-sm">
+        <p className="text-zinc-600 dark:text-zinc-400">Copy it to the receiver now: it isn't shown again. A new one can be made at any time.</p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 rounded-lg bg-zinc-100 px-3 py-2 font-mono text-xs break-all select-all dark:bg-zinc-800" aria-label="Signing secret">
+            {value}
+          </code>
+          <Button size="sm" icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} onClick={() => void copy()}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Each request has <code className="font-mono">X-Salt-Shaker-Timestamp</code> and <code className="font-mono">X-Salt-Shaker-Signature: sha256=…</code>, the HMAC-SHA256 of <code className="font-mono">timestamp.body</code> with this secret.
+        </p>
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ChannelModal({ channel, events, onClose, onSaved, onSecret }: { channel: Channel | null; events?: Record<NotifyEvent, string>; onClose: () => void; onSaved: () => void; onSecret: (name: string, secret: string) => void }) {
   const api = useAutomationApi()
   const [name, setName] = useState(channel?.name ?? '')
   const [kind, setKind] = useState<Channel['kind']>(channel?.kind ?? 'slack')
@@ -172,7 +262,10 @@ function ChannelModal({ channel, events, onClose, onSaved }: { channel: Channel 
     setError(null)
     try {
       if (channel) await api.updateChannel(channel.id, { name: name.trim(), events: [...chosen], ...(url.trim() ? { url: url.trim() } : {}) })
-      else await api.createChannel({ name: name.trim(), kind, url: url.trim(), events: [...chosen] })
+      else {
+        const created = await api.createChannel({ name: name.trim(), kind, url: url.trim(), events: [...chosen] })
+        if (created?.secret) onSecret(name.trim(), created.secret)
+      }
       onSaved()
       onClose()
     } catch (err) {

@@ -348,6 +348,8 @@ export interface Channel {
   enabled: boolean
   lastSentAt: string | null
   lastError: string | null
+  /** JSON webhooks: whether it has a signing secret (the secret itself is shown once) */
+  signed?: boolean
 }
 
 export interface AutomationMeta {
@@ -395,7 +397,9 @@ export const automation = {
   deleteSchedule: (id: number) => send('DELETE', `/api/schedules/${id}`),
   runSchedule: (id: number) => send<{ jid: string }>('POST', `/api/schedules/${id}/run`, {}),
   channels: () => request<{ channels: Channel[] }>('/api/notifications'),
-  createChannel: (c: { name: string; kind: string; url: string; events: NotifyEvent[] }) => send('POST', '/api/notifications', c),
+  createChannel: (c: { name: string; kind: string; url: string; events: NotifyEvent[] }) => send<{ id: number; secret?: string }>('POST', '/api/notifications', c),
+  /** a new signing secret for a JSON webhook; the old one stops working */
+  rotateSecret: (id: number) => send<{ secret: string }>('POST', `/api/notifications/${id}/secret`, {}),
   updateChannel: (id: number, c: { name?: string; url?: string; events?: NotifyEvent[]; enabled?: boolean }) => send('PATCH', `/api/notifications/${id}`, c),
   deleteChannel: (id: number) => send('DELETE', `/api/notifications/${id}`),
   testChannel: (id: number) => send('POST', `/api/notifications/${id}/test`, {}),

@@ -15,6 +15,7 @@ const EVENT_SHORT: Record<NotifyEvent, string> = {
   drift: 'Drift',
   patches: 'Patches',
   vulns: 'Vulnerabilities',
+  osquery: 'Query changes',
   schedule: 'Every scheduled run',
   job_failed: 'Failed jobs',
   pending_key: 'Pending keys',

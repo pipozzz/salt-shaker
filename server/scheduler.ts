@@ -1,7 +1,9 @@
 import { Cron } from 'croner'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, ne } from 'drizzle-orm'
 import type { Db, Schema } from './db'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../src/lib/inventory'
+import { osqueryCall } from '../src/lib/osquery'
+import { osqueryDiff, osqueryMessage } from './osquery'
 import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
@@ -12,6 +14,7 @@ export const SCHEDULE_KINDS = {
   compliance: 'Compliance check (state.apply test=True)',
   patches: 'Patch scan (pkg.list_upgrades)',
   vulns: 'Vulnerability scan (package inventory)',
+  osquery: 'osquery query (alert on changes)',
   function: 'Any function',
 } as const
 export type ScheduleKind = keyof typeof SCHEDULE_KINDS
@@ -39,7 +42,11 @@ export function lowstateFor(s: Pick<ScheduleRow, 'id' | 'name' | 'kind' | 'fun' 
   if (s.kind === 'compliance') return { ...base, fun: 'state.apply', arg: [], kwarg: { test: true } }
   if (s.kind === 'patches') return { ...base, fun: 'pkg.list_upgrades', arg: [], kwarg: { refresh: true } }
   if (s.kind === 'vulns') return { ...base, fun: 'cmd.run', arg: [INVENTORY_SCRIPT], kwarg: { ...INVENTORY_KWARG } }
-  const args = s.args ? (JSON.parse(s.args) as { arg?: unknown[]; kwarg?: Record<string, unknown> }) : {}
+  const args = s.args ? (JSON.parse(s.args) as { arg?: unknown[]; kwarg?: Record<string, unknown>; sql?: string }) : {}
+  if (s.kind === 'osquery') {
+    const call = osqueryCall(args.sql ?? 'SELECT 1;')
+    return { ...base, fun: 'cmd.run', arg: call.arg, kwarg: call.kwarg as Record<string, unknown> }
+  }
   return { ...base, fun: s.fun ?? 'test.ping', arg: args.arg ?? [], kwarg: args.kwarg ?? {} }
 }
 
@@ -152,6 +159,20 @@ export class Scheduler {
     await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
   }
 
+  /** The returns of the schedule's run before `jid`, to compare a query's rows with. */
+  private async previousReturns(name: string, jid: string) {
+    const j = this.schema.job
+    const [prev] = await this.db
+      .select({ jid: j.jid })
+      .from(j)
+      .where(and(eq(j.shakerUser, `schedule:${name}`), ne(j.jid, jid)))
+      .orderBy(desc(j.startedAt))
+      .limit(1)
+    if (!prev) return null
+    const r = this.schema.jobReturn
+    return this.db.select({ minion: r.minion, ret: r.ret }).from(r).where(eq(r.jid, prev.jid))
+  }
+
   private async summarizeVulns(s: ScheduleRow, jid: string, expected: number, target: string) {
     try {
       const { report, updating } = await this.vulns!.get(10 * 60_000)
@@ -187,6 +208,12 @@ export class Scheduler {
         summary = ps
         const msg = patchMessage(s.name, target, ps, jid)
         if (ps.needUpdates > 0) await this.notifier.emit('patches', msg)
+        await this.notifier.emit('schedule', msg)
+      } else if (s.kind === 'osquery') {
+        const d = osqueryDiff(await this.previousReturns(s.name, jid), rows, p.minions.length)
+        summary = d
+        const msg = osqueryMessage(s.name, target, d, jid)
+        if (!d.baseline && d.added + d.removed > 0) await this.notifier.emit('osquery', msg)
         await this.notifier.emit('schedule', msg)
       } else if (s.kind === 'vulns' && this.vulns) {
         // matching against OSV.dev can take a while the first time; don't hold up other schedules

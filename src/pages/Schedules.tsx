@@ -1,3 +1,4 @@
+import { OSQUERY_LIBRARY, checkQuery } from '../lib/osquery'
 import { CalendarClock, ExternalLink, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -18,8 +19,8 @@ const PRESETS: Array<[string, string]> = [
 ]
 const presetLabel = (cron: string) => PRESETS.find(([c]) => c === cron)?.[1]
 
-const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', vulns: 'red', function: 'zinc' }
-const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', vulns: 'Vulnerability scan', function: 'Function' }
+const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', vulns: 'red', osquery: 'amber', function: 'zinc' }
+const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', vulns: 'Vulnerability scan', osquery: 'osquery', function: 'Function' }
 
 /** "in 3h", "in 12m": relTime() only speaks about the past. */
 function untilTime(d: Date) {
@@ -56,6 +57,25 @@ function Summary({ s }: { s: Schedule }) {
         {v.critical > 0 && <Badge tone="red">{v.critical} critical</Badge>}
         {v.high > 0 && <Badge tone="amber">{v.high} high</Badge>}
         {v.critical + v.high > 0 ? <Badge>{v.fixable} with a fix</Badge> : <Badge tone="green">nothing critical or high · {v.scanned} scanned</Badge>}
+      </Link>
+    )
+  }
+  if (s.kind === 'osquery' && 'baseline' in sum) {
+    const d = sum as { baseline: boolean; rows: number; minions: number; added: number; removed: number; changedMinions: number; missing: number; failed: number; tooLarge?: number }
+    return (
+      <Link to={`/jobs/${s.lastJid}`} className="flex flex-wrap gap-1">
+        {d.baseline ? (
+          <Badge>first run · {d.rows} rows</Badge>
+        ) : d.added + d.removed ? (
+          <Badge tone="amber">
+            {[d.added && `+${d.added}`, d.removed && `−${d.removed}`].filter(Boolean).join(' ')} on {d.changedMinions} {d.changedMinions === 1 ? 'minion' : 'minions'}
+          </Badge>
+        ) : (
+          <Badge tone="green">no changes · {d.rows} rows</Badge>
+        )}
+        {d.failed > 0 && <Badge tone="red">{d.failed} failed</Badge>}
+        {d.missing > 0 && <Badge>{d.missing} without osquery</Badge>}
+        {(d.tooLarge ?? 0) > 0 && <Badge tone="amber">{d.tooLarge} too large to compare</Badge>}
       </Link>
     )
   }
@@ -107,7 +127,11 @@ export function SchedulesPage() {
   const meta = useAsync(() => automation.meta(), [])
   // "Schedule…" on the Run page opens a new schedule for that function and target
   const [params, setParams] = useSearchParams()
-  const fromRun = params.get('fun') ? { fun: params.get('fun')!, args: params.get('args') ?? '', tgt: params.get('tgt') ?? '*', tgtType: (params.get('tgt_type') as TargetType | null) ?? 'glob' } : null
+  const fromRun = params.get('fun')
+    ? { fun: params.get('fun')!, args: params.get('args') ?? '', tgt: params.get('tgt') ?? '*', tgtType: (params.get('tgt_type') as TargetType | null) ?? 'glob' }
+    : params.get('sql')
+      ? { fun: '', args: '', sql: params.get('sql')!, name: params.get('name') ?? '', tgt: params.get('tgt') ?? '*', tgtType: (params.get('tgt_type') as TargetType | null) ?? 'glob' }
+      : null
   const [editing, setEditing] = useState<Schedule | 'new' | null>(fromRun ? 'new' : null)
   const closeEditor = () => {
     setEditing(null)
@@ -267,13 +291,18 @@ export function SchedulesPage() {
 interface Draft {
   fun: string
   args: string
+  /** from the Query page: an osquery schedule */
+  sql?: string
+  name?: string
   tgt: string
   tgtType: TargetType
 }
 
 function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule: Schedule | null; draft?: Draft | null; kinds?: Record<ScheduleKind, string>; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(schedule?.name ?? (draft ? `${draft.fun} on ${draft.tgt}` : ''))
-  const [kind, setKind] = useState<ScheduleKind>(schedule?.kind ?? (draft ? 'function' : 'compliance'))
+  const [name, setName] = useState(schedule?.name ?? (draft ? (draft.sql !== undefined ? draft.name || 'Watch query' : `${draft.fun} on ${draft.tgt}`) : ''))
+  const [kind, setKind] = useState<ScheduleKind>(schedule?.kind ?? (draft ? (draft.sql !== undefined ? 'osquery' : 'function') : 'compliance'))
+  const [sql, setSql] = useState(schedule?.args?.sql ?? draft?.sql ?? OSQUERY_LIBRARY[0].sql)
+  const sqlError = kind === 'osquery' ? checkQuery(sql) : null
   const [tgt, setTgt] = useState(schedule?.target ?? draft?.tgt ?? '*')
   const [tgtType, setTgtType] = useState<TargetType>((schedule?.targetType as TargetType) ?? draft?.tgtType ?? 'glob')
   const [fun, setFun] = useState(schedule?.fun ?? draft?.fun ?? '')
@@ -296,7 +325,7 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
       target: tgt.trim(),
       targetType: tgtType,
       cron: (preset === 'custom' ? cron : preset).trim(),
-      ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : {}),
+      ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : kind === 'osquery' ? { args: { sql: sql.trim() } } : {}),
     }
     try {
       if (schedule) await automation.updateSchedule(schedule.id, input)
@@ -337,6 +366,28 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
             </Field>
           </div>
         )}
+        {kind === 'osquery' && (
+          <div className="space-y-2">
+            <Field label="Query" hint={sqlError && sql.trim() ? sqlError : 'Each run is compared with the previous one; new or gone rows trigger the “Query changes” notification.'}>
+              <textarea
+                value={sql}
+                onChange={(e) => setSql(e.target.value)}
+                rows={5}
+                spellCheck={false}
+                aria-label="Query"
+                className="w-full rounded-lg border border-zinc-200 bg-white p-2 font-mono text-xs [font-variant-ligatures:none] focus:border-accent-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900"
+              />
+            </Field>
+            <Select aria-label="Start from the library" value="" onChange={(e) => e.target.value && setSql(e.target.value)} className="w-auto text-xs">
+              <option value="">Start from the library…</option>
+              {OSQUERY_LIBRARY.map((l) => (
+                <option key={l.name} value={l.sql}>
+                  {l.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <TargetField
           tgt={tgt}
           tgtType={tgtType}
@@ -367,7 +418,7 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
           <Button type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={busy}>
+          <Button type="submit" variant="primary" loading={busy} disabled={!!sqlError}>
             {schedule ? 'Save' : 'Create schedule'}
           </Button>
         </div>

@@ -14,17 +14,17 @@ function tables(id: string, os: string, release: string): Record<string, Row[]> 
   const web = id.startsWith('web')
   const db = id.startsWith('db')
   const ports: Row[] = [
-    { name: 'sshd', port: '22', protocol: '6', address: '0.0.0.0', pid: '812', path: '/usr/sbin/sshd' },
-    { name: 'salt-minion', port: '0', protocol: '6', address: '0.0.0.0', pid: '901', path: '/usr/bin/python3' },
+    { name: 'sshd', port: '22', protocol: '6', address: '0.0.0.0', path: '/usr/sbin/sshd' },
+    { name: 'salt-minion', port: '0', protocol: '6', address: '0.0.0.0', path: '/usr/bin/python3' },
     ...(web
       ? [
-          { name: 'nginx', port: '80', protocol: '6', address: '0.0.0.0', pid: '1204', path: '/usr/sbin/nginx' },
-          { name: 'nginx', port: '443', protocol: '6', address: '0.0.0.0', pid: '1204', path: '/usr/sbin/nginx' },
+          { name: 'nginx', port: '80', protocol: '6', address: '0.0.0.0', path: '/usr/sbin/nginx' },
+          { name: 'nginx', port: '443', protocol: '6', address: '0.0.0.0', path: '/usr/sbin/nginx' },
         ]
       : []),
-    ...(db ? [{ name: 'postgres', port: '5432', protocol: '6', address: '10.0.2.21', pid: '1530', path: '/usr/lib/postgresql/15/bin/postgres' }] : []),
-    ...(id === 'web-02' ? [{ name: 'python3', port: '8000', protocol: '6', address: '0.0.0.0', pid: '4411', path: '/usr/bin/python3' }] : []),
-    ...(id === 'mon-01' ? [{ name: 'prometheus', port: '9090', protocol: '6', address: '0.0.0.0', pid: '2210', path: '/usr/bin/prometheus' }] : []),
+    ...(db ? [{ name: 'postgres', port: '5432', protocol: '6', address: '10.0.2.21', path: '/usr/lib/postgresql/15/bin/postgres' }] : []),
+    ...(id === 'web-02' ? [{ name: 'python3', port: '8000', protocol: '6', address: '0.0.0.0', path: '/usr/bin/python3' }] : []),
+    ...(id === 'mon-01' ? [{ name: 'prometheus', port: '9090', protocol: '6', address: '0.0.0.0', path: '/usr/bin/prometheus' }] : []),
   ]
   return {
     listening_ports: ports.filter((p) => p.port !== '0'),

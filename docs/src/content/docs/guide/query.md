@@ -22,6 +22,12 @@ The library has ready-made queries for listening ports, logged-in users, account
 
 With the server, operators and admins save a query for the team with **Save for the team**. Saved queries are listed at the top of the library for everyone; whoever saved one (or an admin) can replace it by saving under the same name, or remove it.
 
+## Watching a query
+
+An admin can run a query on a schedule with **Watch…**, or with an [osquery schedule](/salt-shaker/guide/schedules/). Each run is compared with the previous one, minion by minion: rows that appeared or went away are counted, the schedule shows them (*+2 −1 on 2 minions*), and the **Query changes** notification lists up to ten of them, e.g. `web-02: + username=tmpadmin shell=/bin/bash`. The first run is the baseline and doesn't alert.
+
+Good candidates are queries whose answer should stay the same: listening ports, accounts with a login shell, authorized SSH keys, SUID binaries, cron jobs, kernel modules. Leave out columns that change by themselves (PIDs, times, memory use), or every run looks different. A minion's result over 512 KB isn't kept in the job history, so it can't be compared; narrow the query if the schedule says so.
+
 ## Installing osquery
 
 Minions without osquery are listed under the results. **Install osquery…** adds the official osquery repository (`pkg.osquery.io`, signed with its own key) and installs the `osquery` package with apt (Debian, Ubuntu) or dnf/yum (RHEL, AlmaLinux, Rocky Linux). It starts no daemon; queries use the `osqueryi` shell. Alpine and other systems aren't covered.

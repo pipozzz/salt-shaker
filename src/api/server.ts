@@ -299,15 +299,15 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 
 // ---- automation (admin) ----
 
-export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
+export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
 
 export interface Schedule {
   id: number
   name: string
   kind: ScheduleKind
   fun: string | null
-  args: { arg?: unknown[]; kwarg?: Record<string, unknown> } | null
+  args: { arg?: unknown[]; kwarg?: Record<string, unknown>; sql?: string } | null
   target: string
   targetType: string
   cron: string
@@ -333,7 +333,7 @@ export interface ScheduleInput {
   name: string
   kind: ScheduleKind
   fun?: string | null
-  args?: { arg: unknown[]; kwarg: Record<string, unknown> } | null
+  args?: { arg: unknown[]; kwarg: Record<string, unknown> } | { sql: string } | null
   target: string
   targetType: string
   cron: string

@@ -4,6 +4,7 @@ import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, type Notifier } from '../notify'
 import { recentScheduleRuns } from '../schedule-runs'
 import { dueAt, nextRun, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
+import { checkQuery } from '../../src/lib/osquery'
 import type { AuditRow, Env } from '../types'
 
 export const TARGET_TYPES = ['glob', 'list', 'grain', 'compound', 'pcre', 'pillar', 'nodegroup']
@@ -84,7 +85,13 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     validateCron(cron)
     const fun = kind === 'function' ? str(body.fun, 'Function', { max: 100 }) : null
     if (fun && !/^[A-Za-z_][\w.]*$/.test(fun)) throw new BadRequest('Invalid function name')
-    const args = kind === 'function' && body.args && typeof body.args === 'object' ? JSON.stringify(body.args) : null
+    let args = kind === 'function' && body.args && typeof body.args === 'object' ? JSON.stringify(body.args) : null
+    if (kind === 'osquery') {
+      const sql = str((body.args as { sql?: unknown } | null)?.sql, 'Query', { max: 10_000 })!
+      const invalid = checkQuery(sql)
+      if (invalid) throw new BadRequest(invalid)
+      args = JSON.stringify({ sql })
+    }
     return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron }
   }
 

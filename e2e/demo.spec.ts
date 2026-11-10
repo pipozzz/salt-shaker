@@ -171,7 +171,7 @@ test('osquery answers in one table, and installs where it is missing', async ({ 
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export CSV' }).click()
   const lines = (await readFile(await (await download).path(), 'utf8')).trim().split('\r\n')
-  expect(lines).toEqual(['minion,name,port,protocol,address,pid,path', 'db-01,postgres,5432,6,10.0.2.21,1530,/usr/lib/postgresql/15/bin/postgres'])
+  expect(lines).toEqual(['minion,name,port,protocol,address,path', 'db-01,postgres,5432,6,10.0.2.21,/usr/lib/postgresql/15/bin/postgres'])
 
   await page.getByPlaceholder('Filter rows…').fill('')
 

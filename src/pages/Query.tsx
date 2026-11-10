@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { BookOpen, Database, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
+import { BookOpen, CalendarClock, Database, Download, Play, RefreshCw, Save, Search, TriangleAlert, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { queries as queriesApi, type SavedQuery } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
@@ -24,6 +24,9 @@ export function QueryPage() {
   const writer = session?.mode === 'demo' || (server && (session.eauth === 'admin' || session.eauth === 'operator'))
   const me = session?.user ?? null
   const job = useJob()
+  const navigate = useNavigate()
+  // schedules are for admins; a scheduled query alerts when its rows change
+  const canSchedule = server && session.eauth === 'admin'
   const install = useJob()
   const [tgt, setTgt] = useStoredState('salt-shaker.query.tgt', '*')
   const [tgtType, setTgtType] = useStoredState<TargetType>('salt-shaker.query.tgtType', 'glob')
@@ -172,6 +175,18 @@ export function QueryPage() {
                 {r && !r.done ? `Running… ${Object.keys(r.results).length}/${r.minions.length}` : 'Run query'}
               </Button>
               <span className="text-xs text-zinc-500 dark:text-zinc-400">{invalid && sql.trim() ? invalid : '⌘/Ctrl + Enter runs it'}</span>
+              {canSchedule && (
+                <Button
+                  type="button"
+                  size="sm"
+                  icon={<CalendarClock className="size-3.5" />}
+                  disabled={!!invalid}
+                  title="Run it on a schedule and get notified when its rows change"
+                  onClick={() => navigate(`/schedules?${new URLSearchParams({ sql, name: OSQUERY_LIBRARY.find((l) => l.sql === sql)?.name ?? '', tgt, tgt_type: tgtType })}`)}
+                >
+                  Watch…
+                </Button>
+              )}
               {writer && server && (
                 <div className="ml-auto">
                   {saving === null ? (

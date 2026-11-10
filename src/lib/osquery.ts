@@ -88,7 +88,7 @@ export const OSQUERY_LIBRARY: LibraryQuery[] = [
   {
     name: 'Listening ports',
     description: 'Processes accepting connections, and on which address',
-    sql: "SELECT p.name, l.port, l.protocol, l.address, p.pid, p.path\nFROM listening_ports l JOIN processes p USING (pid)\nWHERE l.port != 0\nORDER BY l.port;",
+    sql: "SELECT DISTINCT p.name, l.port, l.protocol, l.address, p.path\nFROM listening_ports l JOIN processes p USING (pid)\nWHERE l.port != 0\nORDER BY l.port;",
   },
   {
     name: 'Logged-in users',

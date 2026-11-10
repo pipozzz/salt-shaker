@@ -1,6 +1,7 @@
 import { Cron } from 'croner'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { checkQuery, osqueryCall, OSQUERY_LIBRARY } from '../lib/osquery'
+import { recordDemoAudit } from './demo-audit'
 import { demoJob } from './mock'
 import type { automation, AutomationMeta, Channel, NotifyEvent, Schedule, ScheduleInput, ScheduleKind, ScheduleRun } from './server'
 
@@ -150,6 +151,7 @@ export const demoAutomation: typeof automation = {
     const error = check(s)
     if (error) return fail(error)
     schedules.push({ ...s, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.create', target: s.name.trim(), args: JSON.stringify(s), outcome: 'ok' })
     return delay(undefined)
   },
   updateSchedule: (sid, changes) => {
@@ -159,10 +161,12 @@ export const demoAutomation: typeof automation = {
     const error = Object.keys(changes).length === 1 && 'enabled' in changes ? null : check(merged, s)
     if (error) return fail(error)
     Object.assign(s, changes)
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.update', target: s.name, args: JSON.stringify(changes), outcome: 'ok' })
     return delay(undefined)
   },
   deleteSchedule: (sid) => {
     const i = schedules.findIndex((x) => x.id === sid)
+    if (i >= 0) recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.delete', target: schedules[i].name, outcome: 'ok' })
     if (i >= 0) schedules.splice(i, 1)
     return delay(undefined)
   },
@@ -187,6 +191,7 @@ export const demoAutomation: typeof automation = {
       return `${u.protocol}//${u.host}/…${(u.pathname + u.search).slice(-4)}`
     })()
     channels.push({ id: Math.max(0, ...channels.map((x) => x.id)) + 1, name: c.name.trim(), kind: c.kind as Channel['kind'], url: masked, events: c.events, enabled: true, lastSentAt: null, lastError: null })
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'notification.create', target: c.name.trim(), args: JSON.stringify({ kind: c.kind, events: c.events }), outcome: 'ok' })
     return delay(undefined)
   },
   updateChannel: (cid, changes) => {

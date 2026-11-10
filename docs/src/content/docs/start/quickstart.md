@@ -15,7 +15,7 @@ npm run dev
 
 Open <http://localhost:5173/?demo>.
 
-The demo has made-up data for the pages that need the server, too: vulnerabilities, schedules and notification channels. They live in the browser and are gone on reload; nothing runs on a schedule and nothing is sent.
+The demo has made-up data for the pages that need the server, too: vulnerabilities, schedules, notification channels and the audit log, which records what you do in the demo. They live in the browser and are gone on reload; nothing runs on a schedule and nothing is sent.
 
 ## Full local lab
 

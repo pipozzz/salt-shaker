@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Demo**
+
+- The demo has an **Audit log**: what you change in the demo (commands, schedules, channels, accepted risks), what its schedules start, and a few earlier entries including denied attempts, with the same filters and CSV export as the server's.
+
 ## 1.12.0
 
 **Vulnerabilities**

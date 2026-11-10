@@ -295,6 +295,25 @@ test('the demo has notification channels to try', async ({ page }) => {
   await expect(page.getByText('Test message sent')).toBeVisible()
 })
 
+test('the demo audits what is done in it, and what was denied', async ({ page }) => {
+  await openDemo(page, `/run?${new URLSearchParams({ tgt: 'web-01', tgt_type: 'list', fun: 'cmd.run', args: "'hostname'" })}`)
+  await page.getByRole('button', { name: 'Run on 1' }).click()
+  await expect(page.getByText('1/1 returned')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Audit log' }).click()
+  await expect(page.getByRole('button', { name: /demo ok cmd\.run → list:web-01/ })).toBeVisible()
+  await page.getByLabel('Outcome').selectOption('denied')
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await expect(page.getByRole('button', { name: /vic denied cmd\.run → db-01/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /demo ok/ })).toHaveCount(0)
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  const lines = (await readFile(await (await download).path(), 'utf8')).trim().split('\r\n')
+  expect(lines[0]).toBe('id,at,username,role,client,function,target,target_type,arguments,jid,outcome,error,ip')
+  expect(lines.slice(1).every((l) => l.includes(',denied,'))).toBe(true)
+})
+
 test('run previews the target and shows results', async ({ page }) => {
   await openDemo(page, '/run?tgt=web-*&fun=test.ping')
   await expect(page.getByText('2 minions:')).toBeVisible()

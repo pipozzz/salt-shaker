@@ -64,7 +64,7 @@ export function Layout() {
   const items = [
     // the vulnerability report is built by the server (the demo has a made-up one)
     ...nav.flatMap((n) => (n.to === '/patches' && session && session.mode !== 'live' ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }] : [n])),
-    ...(role === 'admin' || role === 'operator' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
+    ...(role === 'admin' || role === 'operator' || session?.mode === 'demo' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
     ...(role === 'admin'
       ? [
           { to: '/schedules', label: 'Schedules', icon: CalendarClock },

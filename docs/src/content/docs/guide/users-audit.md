@@ -18,7 +18,7 @@ The first admin is created on the first visit to a fresh install.
 
 ## Audit log
 
-The **Audit log** records every change, plus every denied attempt, with who, what, where (client IP) and the resulting jid.
+The **Audit log** records every change, plus every denied attempt (the demo has one too, of what you do in it), with who, what, where (client IP) and the resulting jid.
 
 Besides Salt calls, it has the console's own changes: schedules and notification channels (`schedule.*`, `notification.*`), and vulnerabilities accepted or withdrawn (`vulns.accept` with the reason and duration, `vulns.unaccept`).
 

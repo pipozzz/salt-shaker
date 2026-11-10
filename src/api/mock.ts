@@ -1,5 +1,7 @@
 import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
 import { demoOsquery } from './demo-osquery'
+import { recordDemoAudit, saltArgs } from './demo-audit'
+import { isAudited } from '../lib/readonly'
 import { SaltError, type FileTree, type Grains, type JobSummary, type KeyList, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /**
@@ -407,6 +409,8 @@ function startJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwa
 export function demoJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwarg: Record<string, unknown>, user: string, when = new Date(), instant = false) {
   const job = startJob(tgt, tgtType, fun, arg, kwarg, user, when, instant)
   if (instant) jobs.sort((a, b) => b.jid.localeCompare(a.jid))
+  // the server audits what its schedules start
+  if (isAudited('local_async', fun)) recordDemoAudit({ at: when, username: user, role: 'system', client: 'local_async', fun, target: tgt, targetType: tgtType, args: saltArgs(arg, kwarg), jid: job?.jid ?? null, outcome: job ? 'ok' : 'error', error: job ? null : 'No minions matched the target', ip: null })
   return job ? { jid: job.jid, minions: job.minions } : null
 }
 
@@ -423,7 +427,11 @@ export function demoJob(tgt: string, tgtType: string, fun: string, arg: unknown[
     [12, '*', 'glob', 'state.apply', ['common'], {}],
     [3, '*', 'glob', 'test.ping', [], {}],
   ]
-  for (const [minsAgo, tgt, type, fun, arg, kwarg] of seed) startJob(tgt, type, fun, arg, kwarg, 'pipo', new Date(now - minsAgo * 60_000), true)
+  for (const [minsAgo, tgt, type, fun, arg, kwarg] of seed) {
+    const when = new Date(now - minsAgo * 60_000)
+    const job = startJob(tgt, type, fun, arg, kwarg, 'pipo', when, true)
+    if (isAudited('local', fun)) recordDemoAudit({ at: when, username: 'pipo', role: 'operator', client: 'local', fun, target: tgt, targetType: type, args: saltArgs(arg, kwarg), jid: job?.jid ?? null, outcome: 'ok', ip: '10.0.9.4' })
+  }
   jobs.sort((a, b) => b.jid.localeCompare(a.jid))
 })()
 
@@ -489,7 +497,22 @@ export class MockTransport implements Transport {
 
   async logout() {}
 
+  /** Answers like salt-api, and audits it the way the server would. */
   async call(low: Lowstate): Promise<unknown> {
+    const audited = isAudited(low.client, low.fun)
+    const entry = { username: this.user, client: low.client, fun: low.fun, target: low.tgt ?? null, targetType: low.tgt_type ?? null, args: saltArgs(low.arg, low.kwarg) }
+    try {
+      const ret = await this.answer(low)
+      const jid = ret && typeof ret === 'object' && 'jid' in ret ? String((ret as { jid: unknown }).jid) : null
+      if (audited) recordDemoAudit({ ...entry, jid, outcome: 'ok' })
+      return ret
+    } catch (e) {
+      if (audited) recordDemoAudit({ ...entry, outcome: 'error', error: e instanceof Error ? e.message : String(e) })
+      throw e
+    }
+  }
+
+  private async answer(low: Lowstate): Promise<unknown> {
     await sleep(rand(120, 380))
     const { client, fun } = low
     const kw = low as Record<string, unknown>

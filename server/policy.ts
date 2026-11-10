@@ -1,5 +1,6 @@
 import type { Role } from './roles'
 import { canFor } from './roles'
+import { READ_ONLY } from '../src/lib/readonly'
 
 const CLIENTS = { local: 'local', local_async: 'local', runner: 'runner', runner_async: 'runner', wheel: 'wheel' } as const
 type Client = keyof typeof CLIENTS
@@ -7,12 +8,6 @@ type Client = keyof typeof CLIENTS
 // keys salt-api would treat as per-request credentials; users must not override the service account
 const AUTH_KEYS = ['username', 'password', 'eauth', 'token']
 
-/** Calls that only read. Everything else is written to the audit log. */
-const READ_ONLY = {
-  local: /^(test\.(ping|version)|grains\.(items|item|get|ls)|pillar\.(items|item|get)|sys\.\w+|saltutil\.find_job|pkg\.(list_upgrades|version|list_pkgs)|status\.\w+|disk\.usage|network\.(ip_addrs|interfaces)|service\.status|state\.show_\w+)$/,
-  runner: /^(manage\.(status|versions)|cache\.grains|jobs\.\w+|pillar\.show_pillar|salt\.cmd)$/,
-  wheel: /^(key\.(list_all|finger)|(file|pillar)_roots\.(list_roots|read|list_env))$/,
-}
 
 export type Decision =
   | { ok: true; low: Record<string, unknown>; client: Client; audited: boolean }

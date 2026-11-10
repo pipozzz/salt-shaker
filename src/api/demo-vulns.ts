@@ -1,4 +1,5 @@
 import type { FindingRow } from '../lib/export'
+import { recordDemoAudit } from './demo-audit'
 import type { InstalledPackage, PackageSearch, Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
@@ -228,10 +229,11 @@ export const demoVulns = {
     const at = new Date()
     const a = { note, acceptedBy: 'demo', acceptedAt: at.toISOString(), expiresAt: days ? new Date(+at + days * 86400_000).toISOString() : null }
     accepted.set(id, a)
+    recordDemoAudit({ username: 'demo', role: 'operator', client: 'console', fun: 'vulns.accept', target: id, args: JSON.stringify({ note, days }), outcome: 'ok' })
     return delay({ accepted: { id, ...a } })
   },
   unaccept: (id: string) => {
-    accepted.delete(id)
+    if (accepted.delete(id)) recordDemoAudit({ username: 'demo', role: 'operator', client: 'console', fun: 'vulns.unaccept', target: id, outcome: 'ok' })
     return delay({ ok: true as const })
   },
 }

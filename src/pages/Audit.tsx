@@ -2,17 +2,24 @@ import clsx from 'clsx'
 import { ChevronRight, Download, RefreshCw, ScrollText, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { demoAudit } from '../api/demo-audit'
 import { auditExportUrl, auditLog, type AuditFilter, type AuditRow } from '../api/server'
 import { JsonView } from '../components/JsonView'
 import { Badge, Button, ButtonLink, Card, Empty, ErrorBox, Input, PageHeader, Select, Spinner } from '../components/ui'
 import { useAsync, useUrlSearch } from '../lib/hooks'
 import { relTime } from '../lib/format'
+import { download } from '../lib/export'
+import { useSession } from '../lib/session'
 
 const PAGE = 100
 const FIELDS = ['q', 'outcome', 'from', 'to'] as const
 const OUTCOMES = ['ok', 'denied', 'error'] as const
 
 export function AuditPage() {
+  const { session } = useSession()
+  // the demo keeps its own log in the browser
+  const demo = session?.mode === 'demo'
+  const list = demo ? demoAudit.list : auditLog
   const search = useUrlSearch(FIELDS)
   const { form } = search
   // the URL may say anything; an unknown outcome means any
@@ -22,7 +29,7 @@ export function AuditPage() {
   const older = olderPages.key === search.key ? olderPages.rows : []
   const [loadingMore, setLoadingMore] = useState(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const first = useAsync(() => auditLog({ ...applied, limit: PAGE }), [search.key])
+  const first = useAsync(() => list({ ...applied, limit: PAGE }), [search.key, demo])
   const filtered = Object.values(applied).some(Boolean)
   const set = (k: (typeof FIELDS)[number]) => (e: { target: { value: string } }) => search.set(k, e.target.value)
   const refresh = () => {
@@ -38,7 +45,7 @@ export function AuditPage() {
     if (!last) return
     setLoadingMore(true)
     try {
-      const res = await auditLog({ ...applied, before: last.id, limit: PAGE })
+      const res = await list({ ...applied, before: last.id, limit: PAGE })
       setOlderPages({ key: search.key, rows: [...older, ...res.rows] })
     } finally {
       setLoadingMore(false)
@@ -52,9 +59,15 @@ export function AuditPage() {
         description="Every call that could change something, who made it and how it ended — including attempts the user's role did not allow."
         actions={
           <>
-            <ButtonLink href={auditExportUrl(applied)} download icon={<Download className="size-4" />} title={filtered ? 'Every entry matching the filter, as CSV' : 'Every entry, as CSV'}>
-              Export CSV
-            </ButtonLink>
+            {demo ? (
+              <Button icon={<Download className="size-4" />} onClick={() => download(`audit-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', demoAudit.csv(applied))}>
+                Export CSV
+              </Button>
+            ) : (
+              <ButtonLink href={auditExportUrl(applied)} download icon={<Download className="size-4" />} title={filtered ? 'Every entry matching the filter, as CSV' : 'Every entry, as CSV'}>
+                Export CSV
+              </ButtonLink>
+            )}
             <Button
               icon={<RefreshCw className={clsx('size-4', first.loading && 'animate-spin')} />}
               onClick={refresh}

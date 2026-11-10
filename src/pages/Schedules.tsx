@@ -84,6 +84,26 @@ function Summary({ s }: { s: Schedule }) {
   return f.failed ? <Badge tone="red">{f.failed} failed</Badge> : <Badge tone="green">{f.returned} ok</Badge>
 }
 
+/** What a watched query's last run found new or gone, as listed in its notification. */
+function QueryChanges({ s }: { s: Schedule }) {
+  const d = s.kind === 'osquery' ? (s.lastSummary as { baseline?: boolean; added?: number; removed?: number; examples?: string[] } | null) : null
+  if (!d || d.baseline || !d.examples?.length) return null
+  const more = (d.added ?? 0) + (d.removed ?? 0) - d.examples.length
+  return (
+    <details className="basis-full pl-14 text-xs">
+      <summary className="cursor-pointer text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">What changed in the last run</summary>
+      <ul className="mt-1 space-y-0.5 font-mono break-all">
+        {d.examples.map((e) => (
+          <li key={e} className={e.includes(': + ') ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}>
+            {e}
+          </li>
+        ))}
+        {more > 0 && <li className="font-sans text-zinc-500 dark:text-zinc-400">… and {more} more in the job</li>}
+      </ul>
+    </details>
+  )
+}
+
 const RUN_BAR: Record<ScheduleRun['status'], string> = {
   ok: 'bg-emerald-500',
   changed: 'bg-amber-400',
@@ -259,6 +279,7 @@ export function SchedulesPage() {
                   </Button>
                   <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setRemoving(s)} aria-label={`Delete ${s.name}`} />
                 </div>
+                <QueryChanges s={s} />
               </li>
             ))}
           </ul>

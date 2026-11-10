@@ -38,8 +38,8 @@ export function QueryPage() {
   const [params, setParams] = useSearchParams()
   useEffect(() => {
     const shared = params.get('sql')
-    if (!shared) return
-    setSql(shared)
+    if (!shared && !params.get('tgt')) return
+    if (shared) setSql(shared)
     if (params.get('tgt')) {
       setTgt(params.get('tgt')!)
       setTgtType((params.get('tgt_type') as TargetType | null) ?? 'glob')

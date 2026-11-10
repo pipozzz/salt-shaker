@@ -10,7 +10,7 @@ sidebar: { order: 6 }
 
 ## Running a query
 
-Pick a target, write a query or choose one from the **Library**, and **Run query** (or press ⌘/Ctrl + Enter). Filter the rows as they come in, and **Export CSV** downloads the rows the filter shows. The last query's results stay on the page when you open a minion and come back. Click a column header to sort by it (numbers sort as numbers); click again to reverse.
+Pick a target, write a query or choose one from the **Library**, and **Run query** (or press ⌘/Ctrl + Enter). **Query** on a minion's page opens the page with that minion as the target. Filter the rows as they come in, and **Export CSV** downloads the rows the filter shows. The last query's results stay on the page when you open a minion and come back. Click a column header to sort by it (numbers sort as numbers); click again to reverse.
 
 **Copy link** copies a link that opens the page with this query and target, to send to a colleague. Queries from the library and the team's saved ones are also in ⌘K: type part of the name, e.g. *ssh keys*.
 
@@ -26,7 +26,7 @@ With the server, operators and admins save a query for the team with **Save for 
 
 ## Watching a query
 
-An admin can run a query on a schedule with **Watch…**, or with an [osquery schedule](/salt-shaker/guide/schedules/). Each run is compared with the previous one, minion by minion: rows that appeared or went away are counted, the schedule shows them (*+2 −1 on 2 minions*), and the **Query changes** notification lists up to ten of them, e.g. `web-02: + username=tmpadmin shell=/bin/bash`. The first run is the baseline and doesn't alert.
+An admin can run a query on a schedule with **Watch…**, or with an [osquery schedule](/salt-shaker/guide/schedules/). Each run is compared with the previous one, minion by minion: rows that appeared or went away are counted, the schedule shows them (*+2 −1 on 2 minions*, with **What changed in the last run** listing them), and the **Query changes** notification lists up to ten of them, e.g. `web-02: + username=tmpadmin shell=/bin/bash`. The first run is the baseline and doesn't alert.
 
 Good candidates are queries whose answer should stay the same: listening ports, accounts with a login shell, authorized SSH keys, SUID binaries, cron jobs, kernel modules. Leave out columns that change by themselves (PIDs, times, memory use), or every run looks different. A minion's result over 512 KB isn't kept in the job history, so it can't be compared; narrow the query if the schedule says so.
 

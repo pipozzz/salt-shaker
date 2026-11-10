@@ -108,7 +108,7 @@ seed(
     target: 'web-*',
     targetType: 'glob',
     cron: '0 * * * *',
-    lastSummary: { baseline: false, minions: 2, rows: 3, added: 1, removed: 0, changedMinions: 1, missing: 0, failed: 0, tooLarge: 0, noreturn: 0, examples: [] },
+    lastSummary: { baseline: false, minions: 2, rows: 3, added: 1, removed: 0, changedMinions: 1, missing: 0, failed: 0, tooLarge: 0, noreturn: 0, examples: ['web-02: + algorithm=ssh-rsa key_end=Hh4kP9sW2xQe7uJ0aB5n key_file=/home/tmpadmin/.ssh/authorized_keys username=tmpadmin'] },
   },
   () => 'ok',
   () => '2 ok · 0 failed',

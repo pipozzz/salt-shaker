@@ -1,4 +1,4 @@
-import { ArrowLeft, Cpu, HardDrive, History, Network, Play, Search, Terminal } from 'lucide-react'
+import { ArrowLeft, Cpu, Database, HardDrive, History, Network, Play, Search, Terminal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
@@ -67,6 +67,9 @@ export function MinionDetailPage() {
           </Button>
           <Button icon={<Play className="size-4" />} onClick={() => run('state.apply', 'test=True')}>
             Dry-run highstate
+          </Button>
+          <Button icon={<Database className="size-4" />} onClick={() => navigate(`/query?${new URLSearchParams({ tgt: id, tgt_type: 'list' })}`)} title="Ask this minion a question in SQL with osquery">
+            Query
           </Button>
           <Button variant="primary" icon={<Terminal className="size-4" />} onClick={() => run('cmd.run', "'uptime'")}>
             Run command

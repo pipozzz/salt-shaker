@@ -224,6 +224,15 @@ test('grouped osquery rows put what only a few minions have first', async ({ pag
   await expect(page.getByText('Query edited since')).toHaveCount(0)
 })
 
+test('a minion page opens Query on that minion', async ({ page }) => {
+  await openDemo(page, '/minions/db-01')
+  await page.getByRole('button', { name: 'Query', exact: true }).click()
+  await expect(page).toHaveURL(/\/query$/)
+  await expect(page.getByLabel('Target')).toHaveValue('db-01')
+  await page.getByRole('button', { name: 'Run query' }).click()
+  await expect(page.getByText(/rows? from 1 of 1 minion/)).toBeVisible()
+})
+
 test('a query opens from ⌘K or a link, and its results sort by column', async ({ page }) => {
   await openDemo(page)
   await page.keyboard.press('ControlOrMeta+k')
@@ -251,6 +260,8 @@ test('the demo has schedules, and a query can be watched from the Query page', a
   await openDemo(page, '/schedules')
   await expect(page.getByText('Nightly compliance')).toBeVisible()
   await expect(page.getByText('+1 on 1 minion')).toBeVisible()
+  await page.getByText('What changed in the last run').click()
+  await expect(page.getByText(/^web-02: \+ .*username=tmpadmin$/)).toBeVisible()
   // its runs are real jobs of the simulated master
   await page.getByRole('link', { name: /updates available \(5 minions with 6 packages to update\)/ }).last().click()
   await expect(page).toHaveURL(/\/jobs\/\d{20}$/)

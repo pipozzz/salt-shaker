@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Query**
+
+- A watched query's schedule lists what changed in its last run (**What changed in the last run**), and **Query** on a minion's page opens the Query page on that minion.
+
 **Demo**
 
 - The demo's schedules run real jobs on the simulated master: their past runs and **Run now** are in the job history, and the links to them open the job.

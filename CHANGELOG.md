@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Docs**
+
+- A new landing page for the docs site: what Salt Shaker does, with a screenshot of each part, how it talks to your master, and how to try or deploy it, in light and dark.
+
 **Minions**
 
 - A **Packages** tab on each minion's page lists everything installed according to its latest vulnerability scan, with each package's version and its known vulnerabilities; filter by name or show only the vulnerable ones.

@@ -1,0 +1,805 @@
+---
+/*
+ * The landing page: our own layout, not Starlight's, so it can show the product properly.
+ * The docs (Starlight) start at /salt-shaker/start/introduction/.
+ */
+import { Image } from 'astro:assets'
+import pkg from '../../../package.json'
+import minions from '../../screenshots/minions.png'
+import minionsDark from '../../screenshots/minions-dark.png'
+import compliance from '../../screenshots/compliance.png'
+import vulnerabilities from '../../screenshots/vulnerabilities.png'
+import patches from '../../screenshots/patches.png'
+import query from '../../screenshots/query.png'
+import schedules from '../../screenshots/schedules.png'
+import audit from '../../screenshots/audit.png'
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+const docs = (path: string) => `${base}/${path}`
+const github = 'https://github.com/pipozzz/salt-shaker'
+const version = pkg.version
+
+const features = [
+  { icon: 'server', title: 'Fleet at a glance', text: 'OS, IPs, CPU, memory, roles and Salt versions of every minion, from the master’s cache, fast with thousands of them.' },
+  { icon: 'check', title: 'Compliance', text: 'Dry-run the highstate across a target, see exactly what drifted, remediate with one click, and follow drift over time.' },
+  { icon: 'shield', title: 'Vulnerabilities', text: 'Known CVEs in installed packages from the distributions’ own trackers via OSV.dev, with a 90-day trend.' },
+  { icon: 'package', title: 'Patches', text: 'Pending upgrades fleet-wide, with the ones that fix a vulnerability marked; upgrade just those.' },
+  { icon: 'search', title: 'Query with osquery', text: 'Ask every minion a question in SQL and get one table back. Watch a query and hear when its answer changes.' },
+  { icon: 'terminal', title: 'Run & orchestrate', text: 'Any execution module on any target, results live, state diffs rendered, risky commands confirmed.' },
+  { icon: 'bell', title: 'Schedules & alerts', text: 'Nightly checks and scans on a cron schedule, alerts to Slack, Teams or signed webhooks.' },
+  { icon: 'lock', title: 'Users, roles, audit', text: 'Local accounts or single sign-on, admin/operator/viewer roles, and every change and denied attempt in the audit log.' },
+]
+
+const showcases = [
+  {
+    image: compliance,
+    eyebrow: 'Compliance',
+    title: 'Know what drifted before it bites',
+    text: 'A dry-run of the highstate groups minions into in compliance, drifted, errors and no return, with the diff of every state that would change.',
+    points: ['One click remediates the drifted minions', 'Past checks are kept, so drift has a history', 'A nightly schedule alerts you when it appears'],
+    link: { href: docs('guide/compliance/'), label: 'How compliance checks work' },
+  },
+  {
+    image: vulnerabilities,
+    eyebrow: 'Vulnerabilities',
+    title: 'CVEs in what’s actually installed',
+    text: 'A read-only scan lists each minion’s packages; the server checks them against OSV.dev, which gathers the Debian, Ubuntu, AlmaLinux, Rocky Linux and Alpine trackers.',
+    points: ['Severity, the fixed version, and a one-click upgrade', 'Accept a risk with a reason and an expiry', 'Search every installed package across the fleet'],
+    link: { href: docs('guide/vulnerabilities/'), label: 'Read about vulnerabilities' },
+  },
+  {
+    image: patches,
+    eyebrow: 'Patches',
+    title: 'Patch what matters first',
+    text: 'Pending upgrades by package or by minion, with the ones that fix a known vulnerability marked by severity and sorted to the top.',
+    points: ['Upgrade only the security fixes, only where they fix something', 'The inventory refreshes after an upgrade', 'Weekly patch scans with alerts'],
+    link: { href: docs('guide/patches/'), label: 'Read about patches' },
+  },
+  {
+    image: query,
+    eyebrow: 'osquery',
+    title: 'Ask the whole fleet a question',
+    text: 'Write one SELECT, or pick one from the library, and see every minion’s answer in one table: listening ports, accounts, SSH keys, SUID binaries, cron jobs.',
+    points: ['Group identical rows to see what only a few minions have', 'Watch a query and get alerted when its rows change', 'Installs osquery where it’s missing'],
+    link: { href: docs('guide/query/'), label: 'Read about Query' },
+  },
+  {
+    image: schedules,
+    eyebrow: 'Automation',
+    title: 'Checks that run themselves',
+    text: 'Compliance checks, patch and vulnerability scans, watched queries or any function on a cron schedule, each with a history of its last runs.',
+    points: ['Slack, Microsoft Teams or HMAC-signed JSON webhooks', 'Alerts for drift, fixable vulnerabilities, failed jobs and minions going down', 'Run now, from anywhere'],
+    link: { href: docs('guide/schedules/'), label: 'Read about schedules' },
+  },
+  {
+    image: audit,
+    eyebrow: 'Security',
+    title: 'Every change, on the record',
+    text: 'The server keeps its own users and roles and talks to salt-api with one service account. Users’ credentials never reach the master.',
+    points: ['Admin, operator and viewer roles, or roles from your IdP’s groups', 'Audit log of every change and every denied attempt, exportable', 'Job history beyond the master’s 24-hour cache'],
+    link: { href: docs('guide/users-audit/'), label: 'Read about users and audit' },
+  },
+]
+
+const install = `docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \\
+  -e SALT_API_URL=https://salt-master:8000 \\
+  -e SALT_API_USERNAME=salt-shaker -e SALT_API_PASSWORD=… \\
+  -e SALT_API_EAUTH=sharedsecret \\
+  ghcr.io/pipozzz/salt-shaker:${version}`
+
+const demo = `git clone ${github}.git
+cd salt-shaker && npm install && npm run dev
+# open http://localhost:5173/?demo`
+
+const icons: Record<string, string> = {
+  server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  check: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/>',
+  shield: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M12 8v4M12 15.5h.01"/>',
+  package: '<path d="m21 8-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  terminal: '<path d="m5 8 4 4-4 4M12 16h7"/>',
+  bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Salt Shaker: a web UI for SaltStack</title>
+    <meta name="description" content="A web UI for SaltStack on top of salt-api: compliance, patches, vulnerabilities, osquery, schedules, users, roles and an audit log, in one container." />
+    <meta property="og:title" content="Salt Shaker: a web UI for SaltStack" />
+    <meta property="og:description" content="Compliance, patches, vulnerabilities, osquery and every Salt function, through salt-api, in one container." />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a href={`${base}/`} class="brand">
+          <img src={`${base}/favicon.svg`} alt="" width="28" height="28" />
+          <span>Salt Shaker</span>
+        </a>
+        <nav aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#start">Get started</a>
+          <a href={docs('start/introduction/')}>Docs</a>
+          <a href={github} class="gh" aria-label="Salt Shaker on GitHub">
+            <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-inner">
+          <div class="hero-text">
+            <a class="pill" href={`${github}/releases/tag/v${version}`}>
+              <span class="dot" aria-hidden="true"></span> Version {version} · open source, AGPL-3.0
+            </a>
+            <h1>Your Salt fleet, <span class="accent">in one place</span></h1>
+            <p class="lead">
+              A web UI for SaltStack that works with your master through salt-api. Compliance, patches, vulnerabilities, osquery and every Salt function, with its own users, roles and audit log. One container.
+            </p>
+            <div class="ctas">
+              <a class="btn primary" href={docs('start/quickstart/')}>Get started</a>
+              <a class="btn" href={github}>View on GitHub</a>
+            </div>
+            <ul class="facts" aria-label="At a glance">
+              <li><strong>0</strong> agents on minions</li>
+              <li><strong>1</strong> container</li>
+              <li><strong>SQLite</strong> or Postgres</li>
+              <li><strong>amd64</strong> + arm64</li>
+            </ul>
+          </div>
+          <div class="browser hero-shot" aria-label="The Minions page">
+            <div class="bar" aria-hidden="true"><span></span><span></span><span></span><em>salt.example.com</em></div>
+            <Image src={minions} alt="The Minions page: status, OS, IPs and Salt versions of every minion" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="light-only" loading="eager" />
+            <Image src={minionsDark} alt="" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="dark-only" loading="eager" />
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="wrap">
+          <p class="eyebrow">Everything in one console</p>
+          <h2>What a Salt fleet needs, day to day</h2>
+          <div class="grid">
+            {features.map((f) => (
+              <article class="card">
+                <span class="icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" set:html={icons[f.icon]} />
+                </span>
+                <h3>{f.title}</h3>
+                <p>{f.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {showcases.map((s, i) => (
+        <section class:list={['section', 'showcase', { flip: i % 2 === 1, tint: i % 2 === 0 }]}>
+          <div class="wrap showcase-inner">
+            <div class="showcase-text">
+              <p class="eyebrow">{s.eyebrow}</p>
+              <h2>{s.title}</h2>
+              <p>{s.text}</p>
+              <ul class="points">
+                {s.points.map((p) => (
+                  <li>{p}</li>
+                ))}
+              </ul>
+              <a class="more" href={s.link.href}>{s.link.label} →</a>
+            </div>
+            <div class="browser">
+              <div class="bar" aria-hidden="true"><span></span><span></span><span></span></div>
+              <Image src={s.image} alt={`${s.eyebrow}: ${s.title}`} widths={[640, 960, 1440]} sizes="(min-width: 1100px) 620px, 100vw" />
+            </div>
+          </div>
+        </section>
+      ))}
+
+      <section id="how" class="section">
+        <div class="wrap">
+          <p class="eyebrow">How it works</p>
+          <h2>On top of salt-api, nothing on the minions</h2>
+          <div class="flow" role="img" aria-label="Your browser talks to the Salt Shaker server with a session cookie; the server talks to salt-api with one service account; salt-api runs it on the master, which reaches the minions.">
+            <div class="node"><strong>Your browser</strong><span>session cookie</span></div>
+            <div class="arrow" aria-hidden="true"></div>
+            <div class="node main"><strong>Salt Shaker</strong><span>users · roles · audit</span><span>SQLite or Postgres</span></div>
+            <div class="arrow" aria-hidden="true"></div>
+            <div class="node"><strong>salt-api</strong><span>one service account</span></div>
+            <div class="arrow" aria-hidden="true"></div>
+            <div class="node"><strong>Salt master</strong><span>and your minions</span></div>
+          </div>
+          <div class="grid three">
+            <article class="card plain">
+              <h3>Your master stays yours</h3>
+              <p>Salt Shaker uses salt-api (<code>rest_cherrypy</code>) on Salt 3006 or newer. No agents, no changes on the minions, no extra ports.</p>
+            </article>
+            <article class="card plain">
+              <h3>Checked before it runs</h3>
+              <p>Every call is checked against the user’s role first, then sent with the service account. Users’ own credentials never reach salt-api.</p>
+            </article>
+            <article class="card plain">
+              <h3>History that outlives the master’s</h3>
+              <p>The server records every job and return from the event bus, even ones started from the salt CLI, for 90 days by default.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="start" class="section tint">
+        <div class="wrap">
+          <p class="eyebrow">Get started</p>
+          <h2>Running in five minutes</h2>
+          <div class="grid two">
+            <article class="card plain">
+              <h3>Try the demo</h3>
+              <p>A simulated master in your browser, with made-up minions, vulnerabilities, schedules and an audit log. No Salt needed.</p>
+              <div class="code">
+                <button class="copy" type="button" data-copy={demo}>Copy</button>
+                <pre><code>{demo}</code></pre>
+              </div>
+            </article>
+            <article class="card plain">
+              <h3>Run it against your master</h3>
+              <p>
+                <a href={docs('deploy/master/')}>Prepare the master</a> with salt-api and a service account, then start the container and create the admin account.
+              </p>
+              <div class="code">
+                <button class="copy" type="button" data-copy={install}>Copy</button>
+                <pre><code>{install}</code></pre>
+              </div>
+            </article>
+          </div>
+          <div class="ctas center">
+            <a class="btn primary" href={docs('start/quickstart/')}>Read the quickstart</a>
+            <a class="btn" href={docs('deploy/docker/')}>Deploy with Docker Compose</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <a href={`${base}/`} class="brand small">
+          <img src={`${base}/favicon.svg`} alt="" width="22" height="22" />
+          <span>Salt Shaker</span>
+        </a>
+        <nav aria-label="Footer">
+          <a href={docs('start/introduction/')}>Docs</a>
+          <a href={docs('reference/security/')}>Security</a>
+          <a href={`${github}/releases`}>Releases</a>
+          <a href={github}>GitHub</a>
+        </nav>
+        <p>Licensed under the AGPL-3.0. Not affiliated with VMware or the Salt Project.</p>
+      </div>
+    </footer>
+
+    <script>
+      for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
+        button.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy ?? '')
+            button.textContent = 'Copied'
+            setTimeout(() => (button.textContent = 'Copy'), 2000)
+          } catch {
+            // select the text by hand
+          }
+        })
+      }
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #ffffff;
+    --bg-tint: #f6f8f8;
+    --surface: #ffffff;
+    --text: #18181b;
+    --muted: #52525b;
+    --line: #e4e4e7;
+    --accent: #0d9488;
+    --accent-strong: #0f766e;
+    --accent-soft: #ccfbf1;
+    --code-bg: #18181b;
+    --code-text: #e4e4e7;
+    --shadow: 0 24px 60px -24px rgb(15 23 42 / 0.35);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f10;
+      --bg-tint: #111718;
+      --surface: #151b1d;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --line: #27272a;
+      --accent: #2dd4bf;
+      --accent-strong: #5eead4;
+      --accent-soft: rgb(45 212 191 / 0.12);
+      --code-bg: #0a0d0e;
+      --code-text: #e4e4e7;
+      --shadow: 0 24px 60px -24px rgb(0 0 0 / 0.8);
+    }
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a {
+    color: var(--accent-strong);
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  .wrap {
+    width: min(1160px, 100% - 2rem);
+    margin-inline: auto;
+  }
+
+  /* header */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 4rem;
+    gap: 1rem;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .brand.small {
+    font-size: 1rem;
+  }
+  .nav nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  .nav nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  .nav nav a:hover {
+    color: var(--text);
+  }
+  .gh {
+    display: inline-flex;
+  }
+
+  /* hero */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 5rem 0 6rem;
+    background:
+      radial-gradient(60rem 30rem at 85% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+      radial-gradient(40rem 24rem at -10% 110%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%);
+  }
+  .hero-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 3.5rem;
+    align-items: center;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .pill:hover {
+    color: var(--text);
+  }
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  h1 {
+    margin: 1.25rem 0 1rem;
+    font-size: clamp(2.4rem, 5vw, 3.75rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+  .accent {
+    color: var(--accent);
+  }
+  .lead {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 34rem;
+  }
+  .ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+  .ctas.center {
+    justify-content: center;
+    margin-top: 2.5rem;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.75rem 1.3rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px -10px rgb(0 0 0 / 0.4);
+  }
+  .btn.primary {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin: 2.25rem 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .facts strong {
+    color: var(--text);
+  }
+
+  /* a screenshot in a browser window */
+  .browser {
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2rem;
+    padding: 0 0.8rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-tint);
+  }
+  .bar span {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .bar em {
+    margin-left: 0.8rem;
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .hero-shot {
+    transform: perspective(2000px) rotateY(-5deg);
+    transform-origin: right center;
+  }
+  .dark-only {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    .light-only {
+      display: none;
+    }
+    .dark-only {
+      display: block;
+    }
+  }
+
+  /* sections */
+  .section {
+    padding: 5.5rem 0;
+  }
+  .section.tint {
+    background: var(--bg-tint);
+  }
+  .eyebrow {
+    margin: 0 0 0.5rem;
+    color: var(--accent-strong);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  h2 {
+    margin: 0 0 2.5rem;
+    font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+  .grid.three {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 2.5rem;
+  }
+  .grid.two {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+  .card {
+    padding: 1.5rem;
+    border: 1px solid var(--line);
+    border-radius: 0.9rem;
+    background: var(--surface);
+    min-width: 0;
+  }
+  .card h3 {
+    margin: 0.9rem 0 0.4rem;
+    font-size: 1.05rem;
+  }
+  .card.plain h3 {
+    margin-top: 0;
+  }
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .icon {
+    display: inline-flex;
+    padding: 0.55rem;
+    border-radius: 0.6rem;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  /* showcases */
+  .showcase-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 4rem;
+    align-items: center;
+  }
+  .flip .showcase-text {
+    order: 2;
+  }
+  .showcase h2 {
+    margin-bottom: 1rem;
+  }
+  .showcase-text > p {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .points {
+    margin: 1.5rem 0;
+    padding: 0;
+    list-style: none;
+  }
+  .points li {
+    position: relative;
+    padding-left: 1.7rem;
+    margin: 0.5rem 0;
+  }
+  .points li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.45rem;
+    width: 1rem;
+    height: 0.55rem;
+    border-left: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(-45deg);
+  }
+  .more {
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* how it works */
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .node {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 1.1rem 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface);
+  }
+  .node span {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .node.main {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .arrow {
+    align-self: center;
+    width: 1.5rem;
+    height: 2px;
+    background: var(--accent);
+    position: relative;
+    flex: none;
+  }
+  .arrow::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: -4px;
+    border: 5px solid transparent;
+    border-left: 7px solid var(--accent);
+    border-right: 0;
+  }
+
+  /* code */
+  .code {
+    position: relative;
+    margin-top: 1.25rem;
+  }
+  .code pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    padding-right: 4.5rem;
+    border-radius: 0.6rem;
+    background: var(--code-bg);
+    color: var(--code-text);
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+  .copy {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #3f3f46;
+    border-radius: 0.4rem;
+    background: #27272a;
+    color: #e4e4e7;
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .copy:hover {
+    background: #3f3f46;
+  }
+
+  /* footer */
+  .footer {
+    border-top: 1px solid var(--line);
+    padding: 2.5rem 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+  }
+  .footer nav {
+    display: flex;
+    gap: 1.25rem;
+  }
+  .footer nav a {
+    color: var(--muted);
+  }
+  .footer p {
+    margin: 0;
+    flex-basis: 100%;
+  }
+
+  @media (max-width: 960px) {
+    .hero {
+      padding: 3rem 0 4rem;
+    }
+    .hero-inner,
+    .showcase-inner {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+    .hero-shot {
+      transform: none;
+    }
+    .flip .showcase-text {
+      order: 0;
+    }
+    .flow {
+      flex-direction: column;
+    }
+    .arrow {
+      width: 2px;
+      height: 1.25rem;
+    }
+    .arrow::after {
+      right: -4px;
+      top: auto;
+      bottom: -1px;
+      border: 5px solid transparent;
+      border-top: 7px solid var(--accent);
+      border-bottom: 0;
+    }
+    .section {
+      padding: 4rem 0;
+    }
+  }
+  @media (max-width: 640px) {
+    .nav nav a:not(.gh):not([href*='start/introduction']) {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    .btn {
+      transition: none;
+    }
+  }
+</style>

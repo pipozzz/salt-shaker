@@ -268,3 +268,14 @@ export const apiToken = pgTable('api_token', {
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 })
+
+/** A window in which new minions whose id matches are accepted without a click (at most maxAccepts). */
+export const keyRule = pgTable('key_rule', {
+  id: serial('id').primaryKey(),
+  pattern: text('pattern').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  maxAccepts: integer('max_accepts').notNull(),
+  accepted: text('accepted').notNull().default('[]'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})

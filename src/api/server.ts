@@ -484,6 +484,23 @@ export const changes = {
   stop: (id: number) => send('POST', `/api/changes/${id}/stop`, {}),
 }
 
+/** An enrollment window: new minions matching the pattern are accepted without a click, for a while. */
+export interface KeyRule {
+  id: number
+  pattern: string
+  expiresAt: string
+  maxAccepts: number
+  accepted: string[]
+  createdBy: string | null
+  createdAt: string
+}
+
+export const keyRules = {
+  list: () => request<{ rules: KeyRule[] }>('/api/key-rules'),
+  open: (pattern: string, hours: number, maxAccepts: number) => send<{ rule: KeyRule }>('POST', '/api/key-rules', { pattern, hours, maxAccepts }),
+  close: (id: number) => send('POST', `/api/key-rules/${id}/close`, {}),
+}
+
 /** A personal API token, without the token itself (shown once, when made). */
 export interface ApiToken {
   id: number

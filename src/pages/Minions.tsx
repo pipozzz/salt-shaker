@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { CircleOff, Download, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
+import { CircleOff, Download, GitCompare, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
@@ -301,6 +301,11 @@ export function MinionsPage() {
             <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} onClick={runOnPicked}>
               Run on selected
             </Button>
+            {picked.length === 2 && (
+              <Button size="sm" icon={<GitCompare className="size-3.5" />} onClick={() => navigate(`/minions/compare?${new URLSearchParams({ a: picked[0], b: picked[1] })}`)}>
+                Compare
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
             </Button>

@@ -17,6 +17,7 @@ import { MinionsPage } from './pages/Minions'
 import { OverviewPage } from './pages/Overview'
 import { BranchPreviewPage } from './pages/BranchPreview'
 import { TokensPage } from './pages/Tokens'
+import { ComparePage } from './pages/Compare'
 import { ChangeDetailPage, ChangesPage } from './pages/Changes'
 import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
@@ -61,6 +62,7 @@ function Gate() {
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="minions" element={<MinionsPage />} />
+        <Route path="minions/compare" element={<ComparePage />} />
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="compliance/preview" element={<BranchPreviewPage />} />

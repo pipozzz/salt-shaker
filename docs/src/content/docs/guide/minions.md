@@ -35,3 +35,8 @@ The **Jobs** tab lists the recorded jobs that targeted the minion, newest first,
 Offline minions are detected the way the Salt CLI does it, with `saltutil.find_job` and a short `gather_job_timeout`.
 
 Press **⌘K** / **Ctrl+K** anywhere to jump to a page, minion, saved target or recent command.
+
+## Comparing two minions
+
+Select two minions on the list and choose **Compare**, or open **Minions → Compare** and pick them, to see what sets them apart: the grains that differ, from the master's cache (so a minion that's down compares too), and the packages that differ in version or are on only one of them, from their latest [vulnerability scan](/salt-shaker/guide/vulnerabilities/). Grains that always differ between machines, like names, addresses and ids, are set apart until you ask for them. Nothing runs on the minions.
+

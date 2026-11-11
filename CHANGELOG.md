@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Enrollment**
+
+- **Enrollment windows**: while bringing up servers, an admin accepts new minions whose id matches a pattern (e.g. `web-2026-*`) as they arrive, for 1 to 72 hours and up to a number, instead of one by one. Windows always end, `*` alone isn't allowed, and every accept is audited and notified.
+
+**Minions**
+
+- **Compare** two minions: select them on the list to see the grains that differ (names, addresses and ids set apart) and the packages that differ in version or are on only one of them. Nothing runs on the minions.
+
 ## 1.16.0
 
 **Changes: batched rollouts and approvals**

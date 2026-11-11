@@ -270,3 +270,14 @@ export const apiToken = sqliteTable('api_token', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
   lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
 })
+
+/** A window in which new minions whose id matches are accepted without a click (at most maxAccepts). */
+export const keyRule = sqliteTable('key_rule', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  pattern: text('pattern').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  maxAccepts: integer('max_accepts').notNull(),
+  accepted: text('accepted').notNull().default('[]'),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})

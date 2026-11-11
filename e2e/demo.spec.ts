@@ -80,6 +80,20 @@ test('a minion page keeps its tab and filter in the URL and links back to the fi
   await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 })
 
+test('two minions picked on the list can be compared', async ({ page }) => {
+  await openDemo(page)
+  await page.getByRole('checkbox', { name: 'Select web-01' }).check()
+  await page.getByRole('checkbox', { name: 'Select db-01' }).check()
+  await page.getByRole('button', { name: 'Compare' }).click()
+  await expect(page).toHaveURL(/\/minions\/compare\?a=/)
+  await expect(page.getByRole('row', { name: /^os Ubuntu Debian$|^os Debian Ubuntu$/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /^postgresql-15/ })).toContainText('missing')
+  // names and addresses are set apart until asked for
+  await expect(page.getByRole('row', { name: /^id / })).toHaveCount(0)
+  await page.getByLabel('Show names, addresses and ids').check()
+  await expect(page.getByRole('row', { name: /^id / })).toBeVisible()
+})
+
 test('minions picked on the list open Run with them as a list target', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')
@@ -573,6 +587,21 @@ test('enroll dialog starts clean every time it opens', async ({ page }) => {
   await page.getByRole('button', { name: 'Close' }).click()
   await page.getByRole('button', { name: 'Enroll minion' }).click()
   await expect(page.getByPlaceholder('web-03')).toHaveValue('')
+})
+
+test('an enrollment window accepts the new keys that match it', async ({ page }) => {
+  await openDemo(page, '/keys')
+  await page.getByLabel('Minion ids like').fill('*')
+  await page.getByRole('button', { name: 'Open a window' }).click()
+  await expect(page.getByText(/The pattern has to name the minions/)).toBeVisible()
+  await page.getByLabel('Minion ids like').fill('edge-*')
+  await page.getByRole('button', { name: 'Open a window' }).click()
+  await expect(page.getByText('accepted 1 of 10: edge-lon-01')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Accepted\s*7/ })).toBeVisible()
+  // worker-02 doesn't match and still waits
+  await expect(page.locator('li', { hasText: 'worker-02' }).getByRole('button', { name: 'Accept' })).toBeVisible()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.getByText('closed', { exact: true })).toBeVisible()
 })
 
 test('accepting a pending key moves it to accepted', async ({ page }) => {

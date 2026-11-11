@@ -530,6 +530,16 @@ function moveKey(id: string, to: keyof KeyList) {
   if (to !== 'local') (keys[to] as string[]).push(id)
 }
 
+/** For the demo's enrollment windows: the keys waiting, and accepting one as the server would. */
+export const demoPendingKeys = () => [...keys.minions_pre]
+export function demoAcceptKey(id: string) {
+  if (!keys.minions_pre.includes(id)) return false
+  moveKey(id, 'minions')
+  ensureMinion(id)
+  emit('salt/key', { id, act: 'accept', result: true })
+  return true
+}
+
 function ensureMinion(id: string) {
   if (!minions[id]) minions[id] = { up: true, grains: makeGrains(id, 'Ubuntu', '24.04', 2, 3934, `10.0.9.${rand(10, 250)}`, []) }
 }

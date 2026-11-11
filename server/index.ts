@@ -27,6 +27,7 @@ import { queryRoutes } from './routes/queries'
 import { scopeRoutes } from './routes/scopes'
 import { changeRoutes } from './routes/changes'
 import { tokenRoutes, userForToken } from './tokens'
+import { KeyAutoAccept, keyRuleRoutes } from './keyrules'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
@@ -217,6 +218,10 @@ app.get('/api/me', async (c) => {
 })
 
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
+
+// enrollment windows accept matching new keys; the event bus is followed by one instance only
+const keyAutoAccept = new KeyAutoAccept({ db, schema, salt, notify: (m) => notifier.emit('pending_key', m), audit })
+history.onEvent((tag, data) => void keyAutoAccept.onEvent(tag, data).catch((e) => console.warn('keys: auto-accept failed', e)))
 
 /** Which minions a target matches, from the master's grains cache, for scoped users' calls. */
 const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await salt.call({ client: 'runner', fun: 'cache.grains', tgt, tgt_type: tgtType })) ?? {}) as Record<string, unknown>))
@@ -424,6 +429,7 @@ app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))
+app.route('/api', keyRuleRoutes({ db, schema, audit }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))

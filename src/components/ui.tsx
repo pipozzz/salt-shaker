@@ -237,15 +237,18 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
 
 export function Stat({ label, value, icon, tone = 'zinc', hint }: { label: string; value: ReactNode; icon: ReactNode; tone?: Tone; hint?: ReactNode }) {
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
+    // as tall as its row, with the hint at the bottom, so stats side by side line up
+    <Card className="flex h-full flex-col p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-zinc-500 dark:text-zinc-400" title={label}>
+            {label}
+          </p>
           <p className="mt-1.5 text-2xl font-semibold tabular-nums">{value}</p>
         </div>
         <div className={clsx('rounded-lg p-2 ring-1 ring-inset [&>svg]:size-4', tones[tone])}>{icon}</div>
       </div>
-      {hint && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
+      {hint && <p className="mt-auto pt-2 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
     </Card>
   )
 }

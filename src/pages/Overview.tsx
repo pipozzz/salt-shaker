@@ -63,7 +63,7 @@ export function OverviewPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Tile to={minionsDown ? '/minions?status=down' : '/minions'}>
           <Stat
             label="Minions responding"
@@ -98,11 +98,11 @@ export function OverviewPage() {
         {mode !== 'live' && (
           <Tile to="/vulnerabilities">
             <Stat
-              label="Critical & high vulnerabilities"
+              label="Critical & high vulns"
               value={o.vulns ? o.vulns.critical + o.vulns.high : vulns.loading ? '…' : '—'}
               icon={<ShieldAlert />}
               tone={!o.vulns ? 'zinc' : o.vulns.critical ? 'red' : o.vulns.high ? 'amber' : 'green'}
-              hint={o.vulns ? `${o.vulns.fixable} with a fix · ${o.vulns.affected}/${o.vulns.scanned} minions affected` : vulns.loading ? null : 'no vulnerability scan yet'}
+              hint={o.vulns ? `${o.vulns.fixable} with a fix · ${o.vulns.affected}/${o.vulns.scanned} minions` : vulns.loading ? null : 'no vulnerability scan yet'}
             />
           </Tile>
         )}
@@ -154,7 +154,7 @@ export function OverviewPage() {
 /** A stat that opens the page behind it. */
 function Tile({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="block h-full rounded-xl transition [&>div]:h-full hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500">
+    <Link to={to} className="block h-full rounded-xl transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500">
       {children}
     </Link>
   )

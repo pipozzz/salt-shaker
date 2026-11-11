@@ -13,7 +13,7 @@ test('the overview shows how the fleet is doing and what needs attention', async
   const tile = (label: string) => page.getByRole('link', { name: new RegExp(label) })
   await expect(tile('Minions responding')).toContainText('5/6')
   await expect(tile('Drifted or failing')).toContainText('3')
-  await expect(tile('Critical & high vulnerabilities')).toContainText('6 with a fix')
+  await expect(tile('Critical & high vulns')).toContainText('6 with a fix')
   await expect(tile('Failed jobs, last day')).toBeVisible()
 
   // worst first, each pointing where it gets fixed

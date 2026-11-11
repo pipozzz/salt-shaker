@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.0
 
 **Several masters**
 
@@ -13,6 +13,7 @@
 **Upgrading**
 
 - `deploy/docker-compose.yml`, `docker-compose.sqlite.yml` and `Caddyfile` are gone. In your `.env`, add `PUBLIC_URL=https://<your DOMAIN>` and the line that picks your old setup: `COMPOSE_FILE=compose.yml:compose.caddy.yml:compose.postgres.yml` (was `docker-compose.yml`) or `COMPOSE_FILE=compose.yml:compose.caddy.yml` (was `docker-compose.sqlite.yml`). Volume names stay the same, so data and certificates carry over. Until `PUBLIC_URL` is set, `docker compose up` stops with a message instead of starting an empty instance.
+- The database gains a table for the other instances when the server starts; nothing to do.
 
 ## 1.20.1
 

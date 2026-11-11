@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, BellRing, CalendarClock, Database, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, CalendarClock, Database, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -12,7 +12,8 @@ import { EventNotifications } from './Toasts'
 import { StatusDot } from './ui'
 
 const nav = [
-  { to: '/', label: 'Minions', icon: Server, end: true },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/minions', label: 'Minions', icon: Server },
   { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
   { to: '/patches', label: 'Patches', icon: Package },
   { to: '/keys', label: 'Enrollment', icon: KeyRound },

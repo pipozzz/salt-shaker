@@ -1,11 +1,42 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 
-/** Opens the demo; ?demo signs in to the mock master directly. */
-async function openDemo(page: Page, path = '/') {
+/** Opens the demo; ?demo signs in to the mock master directly. Most tests start at the minions list. */
+async function openDemo(page: Page, path = '/minions') {
   await page.goto(`${path}${path.includes('?') ? '&' : '?'}demo`)
   await expect(page.getByRole('complementary').getByText('Demo', { exact: true })).toBeVisible()
 }
+
+test('the overview shows how the fleet is doing and what needs attention', async ({ page }) => {
+  await openDemo(page, '/')
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  const tile = (label: string) => page.getByRole('link', { name: new RegExp(label) })
+  await expect(tile('Minions responding')).toContainText('5/6')
+  await expect(tile('Drifted or failing')).toContainText('3')
+  await expect(tile('Critical & high vulnerabilities')).toContainText('6 with a fix')
+  await expect(tile('Failed jobs, last day')).toBeVisible()
+
+  // worst first, each pointing where it gets fixed
+  const items = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /See them|Upgrade|Review keys|Remediate|See jobs/ }) })
+  await expect(items.first()).toContainText('1 minion not responding')
+  await expect(items.first()).toContainText('cache-01')
+  await page.getByRole('link', { name: 'Remediate' }).click()
+  await expect(page).toHaveURL(/\/compliance$/)
+
+  // a stat opens its page
+  await page.getByRole('link', { name: 'Overview' }).click()
+  // once the minions have answered, the tile leads to the ones that didn't
+  await expect(tile('Minions responding')).toContainText('1 not responding')
+  await tile('Minions responding').click()
+  await expect(page).toHaveURL(/\/minions\?status=down$/)
+  await expect(page.getByRole('cell', { name: 'cache-01', exact: true })).toBeVisible()
+})
+
+test('an old link to the minions list with filters still opens it', async ({ page }) => {
+  await openDemo(page, '/?q=db')
+  await expect(page).toHaveURL(/\/minions\?q=db$/)
+  await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('db')
+})
 
 test('minions overview shows the fleet and flags old Salt versions', async ({ page }) => {
   await openDemo(page)
@@ -45,7 +76,7 @@ test('a minion page keeps its tab and filter in the URL and links back to the fi
   await expect(page.getByRole('button', { name: 'Pillar', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByPlaceholder('Filter keys…')).toHaveValue('postgres')
   await page.getByRole('main').getByRole('link', { name: 'Minions' }).click()
-  await expect(page).toHaveURL(/:\d+\/\?(demo=&)?q=db$/)
+  await expect(page).toHaveURL(/\/minions\?(demo=&)?q=db$/)
   await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 })
 

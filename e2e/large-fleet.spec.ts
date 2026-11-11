@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 // ?demo=large: 606 generated minions, some down, some on an older Salt
 test('a large fleet renders in pages and filters reset paging', async ({ page }) => {
-  await page.goto('/?demo=large')
+  await page.goto('/minions?demo=large')
   await expect(page.getByText('Showing 100 of 606')).toBeVisible()
   await expect(page.getByRole('row')).toHaveCount(101) // header + one page
 
@@ -17,7 +17,7 @@ test('a large fleet renders in pages and filters reset paging', async ({ page })
 })
 
 test('minions appear before the slow responding check finishes', async ({ page }) => {
-  await page.goto('/?demo=large')
+  await page.goto('/minions?demo=large')
   // grains come from the cache right away; manage.status takes longer
   await expect(page.getByText('Pinging minions…')).toBeVisible()
   await expect(page.getByRole('cell', { name: 'api-ams-001', exact: true })).toBeVisible()

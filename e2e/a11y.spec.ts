@@ -8,8 +8,12 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
     await p.goto('/')
     await expect(p.getByRole('button', { name: 'Demo' })).toBeVisible()
   }],
-  ['minions', async (p) => {
+  ['overview', async (p) => {
     await p.goto('/?demo')
+    await expect(p.getByText('1 minion not responding')).toBeVisible()
+  }],
+  ['minions', async (p) => {
+    await p.goto('/minions')
     await expect(p.getByRole('cell', { name: 'web-01', exact: true })).toBeVisible()
   }],
   ['enrollment', async (p) => {

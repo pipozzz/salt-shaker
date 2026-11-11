@@ -49,7 +49,7 @@ export function MinionDetailPage() {
 
   return (
     <>
-      <Link to={back ? `/?${back}` : '/'} className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 dark:text-zinc-400">
+      <Link to={back ? `/minions?${back}` : '/minions'} className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 dark:text-zinc-400">
         <ArrowLeft className="size-4" /> Minions
       </Link>
 

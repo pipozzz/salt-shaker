@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Overview**
+
+- A new **Overview** home page shows how the fleet is doing: minions responding, drifted or failing minions, minions to patch, critical and high vulnerabilities and failed jobs of the last day, each opening its page. **Needs attention** lists what to look at, worst first (minions down, highstate errors, fixable critical vulnerabilities, keys waiting, drift, failed jobs, stale checks, risk acceptances ending), with a button to where it gets fixed, next to the 90-day vulnerability trend.
+- The minions list moved to **Minions** (`/minions`); old links with its filters still open it.
+
 **Docs**
 
 - A new landing page for the docs site: what Salt Shaker does, with a screenshot of each part, how it talks to your master, and how to try or deploy it, in light and dark.

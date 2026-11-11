@@ -11,6 +11,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 
 ## Features
 
+- **Overview:** the home page: minions responding, drift, pending patches, critical and high vulnerabilities and failed jobs at a glance, and what needs attention, worst first, each linking to where it gets fixed.
 - **Minions:** status, OS, IPs, CPU/RAM and roles at a glance, read from the master's cache, so it stays fast with large fleets and shows offline minions too. A fleet breakdown flags minions running an older Salt than the master. Each minion's page shows its grains and compiled pillar.
 - **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions. Past checks are kept, so you can follow drift over time.
 - **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, everything on a minion, or just the upgrades that fix known vulnerabilities.

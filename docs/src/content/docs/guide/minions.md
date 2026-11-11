@@ -1,10 +1,10 @@
 ---
 title: Minions
-description: Fleet overview, grains and pillar.
+description: Every minion's status, grains and pillar.
 sidebar: { order: 1 }
 ---
 
-![Minions overview](../../../../screenshots/minions.png)
+![Minions](../../../../screenshots/minions.png)
 
 The **Minions** page shows status, OS, IPs, CPU/RAM and roles of every minion. A fleet breakdown flags minions running an older Salt than the master.
 

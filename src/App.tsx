@@ -14,6 +14,7 @@ import { KeysPage } from './pages/Keys'
 import { LoginPage } from './pages/Login'
 import { MinionDetailPage } from './pages/MinionDetail'
 import { MinionsPage } from './pages/Minions'
+import { OverviewPage } from './pages/Overview'
 import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
@@ -24,6 +25,18 @@ import { NotificationsPage } from './pages/Notifications'
 import { SystemPage } from './pages/System'
 import { SchedulesPage } from './pages/Schedules'
 import { VulnerabilitiesPage } from './pages/Vulnerabilities'
+
+// the minions list used to be the home page; its filters in an old link still lead there
+const MINION_FILTERS = ['q', 'status', 'facet']
+
+function Home() {
+  const [params] = useSearchParams()
+  if (MINION_FILTERS.some((k) => params.has(k))) {
+    const keep = new URLSearchParams([...params].filter(([k]) => MINION_FILTERS.includes(k)))
+    return <Navigate to={`/minions?${keep}`} replace />
+  }
+  return <OverviewPage />
+}
 
 function Gate() {
   const { session, login, server } = useSession()
@@ -43,7 +56,8 @@ function Gate() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<MinionsPage />} />
+        <Route index element={<Home />} />
+        <Route path="minions" element={<MinionsPage />} />
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="patches" element={<PatchesPage />} />

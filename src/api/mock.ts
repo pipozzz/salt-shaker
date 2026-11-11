@@ -1,3 +1,4 @@
+import type { HistoryJob, MinionUpdates } from './server'
 import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
 import { demoOsquery } from './demo-osquery'
 import { recordDemoAudit, saltArgs } from './demo-audit'
@@ -391,15 +392,55 @@ function startJob(tgt: string, tgtType: string, fun: string, arg: unknown[], kwa
     job.results[id] = { at: when.getTime() + delay, ret: execute(id, fun, arg, kwarg), pid: rand(1000, 9999) }
     if (!instant) {
       const ret = job.results[id].ret
-      const failed =
-        (typeof ret === 'string' && ret.endsWith('is not available.')) ||
-        (!!ret && typeof ret === 'object' && Object.values(ret).some((v) => v && typeof v === 'object' && (v as { result?: unknown }).result === false))
+      const failed = failedReturn(ret)
       job.results[id].timer = setTimeout(() => emit(`salt/job/${jid}/ret/${id}`, { id, jid, fun, return: ret, retcode: failed ? 2 : 0, success: true }), delay)
     }
   }
   jobs.unshift(job)
   if (!instant) emit(`salt/job/${jid}/new`, { jid, tgt, tgt_type: tgtType, fun, arg, minions: matched, user })
   return job
+}
+
+/** A jid's start time: YYYYMMDDhhmmss… in local time, as newJid makes them. */
+const jidTime = (jid: string) => new Date(+jid.slice(0, 4), +jid.slice(4, 6) - 1, +jid.slice(6, 8), +jid.slice(8, 10), +jid.slice(10, 12), +jid.slice(12, 14)).getTime()
+
+/** Whether a minion's return counts as failed: a missing function, or a state that failed. */
+function failedReturn(ret: unknown) {
+  return (
+    (typeof ret === 'string' && ret.endsWith('is not available.')) ||
+    (!!ret && typeof ret === 'object' && Object.values(ret).some((v) => v && typeof v === 'object' && (v as { result?: unknown }).result === false))
+  )
+}
+
+/** The demo's job history since `since`, newest first, shaped like the server's (returned and failed per job). */
+export function demoJobHistory(since: number): HistoryJob[] {
+  const now = Date.now()
+  return jobs
+    .map((j) => ({ j, at: jidTime(j.jid) }))
+    .filter(({ at }) => at >= since)
+    .sort((a, b) => b.at - a.at)
+    .map(({ j, at }) => {
+      const done = Object.values(j.results).filter((r) => r.at <= now)
+      return {
+        jid: j.jid,
+        fun: j.Function,
+        args: JSON.stringify(j.Arguments),
+        target: String(j.Target),
+        targetType: j['Target-type'],
+        saltUser: j.User,
+        shakerUser: j.User,
+        minions: JSON.stringify(j.minions),
+        dryRun: false,
+        startedAt: new Date(at).toISOString(),
+        returned: done.length,
+        failed: done.filter((r) => failedReturn(r.ret)).length,
+      }
+    })
+}
+
+/** Each answering minion's pending upgrades, like the server keeps from its latest patch scan. */
+export function demoPendingUpdates(checkedAt: string): Record<string, MinionUpdates> {
+  return Object.fromEntries(Object.entries(upgrades).filter(([id]) => minions[id]?.up).map(([id, u]) => [id, { packages: Object.keys(u).length, jid: '', checkedAt }]))
 }
 
 /**
@@ -425,6 +466,8 @@ export function demoJob(tgt: string, tgtType: string, fun: string, arg: unknown[
     [60, '*', 'glob', 'pkg.list_upgrades', [], {}],
     [30, 'mon-01', 'glob', 'service.status', ['prometheus'], {}],
     [12, '*', 'glob', 'state.apply', ['common'], {}],
+    // one that failed, for the overview and the failed-jobs filter to show
+    [50, 'web-02', 'glob', 'service.restart', ['nginx'], {}],
     [3, '*', 'glob', 'test.ping', [], {}],
   ]
   for (const [minsAgo, tgt, type, fun, arg, kwarg] of seed) {

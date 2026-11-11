@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.1
+
+**Fixes**
+
+- The 1.19.0 build stopped at a flaky end-to-end test, so its image wasn't published; 1.19.1 is the same release with the test fixed.
+
 ## 1.19.0
 
 **Compliance**

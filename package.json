@@ -1,7 +1,7 @@
 {
   "name": "salt-shaker",
   "private": true,
-  "version": "1.19.0",
+  "version": "1.19.1",
   "description": "A web UI for SaltStack on top of salt-api",
   "license": "AGPL-3.0-or-later",
   "repository": {

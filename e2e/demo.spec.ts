@@ -630,7 +630,11 @@ test('the weekly report shows how the fleet did and can be sent now', async ({ p
 test('hardening checks score the minions and say who fails what', async ({ page }) => {
   await openDemo(page, '/compliance')
   await page.getByRole('link', { name: 'Hardening checks' }).click()
-  await page.getByLabel('Target').fill('web-*,db-01')
+  // Compliance has a target field too: wait until the page has changed
+  await expect(page.getByRole('heading', { name: 'Hardening checks', level: 1 })).toBeVisible()
+  await page.getByLabel('Match by').selectOption('list')
+  await page.getByLabel('Target').fill('web-01,web-02,db-01')
+  await expect(page.getByText('3 minions:')).toBeVisible()
   await page.getByRole('button', { name: 'Run the checks' }).click()
   // db-01 has a setuid shell in /tmp; web-02 takes SSH passwords
   await expect(page.locator('li', { hasText: 'No setuid programs in temporary directories' }).getByText('fails on 1')).toBeVisible()

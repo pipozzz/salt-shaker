@@ -657,6 +657,27 @@ test('the map groups minions and colours them by the chosen state', async ({ pag
   await expect(page).toHaveURL(/\/minions\/db-01$/)
 })
 
+test('the other masters show on the overview, and admins add them on System', async ({ page }) => {
+  await openDemo(page, '/')
+  const all = page.locator('table', { hasText: 'Awaiting approval' })
+  await expect(all.getByRole('row', { name: /prod-us/ })).toContainText('48')
+  await expect(all.getByRole('row', { name: /lab/ })).toContainText('No answer within 5 seconds')
+  await page.getByText('demo', { exact: true }).first().click()
+  await expect(page.getByRole('link', { name: 'prod-us' })).toBeVisible()
+
+  await page.goto('/system')
+  await page.getByLabel('Instance name').fill('prod-ap')
+  await page.getByLabel('Instance address').fill('https://salt-ap.example.com')
+  await page.getByLabel('API token from there').fill('nope')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByText(/it starts with ss_/)).toBeVisible()
+  await page.getByLabel('API token from there').fill('ss_demo')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByText('https://salt-ap.example.com')).toBeVisible()
+  await page.getByRole('button', { name: 'Remove prod-ap' }).click()
+  await expect(page.getByText('https://salt-ap.example.com')).toHaveCount(0)
+})
+
 test('accepting a pending key moves it to accepted', async ({ page }) => {
   await openDemo(page, '/keys')
   const pending = page.locator('li', { hasText: 'worker-02' })

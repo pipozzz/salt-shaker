@@ -298,3 +298,13 @@ export const slackLink = pgTable(
   },
   (t) => [primaryKey({ columns: [t.team, t.slackUser] })],
 )
+
+/** Other Salt Shaker instances (one per master), for the instance switcher and their summary on the overview. */
+export const peer = pgTable('peer', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  // an API token from the other instance, ideally a viewer's: it reads /api/summary there
+  token: text('token').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})

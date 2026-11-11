@@ -300,3 +300,13 @@ export const slackLink = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.team, t.slackUser] })],
 )
+
+/** Other Salt Shaker instances (one per master), for the instance switcher and their summary on the overview. */
+export const peer = sqliteTable('peer', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  // an API token from the other instance, ideally a viewer's: it reads /api/summary there
+  token: text('token').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})

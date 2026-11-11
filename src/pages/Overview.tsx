@@ -1,3 +1,4 @@
+import { OtherMasters } from '../components/Instances'
 import clsx from 'clsx'
 import { ArrowRight, CircleAlert, History, Info, Package, RefreshCw, Server, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -67,6 +68,8 @@ export function OverviewPage() {
           </Button>
         }
       />
+
+      <OtherMasters refreshes={refreshes} />
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Tile to={minionsDown ? '/minions?status=down' : '/minions'}>

@@ -11,6 +11,7 @@ The server is configured with environment variables.
 | `SALT_API_USERNAME` / `SALT_API_PASSWORD` | *(required)* | the service account |
 | `SALT_API_EAUTH` | `pam` | eauth backend of the service account |
 | `PUBLIC_URL` | `http://localhost:8080` | the URL users open; cookies and origin checks are based on it |
+| `INSTANCE_NAME` | the host of `PUBLIC_URL` | this instance's name among [several masters](/salt-shaker/deploy/masters/), e.g. `prod-eu` |
 | `PORT` | `8080` | port the server listens on |
 | `DATABASE_URL` | SQLite in `DATA_DIR` | set `postgres://user:pass@host/db` to use Postgres |
 | `DATA_DIR` | `/data` in the image | SQLite database and the generated auth secret |

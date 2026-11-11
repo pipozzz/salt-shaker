@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Several masters**
+
+- Link the Salt Shaker of each master (**System → Other masters**, with a viewer's API token from each): the overview shows **All masters** side by side (minions, not answering, failed jobs, critical vulnerabilities, pending keys, approvals), and a switcher in the sidebar opens another one. Each instance is named with `INSTANCE_NAME` and sums itself up at `GET /api/summary`. See [Several masters](https://pipozzz.github.io/salt-shaker/deploy/masters/).
+
 ## 1.20.1
 
 **Fixes**

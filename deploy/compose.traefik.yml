@@ -1,0 +1,22 @@
+# Behind a Traefik you already run, on its Docker network.
+#   COMPOSE_FILE=compose.yml:compose.traefik.yml    in .env, with DOMAIN set to the host in PUBLIC_URL
+# Traefik streams Server-Sent Events without extra settings.
+services:
+  salt-shaker:
+    # reachable through Traefik only
+    ports: !reset []
+    environment:
+      TRUST_PROXY: "1"
+    networks: [default, traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.salt-shaker.rule: Host(`${DOMAIN:?set DOMAIN in .env, the host name in PUBLIC_URL}`)
+      traefik.http.routers.salt-shaker.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.salt-shaker.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.services.salt-shaker.loadbalancer.server.port: "8080"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

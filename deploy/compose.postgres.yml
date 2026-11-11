@@ -1,0 +1,28 @@
+# Postgres instead of SQLite, in its own container.
+#   COMPOSE_FILE=compose.yml:compose.postgres.yml    in .env, with POSTGRES_PASSWORD set
+# For a Postgres you already run, skip this file and set DATABASE_URL in .env instead.
+services:
+  salt-shaker:
+    environment:
+      DATABASE_URL: postgres://salt_shaker:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, e.g. openssl rand -hex 24}@postgres:5432/salt_shaker
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: salt_shaker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: salt_shaker
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salt_shaker -d salt_shaker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres:

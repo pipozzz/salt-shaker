@@ -545,6 +545,35 @@ export const slack = {
   unlink: () => send('DELETE', '/api/slack/links'),
 }
 
+/** How one Salt Shaker instance (one master) is doing, as /api/summary sums it up. */
+export interface InstanceSummary {
+  name: string
+  version: string
+  url: string
+  minions: { accepted: number; notAnswering: number | null }
+  pendingKeys: number
+  failedJobs: number
+  vulns: { critical: number; high: number } | null
+  waitingApproval: number
+}
+
+export interface Peer {
+  id: number
+  name: string
+  url: string
+}
+
+export type PeerStatus = Peer & ({ summary: InstanceSummary; error?: undefined } | { summary?: undefined; error: string })
+
+/** The other instances (masters): for the switcher, the overview, and admins to add or remove. */
+export const peers = {
+  list: () => request<{ self: { name: string }; peers: Peer[] }>('/api/peers'),
+  summary: () => request<InstanceSummary>('/api/summary'),
+  status: (fresh = false) => request<{ peers: PeerStatus[] }>(`/api/peers/status${fresh ? '?fresh=1' : ''}`),
+  add: (p: { name: string; url: string; token: string }) => send<{ id: number }>('POST', '/api/peers', p),
+  remove: (id: number) => send('DELETE', `/api/peers/${id}`),
+}
+
 /** Admins limit users to the minions a target matches. */
 export const scopes = {
   list: () => request<{ scopes: Array<UserScope & { userId: string; updatedBy: string | null; updatedAt: string }> }>('/api/scopes'),

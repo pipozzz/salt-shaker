@@ -1,7 +1,0 @@
-{$DOMAIN} {
-	encode zstd gzip
-	reverse_proxy salt-shaker:8080 {
-		# stream the event bus (Server-Sent Events) without buffering
-		flush_interval -1
-	}
-}

@@ -1,3 +1,4 @@
+import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
 import { Activity, BellRing, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -105,6 +106,7 @@ export function Layout() {
           <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-amber-700 uppercase dark:bg-amber-500/15 dark:text-amber-400">Demo</span>
         )}
       </div>
+      <InstanceSwitcher />
       <div className="px-2 pt-1">
         <button
           onClick={() => {

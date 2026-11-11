@@ -31,6 +31,7 @@ import { KeyAutoAccept, keyRuleRoutes } from './keyrules'
 import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
+import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
@@ -70,16 +71,18 @@ if (config.oidc) {
 }
 const salt = new SaltService(config.saltApi)
 // accepted minion ids, so minions whose key was deleted drop out of the vulnerability report
-let acceptedCache: { at: number; ids: string[] } | null = null
-const acceptedMinions = async () => {
-  if (!acceptedCache || Date.now() - acceptedCache.at > 60_000) {
-    const res = (await salt.call({ client: 'wheel', fun: 'key.list_all' })) as { data?: { return?: { minions?: string[] } } } | null
+let keysCache: { at: number; ids: string[]; pending: number } | null = null
+/** The master's keys, kept for a minute: accepted minion ids, and how many wait for approval. */
+const keyList = async () => {
+  if (!keysCache || Date.now() - keysCache.at > 60_000) {
+    const res = (await salt.call({ client: 'wheel', fun: 'key.list_all' })) as { data?: { return?: { minions?: string[]; minions_pre?: string[] } } } | null
     const ids = res?.data?.return?.minions
     if (!Array.isArray(ids)) return null
-    acceptedCache = { at: Date.now(), ids }
+    keysCache = { at: Date.now(), ids, pending: res?.data?.return?.minions_pre?.length ?? 0 }
   }
-  return acceptedCache.ids
+  return keysCache
 }
+const acceptedMinions = async () => (await keyList())?.ids ?? null
 const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions })
 const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
@@ -447,6 +450,19 @@ app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))
 app.route('/api', keyRuleRoutes({ db, schema, audit }))
 app.route('/api', reportRoutes({ report: weeklyReport }))
+const summary = () =>
+  summarize({
+    db,
+    schema,
+    name: config.instanceName,
+    version: pkg.version,
+    url: config.publicUrl,
+    keys: async () => {
+      const k = await keyList().catch(() => null)
+      return k && { accepted: k.ids, pending: k.pending }
+    },
+  })
+app.route('/api', peerRoutes({ db, schema, audit, self: summary }))
 app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0 }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))

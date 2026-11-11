@@ -22,14 +22,7 @@ All settings are environment variables, listed in [Configuration](/salt-shaker/r
 
 ## With Docker Compose
 
-[`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) has two production setups. Both run behind [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for your domain, and share one `.env`.
-
-| | File | Use it for |
-| --- | --- | --- |
-| **SQLite** | `docker-compose.sqlite.yml` | one instance; the simplest setup, with everything in one volume |
-| **Postgres** | `docker-compose.yml` | [several instances](#several-instances), or when you already run and back up Postgres |
-
-DNS for the domain must point at the host, and ports 80 and 443 must be open.
+[`deploy/`](https://github.com/pipozzz/salt-shaker/tree/main/deploy) starts from a plain `compose.yml`: Salt Shaker alone, with SQLite in a volume and plain HTTP on port 8080. HTTPS and Postgres are add-on files you pick in `.env`. Needs Docker Compose 2.24 or newer.
 
 ```bash
 git clone https://github.com/pipozzz/salt-shaker.git
@@ -40,43 +33,44 @@ cp .env.example .env && chmod 600 .env
 Fill in `.env`:
 
 ```bash
-DOMAIN=salt.example.com
+PUBLIC_URL=http://salt.example.internal:8080
 SALT_API_URL=https://salt-master.internal:8000
 SALT_API_USERNAME=salt-shaker
 SALT_API_PASSWORD=<the shared secret>
 SALT_API_EAUTH=sharedsecret
-
-# Postgres only; generate with: openssl rand -base64 32
-POSTGRES_PASSWORD=
-BETTER_AUTH_SECRET=
-
-# pin a release instead of following latest
-SALT_SHAKER_VERSION=latest
 ```
 
-The `OIDC_*` settings are optional; leave `OIDC_ISSUER` empty to use local accounts only.
-
-### SQLite
-
-```bash
-docker compose -f docker-compose.sqlite.yml up -d
-```
-
-The database and the generated auth secret are kept in the `data` volume. Back it up; losing the auth secret signs everyone out.
-
-### Postgres
-
-Set `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` in `.env`, then:
+Then:
 
 ```bash
 docker compose up -d
 ```
 
-### Then
+Open `PUBLIC_URL` and create the admin account. Then open **System** in the menu: it shows whether salt-api answers the service account, whether the event bus is followed, and the settings the server picked up.
 
-Open `https://salt.example.com` and create the admin account. Then open **System** in the menu: it shows whether salt-api answers the service account, whether the event bus is followed, and the settings the server picked up.
+Every setting in `.env` reaches the container, so any variable from [Configuration](/salt-shaker/reference/configuration/) works there, for example `OIDC_*` for [single sign-on](/salt-shaker/deploy/sso/) or `METRICS_TOKEN`. Leave a setting out rather than empty.
 
-If you already run a reverse proxy, drop the `caddy` service, publish `127.0.0.1:8080:8080` on `salt-shaker` and see [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
+### HTTPS, Postgres, Traefik
+
+One line in `.env` picks what runs, as compose files joined with `:`:
+
+| `COMPOSE_FILE=` | What runs |
+| --- | --- |
+| `compose.yml` | Salt Shaker alone, on `LISTEN` (default `8080`) |
+| `compose.yml:compose.caddy.yml` | + [Caddy](https://caddyserver.com), which gets a Let's Encrypt certificate for the host in `PUBLIC_URL` |
+| `compose.yml:compose.traefik.yml` | behind the Traefik you already run |
+| `compose.yml:compose.caddy.yml:compose.postgres.yml` | + Postgres instead of SQLite |
+
+Run `docker compose up -d` again after changing it.
+
+- **Caddy**: set `PUBLIC_URL=https://salt.example.com`. DNS for the host must point here, with ports 80 and 443 open. Salt Shaker itself is then reachable only through Caddy.
+- **Traefik**: set `PUBLIC_URL=https://salt.example.com` and `DOMAIN=salt.example.com`. The container joins the Docker network `traefik` and asks for the entrypoint `websecure` and the certificate resolver `letsencrypt`; set `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT` or `TRAEFIK_CERTRESOLVER` if yours are named differently.
+- **Postgres**: set `POSTGRES_PASSWORD` (for example `openssl rand -hex 24`). For a Postgres you already run, skip `compose.postgres.yml` and set `DATABASE_URL` instead. Use Postgres for [several instances](#several-instances), or when you already back it up.
+- **nginx or another proxy on this host**: keep `compose.yml`, set `LISTEN=127.0.0.1:8080` and `TRUST_PROXY=1`, and see [Behind a reverse proxy](/salt-shaker/deploy/reverse-proxy/).
+
+The database (with SQLite) and the generated auth secret are kept in the `data` volume. Back it up; losing the auth secret signs everyone out.
+
+Upgrade with `docker compose pull && docker compose up -d`. To stay on a release, set `SALT_SHAKER_VERSION`, e.g. `1.20.0`.
 
 ## Database
 

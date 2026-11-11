@@ -1,0 +1,35 @@
+# Caddy in front with automatic HTTPS (Let's Encrypt) for the host in PUBLIC_URL.
+# DNS for that host must point here, with ports 80 and 443 open.
+#   COMPOSE_FILE=compose.yml:compose.caddy.yml    in .env
+services:
+  salt-shaker:
+    # reachable through Caddy only
+    ports: !reset []
+    environment:
+      TRUST_PROXY: "1"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      # certificates; keep this volume, or Caddy asks Let's Encrypt again on every start
+      - caddy-data:/data
+    depends_on: [salt-shaker]
+
+configs:
+  caddyfile:
+    content: |
+      ${PUBLIC_URL} {
+        encode zstd gzip
+        reverse_proxy salt-shaker:8080 {
+          # stream the event bus (Server-Sent Events) without buffering
+          flush_interval -1
+        }
+      }
+
+volumes:
+  caddy-data:

@@ -31,6 +31,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Single sign-on:** OIDC with Keycloak, Entra ID, Google, Authentik, Okta and others. Roles can come from IdP groups and are refreshed on every sign-in.
 - **Schedules:** nightly compliance checks, weekly patch or vulnerability scans, watched osquery queries or any function, on a cron schedule.
 - **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, fixable critical or high vulnerabilities, changes in a watched query, risk acceptances about to end, failed jobs and minions waiting for approval, and a weekly report of how the fleet did.
+- **Several masters:** link the Salt Shaker of each master to see them all on the overview and switch between them.
 - **Slack:** a `/salt` command to check status, apply the highstate or run a function from a channel, as your own user with your permissions, audited.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
 - **API tokens:** scripts and CI call the same API as the UI, acting as their user, with every call audited.

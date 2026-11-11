@@ -1,0 +1,22 @@
+# Salt Shaker on its own: SQLite in a volume, plain HTTP on port 8080.
+#   cp .env.example .env    # fill in PUBLIC_URL and SALT_API_*
+#   docker compose up -d
+# Add HTTPS or Postgres by listing more files in COMPOSE_FILE in .env (see README.md).
+services:
+  salt-shaker:
+    image: ghcr.io/pipozzz/salt-shaker:${SALT_SHAKER_VERSION:-latest}
+    restart: unless-stopped
+    # every setting in .env is passed on, so any variable from the configuration reference works there
+    env_file: .env
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env (coming from docker-compose.yml? see deploy/README.md)}
+      SALT_API_URL: ${SALT_API_URL:?set SALT_API_URL in .env}
+    ports:
+      # 127.0.0.1:8080 keeps it local, for a reverse proxy on this host
+      - ${LISTEN:-8080}:8080
+    volumes:
+      # SQLite and the generated auth secret; back up this volume
+      - data:/data
+
+volumes:
+  data:

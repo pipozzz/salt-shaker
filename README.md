@@ -117,7 +117,7 @@ docker run -d --name salt-shaker -p 8080:8080 -v salt-shaker-data:/data \
 
 Then open the URL and create the admin.
 
-For a complete setup with automatic HTTPS (Caddy), use [`deploy/`](deploy): copy `deploy/.env.example` to `deploy/.env` and fill it in. Then run `docker compose -f docker-compose.sqlite.yml up -d` there for SQLite, or `docker compose up -d` for Postgres.
+With Docker Compose, use [`deploy/`](deploy): copy `deploy/.env.example` to `deploy/.env`, fill it in and run `docker compose up -d` there. That starts Salt Shaker alone on port 8080; one line in `.env` adds Caddy with automatic HTTPS, Postgres, or puts it behind your Traefik.
 
 | Variable | Default | |
 | --- | --- | --- |

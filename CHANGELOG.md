@@ -6,6 +6,14 @@
 
 - Link the Salt Shaker of each master (**System → Other masters**, with a viewer's API token from each): the overview shows **All masters** side by side (minions, not answering, failed jobs, critical vulnerabilities, pending keys, approvals), and a switcher in the sidebar opens another one. Each instance is named with `INSTANCE_NAME` and sums itself up at `GET /api/summary`. See [Several masters](https://pipozzz.github.io/salt-shaker/deploy/masters/).
 
+**Deploying**
+
+- `deploy/` starts from a plain `compose.yml`: Salt Shaker alone with SQLite on port 8080. Caddy with automatic HTTPS, Postgres and an existing Traefik are add-on files chosen with one line in `.env` (`COMPOSE_FILE=compose.yml:compose.caddy.yml`), and every setting in `.env` reaches the container, so any variable from the configuration reference works there without editing a compose file. Needs Docker Compose 2.24 or newer.
+
+**Upgrading**
+
+- `deploy/docker-compose.yml`, `docker-compose.sqlite.yml` and `Caddyfile` are gone. In your `.env`, add `PUBLIC_URL=https://<your DOMAIN>` and the line that picks your old setup: `COMPOSE_FILE=compose.yml:compose.caddy.yml:compose.postgres.yml` (was `docker-compose.yml`) or `COMPOSE_FILE=compose.yml:compose.caddy.yml` (was `docker-compose.sqlite.yml`). Volume names stay the same, so data and certificates carry over. Until `PUBLIC_URL` is set, `docker compose up` stops with a message instead of starting an empty instance.
+
 ## 1.20.1
 
 **Fixes**

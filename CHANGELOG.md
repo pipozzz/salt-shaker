@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.20.1
+
+**Fixes**
+
+- The Slack **/salt** command answered every request with "Not signed in": its endpoint sat behind the check for a signed-in user. Slack's signed requests now reach it.
+
 ## 1.20.0
 
 **Map**

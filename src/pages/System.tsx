@@ -1,4 +1,5 @@
 import { PeersSettings } from '../components/Instances'
+import { MaintenanceWindows } from '../components/Windows'
 import clsx from 'clsx'
 import { RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -34,6 +35,7 @@ export function SystemPage() {
           <Database s={data} />
           <Automation s={data} />
           <Settings s={data} />
+          <MaintenanceWindows />
           <PeersSettings />
         </div>
       )}

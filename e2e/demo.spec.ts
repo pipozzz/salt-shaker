@@ -666,16 +666,36 @@ test('the other masters show on the overview, and admins add them on System', as
   await expect(page.getByRole('link', { name: 'prod-us' })).toBeVisible()
 
   await page.goto('/system')
+  const addPeer = page.locator('form', { has: page.getByLabel('Instance name') }).getByRole('button', { name: 'Add', exact: true })
   await page.getByLabel('Instance name').fill('prod-ap')
   await page.getByLabel('Instance address').fill('https://salt-ap.example.com')
   await page.getByLabel('API token from there').fill('nope')
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await addPeer.click()
   await expect(page.getByText(/it starts with ss_/)).toBeVisible()
   await page.getByLabel('API token from there').fill('ss_demo')
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await addPeer.click()
   await expect(page.getByText('https://salt-ap.example.com')).toBeVisible()
   await page.getByRole('button', { name: 'Remove prod-ap' }).click()
   await expect(page.getByText('https://salt-ap.example.com')).toHaveCount(0)
+})
+
+test('schedules wait for a maintenance window, and Run says when the next one opens', async ({ page }) => {
+  await openDemo(page, '/schedules')
+  await expect(page.getByTitle('Waits for this maintenance window when it comes due outside it')).toContainText('Patch nights')
+
+  await page.goto('/run')
+  await expect(page.getByRole('status').filter({ hasText: 'maintenance window' })).toContainText(/Patch nights|Inside the maintenance window/)
+
+  await page.goto('/system')
+  await page.getByLabel('Window name').fill('Every day')
+  for (const day of ['Mon', 'Wed', 'Fri', 'Sat', 'Sun']) await page.getByRole('button', { name: day, exact: true }).click()
+  await page.getByLabel('Opens at').fill('00:00')
+  await page.getByLabel('Window length').selectOption('1440')
+  await page.locator('form', { has: page.getByLabel('Window name') }).getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByText('Every day 00:00 for 24 h')).toBeVisible()
+  await expect(page.getByText(/^open until/)).toBeVisible()
+  await page.getByRole('button', { name: 'Remove Every day' }).click()
+  await expect(page.getByText('Every day 00:00 for 24 h')).toHaveCount(0)
 })
 
 test('accepting a pending key moves it to accepted', async ({ page }) => {

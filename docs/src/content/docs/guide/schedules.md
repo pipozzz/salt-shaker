@@ -26,6 +26,15 @@ Each schedule shows when it runs next, a summary of its last run with a link to 
 With several server instances on one database, each scheduled run still starts exactly once.
 :::
 
+### Maintenance windows
+
+A maintenance window says when changes are expected, for example *Tuesday and Thursday from 22:00 for 4 hours*. Admins add them on **System → Maintenance windows**, each with its own time zone, so *22:00 Europe/Bratislava* stays 22:00 there across daylight saving changes. A window can run past midnight and lasts at most 24 hours.
+
+- **Schedules:** pick a window under **Only in**. When the schedule comes due outside the window, it waits for the window to open and then runs once, however many of its slots it missed. The list shows the window and the real next run. **Run now** doesn't wait.
+- **Run and Changes:** a line at the top says you're inside a window and until when, or outside every window and when the next opens. It's a reminder; nothing is blocked. To require a second person for risky changes, use [approvals](/salt-shaker/guide/changes/#approvals).
+
+Removing a window frees the schedules that waited for it; they run on their cron again. Adding and removing windows is in the audit log as `window.add` and `window.remove`.
+
 ## Notifications
 
 **Notifications** sends alerts to webhooks. Each channel picks which events it gets:

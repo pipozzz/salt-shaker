@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { Change, MinionOutcome } from '../api/server'
 import { formatArgs } from '../api/salt'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Modal, PageHeader, Spinner } from '../components/ui'
+import { WindowNotice } from '../components/Windows'
 import { CHANGE_STATUS, changeTarget, useChangesApi } from '../lib/changes'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
@@ -39,6 +40,7 @@ export function ChangesPage() {
           </Button>
         }
       />
+      <WindowNotice className="mb-4" />
       {list.error && <ErrorBox error={list.error} onRetry={() => setReloads((n) => n + 1)} />}
       {list.data?.approval === 'risky' && (
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">Operators' commands that change minions need an admin's approval here before they run; another admin than the requester decides.</p>

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Maintenance windows**
+
+- Admins set when changes are expected on **System → Maintenance windows** (weekdays, a local start time, how long, a time zone). A schedule tied to a window waits for it to open instead of running at its cron slot, and Run and Changes say when you're outside every window and when the next opens. See [Maintenance windows](https://pipozzz.github.io/salt-shaker/guide/schedules/#maintenance-windows).
+
 ## 1.21.0
 
 **Several masters**

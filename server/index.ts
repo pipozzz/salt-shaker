@@ -31,6 +31,7 @@ import { KeyAutoAccept, keyRuleRoutes } from './keyrules'
 import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
+import { windowRoutes } from './windows'
 import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
@@ -444,6 +445,7 @@ changeRunner.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 // first: Slack signs its requests instead of signing in, and targetRoutes' guard covers every /api route after it
 app.route('/api', slackRoutes({ db, schema, secret: config.slackSigningSecret, publicUrl: config.publicUrl, saltAs, audit }))
+app.route('/api', windowRoutes({ db, schema, audit }))
 app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))

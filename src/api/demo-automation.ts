@@ -1,4 +1,6 @@
 import { Cron } from 'croner'
+import { nextOpening, openingAt } from '../lib/windows'
+import { demoWindowList } from './demo-windows'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { checkQuery, osqueryCall, OSQUERY_LIBRARY } from '../lib/osquery'
 import { recordDemoAudit } from './demo-audit'
@@ -62,7 +64,7 @@ const start = (s: Kind & { name: string; target: string; targetType: string }, w
 
 const next = (cron: string, from = new Date()) => new Cron(cron, { paused: true }).nextRun(from)
 
-type Seed = Kind & { name: string; target: string; targetType: string; cron: string }
+type Seed = Kind & { name: string; target: string; targetType: string; cron: string; windowId?: number }
 
 /** the last ten runs, one per cron slot before now, each a job in the demo's history */
 function history(s: Seed, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string): ScheduleRun[] {
@@ -82,7 +84,7 @@ const schedules: Array<Omit<Schedule, 'nextRunAt' | 'cronError'>> = []
 function seed(s: Seed & Pick<Schedule, 'lastSummary'>, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string) {
   const recentRuns = history(s, status, detail)
   const last = recentRuns[recentRuns.length - 1]
-  schedules.push({ enabled: true, ...s, recentRuns, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
+  schedules.push({ enabled: true, windowId: null, ...s, recentRuns, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
 }
 seed(
   { name: 'Nightly compliance', kind: 'compliance', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 2 * * *', lastSummary: { ok: 4, drift: 1, error: 0, noreturn: 1 } },
@@ -90,7 +92,7 @@ seed(
   (i) => (i > 7 ? '4 ok · 1 drifted · 0 errors · 1 no return' : i === 6 ? '4 ok · 0 drifted · 1 error' : '5 ok · 0 drifted · 0 errors'),
 )
 seed(
-  { name: 'Weekly patch scan', kind: 'patches', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 6 * * 1', lastSummary: { needUpdates: 5, packages: 6, scanned: 5 } },
+  { name: 'Weekly patch scan', kind: 'patches', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 6 * * 1', windowId: 1, lastSummary: { needUpdates: 5, packages: 6, scanned: 5 } },
   () => 'changed',
   () => '5 minions with 6 packages to update',
 )
@@ -128,9 +130,17 @@ const channels: Channel[] = [
   { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null, signed: true },
 ]
 
+/** Its cron slot, or when its window next opens after that (as the server does). */
+function runsAt(s: (typeof schedules)[number]) {
+  const due = next(s.cron)
+  const w = s.windowId ? demoWindowList.find((x) => x.id === s.windowId) : undefined
+  if (!due || !w || openingAt(w, due)) return due
+  return nextOpening(w, due)?.start ?? null
+}
+
 function view(s: (typeof schedules)[number]): Schedule {
   try {
-    return { ...s, nextRunAt: s.enabled ? (next(s.cron)?.toISOString() ?? null) : null, cronError: null }
+    return { ...s, windowId: s.windowId && demoWindowList.some((w) => w.id === s.windowId) ? s.windowId : null, nextRunAt: s.enabled ? (runsAt(s)?.toISOString() ?? null) : null, cronError: null }
   } catch (e) {
     return { ...s, nextRunAt: null, cronError: e instanceof Error ? e.message : String(e) }
   }
@@ -157,7 +167,7 @@ export const demoAutomation: typeof automation = {
   createSchedule: (s) => {
     const error = check(s)
     if (error) return fail(error)
-    schedules.push({ ...s, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
+    schedules.push({ ...s, windowId: s.windowId ?? null, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
     recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.create', target: s.name.trim(), args: JSON.stringify(s), outcome: 'ok' })
     return delay(undefined)
   },

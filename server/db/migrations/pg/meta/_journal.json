@@ -134,6 +134,13 @@
       "when": 1794396523685,
       "tag": "0018_peer",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794420097215,
+      "tag": "0019_maintenance_window",
+      "breakpoints": true
     }
   ]
 }

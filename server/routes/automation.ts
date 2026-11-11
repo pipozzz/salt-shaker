@@ -3,7 +3,8 @@ import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, newWebhookSecret, type Notifier } from '../notify'
 import { recentScheduleRuns } from '../schedule-runs'
-import { dueAt, nextRun, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
+import { nextRun, runsAt, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
+import { loadWindows } from '../windows'
 import { checkQuery } from '../../src/lib/osquery'
 import type { AuditRow, Env } from '../types'
 
@@ -92,18 +93,27 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
       if (invalid) throw new BadRequest(invalid)
       args = JSON.stringify({ sql })
     }
-    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron }
+    const windowId = body.windowId === null || body.windowId === undefined || body.windowId === '' ? null : Number(body.windowId)
+    if (windowId !== null && !Number.isInteger(windowId)) throw new BadRequest('Unknown maintenance window')
+    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron, windowId }
+  }
+
+  const checkWindow = async (windowId: number | null) => {
+    if (windowId === null) return
+    const [w] = await db.select({ id: schema.maintenanceWindow.id }).from(schema.maintenanceWindow).where(eq(schema.maintenanceWindow.id, windowId))
+    if (!w) throw new BadRequest('Unknown maintenance window')
   }
 
   r.get('/schedules', async (c) => {
     const rows = await db.select().from(t).orderBy(asc(t.name))
     const runs = await recentScheduleRuns(db, schema, rows)
+    const windows = new Map((await loadWindows(db, schema)).map((w) => [w.id, w]))
     return c.json({
       schedules: rows.map((s) => {
         let next: Date | null = null
         let cronError: string | null = null
         try {
-          next = s.enabled ? dueAt(s) : null
+          next = s.enabled ? runsAt(s, s.windowId ? windows.get(s.windowId) : undefined) : null
         } catch (e) {
           cronError = e instanceof Error ? e.message : String(e)
         }
@@ -114,6 +124,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
 
   r.post('/schedules', async (c) => {
     const values = readSchedule(await c.req.json())
+    await checkWindow(values.windowId)
     const exists = await db.select({ id: t.id }).from(t).where(eq(t.name, values.name))
     if (exists.length) throw new BadRequest('A schedule with this name already exists')
     const [row] = await db
@@ -133,6 +144,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
       Object.keys(body).length === 1 && typeof body.enabled === 'boolean'
         ? { enabled: body.enabled }
         : { ...readSchedule({ ...current, args: current.args ? JSON.parse(current.args) : null, ...body }), ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}) }
+    if ('windowId' in changes) await checkWindow(changes.windowId)
     await db.update(t).set(changes).where(eq(t.id, id))
     await audit({ ...who(c), client: 'admin', fun: 'schedule.update', target: current.name, args: JSON.stringify(changes), outcome: 'ok' })
     return c.json({ ok: true })

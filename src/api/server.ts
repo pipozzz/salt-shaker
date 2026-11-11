@@ -1,4 +1,5 @@
 import type { ReportMessage } from '../lib/report'
+import type { MaintenanceWindow } from '../lib/windows'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
@@ -331,6 +332,8 @@ export interface Schedule {
   cronError: string | null
   /** latest recorded runs, oldest first */
   recentRuns: ScheduleRun[]
+  /** the maintenance window it waits for, if any */
+  windowId: number | null
 }
 
 export interface ScheduleRun {
@@ -348,6 +351,7 @@ export interface ScheduleInput {
   target: string
   targetType: string
   cron: string
+  windowId?: number | null
 }
 
 export interface Channel {
@@ -572,6 +576,21 @@ export const peers = {
   status: (fresh = false) => request<{ peers: PeerStatus[] }>(`/api/peers/status${fresh ? '?fresh=1' : ''}`),
   add: (p: { name: string; url: string; token: string }) => send<{ id: number }>('POST', '/api/peers', p),
   remove: (id: number) => send('DELETE', `/api/peers/${id}`),
+}
+
+export interface WindowsState {
+  windows: MaintenanceWindow[]
+  /** the window open now, and when it closes */
+  open: { id: number; end: string } | null
+  /** otherwise the one that opens first */
+  next: { id: number; start: string; end: string } | null
+}
+
+/** Maintenance windows: everyone reads them, admins add and remove them. */
+export const maintenance = {
+  list: () => request<WindowsState>('/api/windows'),
+  add: (w: Omit<MaintenanceWindow, 'id'>) => send<{ window: MaintenanceWindow }>('POST', '/api/windows', w),
+  remove: (id: number) => send('DELETE', `/api/windows/${id}`),
 }
 
 /** Admins limit users to the minions a target matches. */

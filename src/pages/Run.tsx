@@ -9,6 +9,7 @@ import type { TargetType } from '../api/types'
 import { ResultActions, ResultView } from '../components/ResultView'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, Input, Modal, PageHeader, PermNote } from '../components/ui'
+import { WindowNotice } from '../components/Windows'
 import { confirmLevel } from '../lib/risk'
 import { useStoredState } from '../lib/hooks'
 import { useCan, useSalt } from '../lib/session'
@@ -134,6 +135,7 @@ export function RunPage() {
   return (
     <>
       <PageHeader title="Run" description="Execute any execution module on a set of minions. Jobs run asynchronously and show up in Jobs." />
+      <WindowNotice className="mb-4" />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
         <div className="min-w-0 space-y-6">

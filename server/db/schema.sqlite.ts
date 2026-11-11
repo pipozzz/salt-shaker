@@ -133,6 +133,8 @@ export const schedule = sqliteTable('schedule', {
   lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
   lastJid: text('last_jid'),
   lastSummary: text('last_summary'),
+  // waits for this maintenance window when it comes due outside it
+  windowId: integer('window_id'),
 })
 
 /** Where alerts go: a Slack-compatible incoming webhook or a generic JSON webhook. */
@@ -308,5 +310,18 @@ export const peer = sqliteTable('peer', {
   url: text('url').notNull(),
   // an API token from the other instance, ideally a viewer's: it reads /api/summary there
   token: text('token').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+/** When changes are expected: weekdays, a local start time and a length, in a timezone. */
+export const maintenanceWindow = sqliteTable('maintenance_window', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  // JSON array of weekdays, 0 = Sunday
+  days: text('days').notNull(),
+  start: text('start').notNull(),
+  minutes: integer('minutes').notNull(),
+  timezone: text('timezone').notNull(),
+  createdBy: text('created_by'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })

@@ -9,6 +9,7 @@ import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
+import { useMaintenanceApi } from '../lib/maintenance'
 import { relTime } from '../lib/format'
 
 const PRESETS: Array<[string, string]> = [
@@ -163,6 +164,9 @@ export function SchedulesPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [started, setStarted] = useState<Record<number, string>>({})
+  const windowsApi = useMaintenanceApi()
+  const windows = useAsync(() => (windowsApi ? windowsApi.list() : Promise.resolve(null)), [windowsApi])
+  const windowName = (id: number | null) => (id ? windows.data?.windows.find((w) => w.id === id)?.name : undefined)
 
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key)
@@ -234,6 +238,11 @@ export function SchedulesPage() {
                   <p className="text-zinc-500 dark:text-zinc-400">
                     {s.cronError ? <span className="text-red-600">{s.cronError}</span> : s.nextRunAt ? `next ${untilTime(new Date(s.nextRunAt))}` : 'paused'}
                   </p>
+                  {windowName(s.windowId) && (
+                    <p className="text-zinc-500 dark:text-zinc-400" title="Waits for this maintenance window when it comes due outside it">
+                      in <span className="font-medium text-zinc-700 dark:text-zinc-300">{windowName(s.windowId)}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="w-52 space-y-1 text-xs">
                   <Summary s={s} />
@@ -336,6 +345,9 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
   const initialCron = schedule?.cron ?? '0 2 * * *'
   const [preset, setPreset] = useState(presetLabel(initialCron) ? initialCron : 'custom')
   const [cron, setCron] = useState(initialCron)
+  const [windowId, setWindowId] = useState<number | null>(schedule?.windowId ?? null)
+  const windowsApi = useMaintenanceApi()
+  const windows = useAsync(() => (windowsApi ? windowsApi.list() : Promise.resolve(null)), [windowsApi])
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -349,6 +361,7 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
       target: tgt.trim(),
       targetType: tgtType,
       cron: (preset === 'custom' ? cron : preset).trim(),
+      windowId,
       ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : kind === 'osquery' ? { args: { sql: sql.trim() } } : {}),
     }
     try {
@@ -434,6 +447,18 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
           {preset === 'custom' && (
             <Field label="Cron expression" hint="minute hour day month weekday, e.g. 30 1 * * 6">
               <Input value={cron} onChange={(e) => setCron(e.target.value)} className="font-mono" required />
+            </Field>
+          )}
+          {!!windows.data?.windows.length && (
+            <Field label="Only in" hint="Due outside the window, it waits for the window to open.">
+              <Select value={windowId ?? ''} onChange={(e) => setWindowId(e.target.value ? Number(e.target.value) : null)} aria-label="Maintenance window">
+                <option value="">Any time</option>
+                {windows.data.windows.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
           )}
         </div>

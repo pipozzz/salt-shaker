@@ -9,6 +9,8 @@ import type { Notifier } from './notify'
 import type { SaltService } from './salt'
 import { acceptanceMessages, complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
 import { vulnScanSummary, type VulnService } from './vulns'
+import { loadWindows } from './windows'
+import { nextOpening, openingAt, type MaintenanceWindow } from '../src/lib/windows'
 
 export const SCHEDULE_KINDS = {
   compliance: 'Compliance check (state.apply test=True)',
@@ -29,6 +31,13 @@ export function nextRun(cron: string, from = new Date()) {
 /** When a schedule is next due: the first cron slot after its last run (or its creation). */
 export function dueAt(s: Pick<ScheduleRow, 'cron' | 'lastRunAt' | 'createdAt'>) {
   return nextRun(s.cron, s.lastRunAt ?? s.createdAt)
+}
+
+/** When it actually runs: its cron slot, or when its maintenance window next opens after that. */
+export function runsAt(s: Pick<ScheduleRow, 'cron' | 'lastRunAt' | 'createdAt'>, window?: MaintenanceWindow) {
+  const due = dueAt(s)
+  if (!due || !window || openingAt(window, due)) return due
+  return nextOpening(window, due)?.start ?? null
 }
 
 /** The salt-api lowstate a schedule runs. */
@@ -97,6 +106,7 @@ export class Scheduler {
     try {
       const t = this.schema.schedule
       const now = new Date()
+      const windows = new Map((await loadWindows(this.db, this.schema)).map((w) => [w.id, w]))
       for (const s of await this.db.select().from(t).where(eq(t.enabled, true))) {
         let due: Date | null
         try {
@@ -105,6 +115,9 @@ export class Scheduler {
           continue // invalid cron saved before validation existed; the UI shows it
         }
         if (!due || due > now) continue
+        // tied to a window: wait until it opens (missed slots in between run once)
+        const window = s.windowId ? windows.get(s.windowId) : undefined
+        if (window && !openingAt(window, now)) continue
         // claim this run: only the instance whose update matches the old lastRunAt gets to start it
         const claimed = await this.db
           .update(t)

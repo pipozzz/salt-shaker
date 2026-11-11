@@ -1,12 +1,12 @@
 ---
 title: Users & Audit log
 description: Manage accounts and review who did what.
-sidebar: { order: 9 }
+sidebar: { order: 10 }
 ---
 
 ## Users
 
-Admins create and manage accounts on the **Users** page. Each account has one [role](/salt-shaker/reference/roles/): *admin*, *operator*, *viewer* or *none*. No Linux accounts are needed on the master.
+Admins create and manage accounts on the **Users** page. Each account has one [role](/salt-shaker/reference/roles/): *admin*, *operator*, *viewer* or *none*. An operator can also be [limited to some minions](/salt-shaker/reference/roles/#limiting-what-someone-can-run-on) under **Can run on**. No Linux accounts are needed on the master.
 
 ![Users](../../../../screenshots/users.png)
 

@@ -2,7 +2,7 @@ import type { HttpBindings } from '@hono/node-server'
 
 export type SessionUser = { id: string; name: string; username?: string | null; role?: string | null }
 
-export type Env = { Bindings: HttpBindings; Variables: { user: SessionUser | null; expiresAt: Date | null } }
+export type Env = { Bindings: HttpBindings; Variables: { user: SessionUser | null; expiresAt: Date | null; via?: 'session' | 'token' } }
 
 export type AuditRow = {
   userId?: string | null

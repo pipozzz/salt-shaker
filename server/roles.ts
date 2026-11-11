@@ -14,7 +14,7 @@ export const ROLE_PERMS: Record<Role, unknown[]> = {
   operator: [
     '.*',
     '@jobs',
-    { '@runner': ['manage.status', 'manage.versions', 'cache.grains', 'jobs.*', 'pillar.show_pillar', 'salt.cmd', 'state.orchestrate'] },
+    { '@runner': ['manage.status', 'manage.versions', 'cache.grains', 'jobs.*', 'pillar.show_pillar', 'salt.cmd', 'state.orchestrate', 'fileserver.envs'] },
     { '@wheel': ['key.list_all', 'key.finger', 'file_roots.list_roots', 'file_roots.read', 'file_roots.list_env'] },
   ],
   // read-only; no pillar access, which commonly holds secrets
@@ -25,7 +25,7 @@ export const ROLE_PERMS: Record<Role, unknown[]> = {
     'pkg.version',
     'sys.list_functions',
     'saltutil.find_job',
-    { '@runner': ['manage.status', 'cache.grains', 'jobs.*', 'salt.cmd'] },
+    { '@runner': ['manage.status', 'cache.grains', 'jobs.*', 'salt.cmd', 'fileserver.envs'] },
     { '@wheel': ['key.list_all', 'key.finger', 'file_roots.list_roots', 'file_roots.read', 'file_roots.list_env'] },
   ],
   none: [],

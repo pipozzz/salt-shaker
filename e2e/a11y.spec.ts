@@ -64,6 +64,24 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
     await p.goto('/minions/db-01?tab=packages')
     await expect(p.getByText(/\d+ packages · debian 12/)).toBeVisible()
   }],
+  ['branch preview', async (p) => {
+    await p.goto('/compliance/preview')
+    await p.getByLabel('Target').fill('web-*')
+    await p.getByRole('button', { name: 'Preview' }).click()
+    await expect(p.getByText('2 of 2 minions would differ')).toBeVisible()
+  }],
+  ['api tokens', async (p) => {
+    await p.goto('/tokens')
+    await expect(p.getByText('gitlab: deploy pipeline')).toBeVisible()
+  }],
+  ['change', async (p) => {
+    await p.goto('/changes/1')
+    await expect(p.getByText('Batch 2')).toBeVisible()
+  }],
+  ['changes', async (p) => {
+    await p.goto('/changes')
+    await expect(p.getByText('Waiting for approval (1)')).toBeVisible()
+  }],
   ['schedules', async (p) => {
     await p.goto('/schedules')
     await p.getByText('What changed in the last run').click()

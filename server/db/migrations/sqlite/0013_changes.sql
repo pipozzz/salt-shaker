@@ -1,0 +1,22 @@
+CREATE TABLE `change` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`reason` text NOT NULL,
+	`target` text NOT NULL,
+	`target_type` text NOT NULL,
+	`fun` text NOT NULL,
+	`args` text NOT NULL,
+	`batch_size` text,
+	`max_failures` integer DEFAULT 0 NOT NULL,
+	`status` text NOT NULL,
+	`requested_by` text NOT NULL,
+	`requested_by_id` text,
+	`requested_at` integer NOT NULL,
+	`decided_by` text,
+	`decided_at` integer,
+	`decision_note` text,
+	`minions` text,
+	`batches` text DEFAULT '[]' NOT NULL,
+	`started_at` integer,
+	`finished_at` integer,
+	`error` text
+);

@@ -1,5 +1,5 @@
 import { recordDemoAudit } from './demo-audit'
-import type { Role, SystemStatus, UserRow, system, users } from './server'
+import type { Role, SystemStatus, UserRow, UserScope, scopes, system, users } from './server'
 
 /*
  * The demo's users and the System page: a made-up team with each role (kept in the browser) and
@@ -25,6 +25,16 @@ const change = (id: string, fun: string, apply: (u: UserRow) => void, args?: obj
   apply(u)
   recordDemoAudit({ username: 'demo', client: 'admin', fun, target: u.username ?? u.name, args: args ? JSON.stringify(args) : null, outcome: 'ok' })
   return delay({})
+}
+
+// Otto is on call for the web tier only
+const limits = new Map<string, UserScope & { updatedBy: string; updatedAt: string }>([['u3', { target: 'web-*', targetType: 'glob', updatedBy: 'pam', updatedAt: at(20) }]])
+
+export const demoScopes: typeof scopes = {
+  list: () => delay({ scopes: [...limits].map(([userId, s]) => ({ userId, ...s })) }),
+  set: (id: string, s: UserScope) =>
+    change(id, 'user.set_scope', () => limits.set(id, { ...s, updatedBy: 'demo', updatedAt: new Date().toISOString() }), s),
+  clear: (id: string) => change(id, 'user.clear_scope', () => limits.delete(id)),
 }
 
 export const demoUsers: typeof users = {

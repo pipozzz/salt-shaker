@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertOctagon, CheckCircle2, ChevronRight, CircleDashed, ExternalLink, Play, ShieldCheck, Unplug, Wrench } from 'lucide-react'
+import { AlertOctagon, CheckCircle2, ChevronRight, CircleDashed, ExternalLink, GitCompare, Play, ShieldCheck, Unplug, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { history, type ComplianceRun } from '../api/server'
@@ -96,7 +96,15 @@ export function CompliancePage() {
 
   return (
     <>
-      <PageHeader title="Compliance" description="Dry-run the highstate across your fleet to find minions that drifted from their desired state." />
+      <PageHeader
+        title="Compliance"
+        description="Dry-run the highstate across your fleet to find minions that drifted from their desired state."
+        actions={
+          <Link to="/compliance/preview" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800">
+            <GitCompare className="size-4" /> Preview a branch
+          </Link>
+        }
+      />
 
       <Card className="mb-6">
         <form onSubmit={check} className="flex flex-wrap items-start gap-3 p-4">

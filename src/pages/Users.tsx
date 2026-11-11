@@ -1,7 +1,9 @@
-import { Ban, KeyRound, Plus, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
+import { Ban, KeyRound, Pencil, Plus, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { demoUsers } from '../api/demo-admin'
-import { ROLES, users as serverUsers, type Role, type UserRow } from '../api/server'
+import { demoScopes, demoUsers } from '../api/demo-admin'
+import { ROLES, scopes as serverScopes, users as serverUsers, type Role, type UserRow, type UserScope } from '../api/server'
+import type { TargetType } from '../api/types'
+import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSession } from '../lib/session'
@@ -21,6 +23,13 @@ function useUsersApi() {
   return session?.mode === 'demo' ? demoUsers : serverUsers
 }
 
+function useScopesApi() {
+  const { session } = useSession()
+  return session?.mode === 'demo' ? demoScopes : serverScopes
+}
+
+const scopeText = (s: UserScope) => `${s.targetType === 'glob' ? '' : `${s.targetType}:`}${s.target}`
+
 const isSso = (u: UserRow) => !u.email.endsWith('@users.salt-shaker.invalid')
 
 export function UsersPage() {
@@ -28,6 +37,9 @@ export function UsersPage() {
   const { session, server } = useSession()
   const rolesFromIdp = !!server?.sso?.rolesFromIdp
   const list = useAsync(() => users.list(), [])
+  const scopesApi = useScopesApi()
+  const scopeList = useAsync(() => scopesApi.list().then((r) => new Map(r.scopes.map((s) => [s.userId, s]))), [])
+  const [limiting, setLimiting] = useState<UserRow | null>(null)
   const [creating, setCreating] = useState(false)
   const [resetFor, setResetFor] = useState<UserRow | null>(null)
   const [removing, setRemoving] = useState<UserRow | null>(null)
@@ -39,7 +51,7 @@ export function UsersPage() {
     setError(null)
     try {
       await fn()
-      await list.reload()
+      await Promise.all([list.reload(), scopeList.reload()])
     } catch (e) {
       setError(e as Error)
     } finally {
@@ -96,6 +108,9 @@ export function UsersPage() {
                 <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="py-2.5 pr-3 pl-4 font-medium">User</th>
                   <th className="px-3 py-2.5 font-medium">Role</th>
+                  <th className="px-3 py-2.5 font-medium" title="An admin can limit a user to the minions a target matches">
+                    Can run on
+                  </th>
                   <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Last sign-in</th>
                   <th className="hidden px-3 py-2.5 font-medium md:table-cell">Created</th>
                   <th className="px-3 py-2.5 pr-4" />
@@ -129,6 +144,25 @@ export function UsersPage() {
                           </Select>
                           {u.banned && <Badge tone="red">disabled</Badge>}
                         </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {(() => {
+                          const s = scopeList.data?.get(u.id)
+                          if (u.role === 'admin') return <span className="text-xs text-zinc-500 dark:text-zinc-400">everything</span>
+                          if (u.role === 'viewer' || u.role === 'none') return <span className="text-xs text-zinc-500 dark:text-zinc-400">—</span>
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setLimiting(u)}
+                              className="inline-flex items-center gap-1.5 text-left text-xs hover:text-accent-700 dark:hover:text-accent-400"
+                            >
+                              {/* the visible text stays part of the name, for screen readers and voice control */}
+                              <span className="sr-only">Change what {u.username ?? u.name} can run on: </span>
+                              {s ? <Badge tone="amber" className="font-mono">{scopeText(s)}</Badge> : <span className="text-zinc-600 dark:text-zinc-400">whole fleet</span>}
+                              <Pencil className="size-3 opacity-60" />
+                            </button>
+                          )
+                        })()}
                       </td>
                       <td className="hidden px-3 py-2.5 text-zinc-500 sm:table-cell dark:text-zinc-400">
                         {u.lastSignInAt ? <span title={new Date(u.lastSignInAt).toLocaleString()}>{relTime(new Date(u.lastSignInAt))}</span> : 'never'}
@@ -168,6 +202,14 @@ export function UsersPage() {
 
       <CreateUserModal open={creating} onClose={() => setCreating(false)} onCreated={list.reload} />
       <ResetPasswordModal user={resetFor} onClose={() => setResetFor(null)} />
+      {limiting && (
+        <ScopeModal
+          user={limiting}
+          current={scopeList.data?.get(limiting.id) ?? null}
+          onClose={() => setLimiting(null)}
+          onSave={(s) => act(`scope:${limiting.id}`, () => (s ? scopesApi.set(limiting.id, s) : scopesApi.clear(limiting.id))).then(() => setLimiting(null))}
+        />
+      )}
       <Modal open={!!removing} onClose={() => setRemoving(null)} title="Delete user?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{removing?.username ?? removing?.name}</span> will be signed out and removed. Their entries in the audit log
@@ -310,3 +352,39 @@ function ResetPasswordModal({ user, onClose }: { user: UserRow | null; onClose: 
     </Modal>
   )
 }
+
+/** Limits a user to the minions a target matches, or lifts the limit. */
+function ScopeModal({ user, current, onClose, onSave }: { user: UserRow; current: UserScope | null; onClose: () => void; onSave: (s: UserScope | null) => void }) {
+  const [tgt, setTgt] = useState(current?.target ?? '')
+  const [tgtType, setTgtType] = useState<TargetType>((current?.targetType as TargetType) ?? 'glob')
+  const name = user.username ?? user.name
+  return (
+    <Modal open onClose={onClose} title={`What ${name} can run on`}>
+      <div className="space-y-4 text-sm">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          Every command, state run and query {name} starts is checked against this target on the server, and runs only on the minions it matches. Anything that would reach other minions is refused and recorded in the audit log, and so are runners that change something, such as orchestrations.
+        </p>
+        <TargetField
+          tgt={tgt}
+          tgtType={tgtType}
+          onChange={(t, tt) => {
+            setTgt(t)
+            setTgtType(tt)
+          }}
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          {current && (
+            <Button className="mr-auto" onClick={() => onSave(null)}>
+              Whole fleet
+            </Button>
+          )}
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!tgt.trim()} onClick={() => onSave({ target: tgt.trim(), targetType: tgtType })}>
+            Limit to this target
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+

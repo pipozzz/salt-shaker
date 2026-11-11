@@ -382,13 +382,88 @@ test('the demo has a team to manage and a System page', async ({ page }) => {
   await expect(page.getByText('Vic Viewer')).toBeVisible()
   await page.getByLabel('Role of vic').selectOption('operator')
   await expect(page.getByLabel('Role of vic')).toHaveValue('operator')
+  // an operator can be limited to some minions
+  await expect(page.getByRole('button', { name: 'Change what otto can run on' })).toContainText('web-*')
+  await page.getByRole('button', { name: 'Change what vic can run on' }).click()
+  await page.getByLabel('Target').fill('G@roles:db')
+  await page.getByLabel('Match by').selectOption('compound')
+  await page.getByRole('button', { name: 'Limit to this target' }).click()
+  await expect(page.getByRole('button', { name: 'Change what vic can run on' })).toContainText('compound:G@roles:db')
   // and it's in the audit log
   await page.getByRole('link', { name: 'Audit log' }).click()
   await expect(page.getByRole('button', { name: /demo ok user\.set_role → vic/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /demo ok user\.set_scope → vic/ })).toBeVisible()
 
   await page.getByRole('link', { name: 'System' }).click()
   await expect(page.getByText('Connected').first()).toBeVisible()
   await expect(page.getByText('salt-master.lab.internal').first()).toBeVisible()
+})
+
+test('a command rolls out in batches from Run, and stops when a minion fails', async ({ page }) => {
+  await openDemo(page, `/run?${new URLSearchParams({ tgt: 'web-*', fun: 'cmd.run', args: "'uptime'" })}`)
+  await page.getByLabel('Roll out in batches').check()
+  await page.getByLabel('Batch size').fill('1')
+  await page.getByLabel('Why').fill('Check uptime one by one')
+  await page.getByRole('button', { name: /^Start rollout on 2/ }).click()
+  // it changes minions, so it's confirmed like any other run
+  await page.getByRole('button', { name: 'Start rollout on 2', exact: true }).last().click()
+  await expect(page).toHaveURL(/\/changes\/\d+$/)
+  await expect(page.getByText('Check uptime one by one')).toBeVisible()
+  await expect(page.getByText('done', { exact: true })).toBeVisible()
+  await expect(page.getByText('2 ok')).toBeVisible()
+  await expect(page.getByText('Batch 2')).toBeVisible()
+
+  // a function the minions don't have fails on the first one, and the rest never start
+  await page.goto(`/run?${new URLSearchParams({ tgt: 'web-*', fun: 'service.restart', args: 'nginx' })}`)
+  await page.getByLabel('Roll out in batches').check()
+  await page.getByLabel('Batch size').fill('1')
+  await page.getByLabel('Why').fill('Restart nginx')
+  await page.getByRole('button', { name: /^Start rollout on 2/ }).click()
+  await page.getByRole('button', { name: 'Start rollout on 2', exact: true }).last().click()
+  await expect(page.getByText('stopped', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 minion failed (web-01); at most 0 allowed')).toBeVisible()
+  await expect(page.getByText('1 failed · 1 waiting')).toBeVisible()
+})
+
+test("an operator's change waits for an admin's approval", async ({ page }) => {
+  await openDemo(page, '/changes')
+  await expect(page.getByText('Waiting for approval (1)')).toBeVisible()
+  await page.getByRole('link', { name: /#2 pkg\.install/ }).first().click()
+  await expect(page.getByText('Nothing runs until it is approved.')).toBeVisible()
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await expect(page.getByText('done', { exact: true })).toBeVisible()
+  await expect(page.getByText('Approved')).toBeVisible()
+  // and it's in the audit log
+  await page.getByRole('link', { name: 'Audit log' }).click()
+  await expect(page.getByRole('button', { name: /demo ok change\.approve → #2 pkg\.install/ })).toBeVisible()
+})
+
+test('a branch of the states can be previewed against base', async ({ page }) => {
+  await openDemo(page, '/compliance')
+  await page.getByRole('link', { name: 'Preview a branch' }).click()
+  await expect(page.getByLabel('Branch')).toHaveValue('nginx-tls')
+  await page.getByLabel('Target').fill('web-*')
+  await page.getByRole('button', { name: 'Preview' }).click()
+  await expect(page.getByText('2 of 2 minions would differ')).toBeVisible()
+  const web01 = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'web-01' }) })
+  await expect(web01.getByText('/etc/nginx/conf.d/tls.conf', { exact: true })).toBeVisible()
+  await expect(web01.getByText('new, would change')).toBeVisible()
+  await expect(web01.getByText('not applied any more')).toBeVisible()
+})
+
+test('API tokens are shown once and can be revoked', async ({ page }) => {
+  await openDemo(page, '/tokens')
+  await expect(page.getByText('gitlab: deploy pipeline')).toBeVisible()
+  await page.getByLabel('Token name').fill('nightly report')
+  await page.getByRole('button', { name: 'Make a token' }).click()
+  await expect(page.getByRole('heading', { name: 'Token for nightly report' })).toBeVisible()
+  await expect(page.getByLabel('API token')).toHaveText(/^ss_[\w-]{43}$/)
+  await page.getByRole('button', { name: 'Done' }).click()
+  const row = page.getByRole('listitem').filter({ hasText: 'nightly report' })
+  await expect(row).toContainText('never used')
+  await row.getByRole('button', { name: 'Revoke' }).click()
+  await page.getByRole('button', { name: 'Revoke', exact: true }).last().click()
+  await expect(page.getByText('nightly report')).toHaveCount(0)
 })
 
 test('run previews the target and shows results', async ({ page }) => {

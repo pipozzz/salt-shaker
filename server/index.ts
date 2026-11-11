@@ -24,6 +24,11 @@ import { OsvClient, VulnService } from './vulns'
 import { automationRoutes } from './routes/automation'
 import { targetRoutes } from './routes/targets'
 import { queryRoutes } from './routes/queries'
+import { scopeRoutes } from './routes/scopes'
+import { changeRoutes } from './routes/changes'
+import { tokenRoutes, userForToken } from './tokens'
+import { ChangeRunner, needsApproval } from './changes'
+import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
 import { Scheduler } from './scheduler'
 import { trimFleet } from '../src/lib/fleet'
@@ -155,9 +160,20 @@ app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
 })
 
 app.use('/api/*', async (c, next) => {
+  // scripts and CI use a personal API token; the web UI, its session cookie
+  const bearer = /^Bearer (\S+)$/.exec(c.req.header('authorization') ?? '')?.[1]
+  if (bearer) {
+    const user = await userForToken(db, schema, bearer)
+    if (!user) return c.json({ error: 'Invalid or expired API token' }, 401)
+    c.set('user', user)
+    c.set('expiresAt', null)
+    c.set('via', 'token')
+    return next()
+  }
   const s = await auth.api.getSession({ headers: c.req.raw.headers })
   c.set('user', (s?.user as SessionUser | undefined) ?? null)
   c.set('expiresAt', s?.session.expiresAt ? new Date(s.session.expiresAt) : null)
+  c.set('via', 'session')
   await next()
 })
 
@@ -170,6 +186,7 @@ app.get('/api/config', async (c) =>
     setupRequired: (await userCount()) === 0,
     sso: config.oidc ? { name: config.oidc.name, providerId: 'oidc', rolesFromIdp: !!config.oidc.roleClaim } : null,
     passwordLogin: config.oidc ? config.passwordLogin : 'all',
+    approval: config.approval,
   }),
 )
 
@@ -190,14 +207,19 @@ app.post('/api/setup', async (c) => {
   }
 })
 
-app.get('/api/me', (c) => {
+app.get('/api/me', async (c) => {
   const user = c.get('user')
   if (!user) return c.json({ error: 'Not signed in' }, 401)
   const role = isRole(user.role) ? user.role : 'viewer'
-  return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], expiresAt: c.get('expiresAt') })
+  // the minions they're limited to, if any, so the UI can say so
+  const scope = await loadScope(db, schema, user.id)
+  return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], scope, expiresAt: c.get('expiresAt') })
 })
 
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
+
+/** Which minions a target matches, from the master's grains cache, for scoped users' calls. */
+const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await salt.call({ client: 'runner', fun: 'cache.grains', tgt, tgt_type: tgtType })) ?? {}) as Record<string, unknown>))
 
 app.post('/api/salt', async (c) => {
   const user = c.get('user')
@@ -211,7 +233,24 @@ app.post('/api/salt', async (c) => {
     }
     return c.json({ error: decision.reason }, decision.status)
   }
-  const { low, audited } = decision
+  const { audited } = decision
+  let { low } = decision
+  // a scoped user runs only on their minions: the target is checked and narrowed to them
+  const scope = await loadScope(db, schema, user.id)
+  if (scope) {
+    const narrowed = await checkScope(scope, low, expandTarget).catch((e: Error) => ({ ok: false as const, reason: `Couldn't check your access: ${e.message}` }))
+    if (!narrowed.ok) {
+      await audit({ userId: user.id, username, role: user.role, client: String(low.client), fun: String(low.fun), target: typeof low.tgt === 'string' ? low.tgt : null, targetType: typeof low.tgt_type === 'string' ? low.tgt_type : null, outcome: 'denied', error: narrowed.reason, ip })
+      return c.json({ error: narrowed.reason }, 403)
+    }
+    low = narrowed.low
+  }
+  // with APPROVAL_REQUIRED=risky, an operator's command that changes minions goes through a change
+  if (String(low.client).startsWith('local') && needsApproval(config.approval, user.role, String(low.fun), (low.kwarg ?? {}) as Record<string, unknown>)) {
+    const reason = `${String(low.fun)} needs an admin's approval: request it as a change`
+    await audit({ userId: user.id, username, role: user.role, client: String(low.client), fun: String(low.fun), target: typeof low.tgt === 'string' ? low.tgt : null, targetType: typeof low.tgt_type === 'string' ? low.tgt_type : null, outcome: 'denied', error: reason, ip })
+    return c.json({ error: reason, needsApproval: true }, 403)
+  }
   const base = {
     userId: user.id,
     username,
@@ -377,9 +416,15 @@ app.get('/api/history/compliance', async (c) => {
 const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...row, role: 'system' }))
 scheduler.vulns = vulns
 scheduler.start()
+// batched rollouts and approved changes; claims each step in the database, so every instance can run it
+const changeRunner = new ChangeRunner({ db, schema, salt, notifier, audit, expand: expandTarget })
+changeRunner.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', queryRoutes({ db, schema }))
+app.route('/api', scopeRoutes({ db, schema, audit }))
+app.route('/api', tokenRoutes({ db, schema, audit }))
+app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 

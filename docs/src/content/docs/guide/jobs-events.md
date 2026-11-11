@@ -1,7 +1,7 @@
 ---
 title: Jobs & Events
 description: Job history, re-runs and the live event bus.
-sidebar: { order: 7 }
+sidebar: { order: 8 }
 ---
 
 ## Jobs

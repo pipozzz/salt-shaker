@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { HistoryJob, VulnMinion, VulnSummary } from '../api/server'
+import type { Change, HistoryJob, VulnMinion, VulnSummary } from '../api/server'
 import { overview, type OverviewInput } from './overview'
 
 const NOW = Date.UTC(2026, 10, 11, 12)
@@ -94,5 +94,15 @@ describe('overview', () => {
   it('lists pending upgrades when nothing urgent does', () => {
     const o = overview({ ...base, updates: { 'web-01': { packages: 3, jid: '3', checkedAt: ago(5) }, 'web-02': { packages: 1, jid: '3', checkedAt: ago(5) } } })
     expect(o.attention).toMatchObject([{ id: 'patches', level: 'info', title: '2 minions with pending upgrades', detail: 'web-01, web-02', to: '/patches' }])
+  })
+
+  it('asks admins to decide waiting changes, and says when a rollout stopped', () => {
+    const change = (id: number, status: Change['status'], extra: Partial<Change> = {}): Change => ({ id, reason: 'r', target: 'web-*', targetType: 'glob', fun: 'state.apply', args: { arg: [], kwarg: {} }, batchSize: '1', maxFailures: 0, status, requestedBy: 'olga', requestedById: 'u', requestedAt: ago(3), decidedBy: null, decidedAt: null, decisionNote: null, minions: null, batches: [], startedAt: null, finishedAt: null, error: null, ...extra })
+    const changes = [change(3, 'pending'), change(2, 'stopped', { finishedAt: ago(2), error: '1 minion failed (web-02); at most 0 allowed' }), change(1, 'stopped', { finishedAt: ago(1), error: 'Stopped by olga' })]
+    expect(overview({ ...base, changes, approver: true }).attention.map((a) => [a.level, a.title, a.to])).toEqual([
+      ['critical', 'Change #2 stopped: state.apply on web-*', '/changes/2'],
+      ['warning', '1 change waiting for approval', '/changes'],
+    ])
+    expect(overview({ ...base, changes, approver: false }).attention.map((a) => a.id)).toEqual(['change-2'])
   })
 })

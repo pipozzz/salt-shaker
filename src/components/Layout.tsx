@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, BellRing, CalendarClock, Database, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -64,7 +64,13 @@ export function Layout() {
   const role = session?.mode === 'server' ? session.eauth : null
   const items = [
     // the vulnerability report is built by the server (the demo has a made-up one)
-    ...nav.flatMap((n) => (n.to === '/patches' && session && session.mode !== 'live' ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }] : [n])),
+    ...nav.flatMap((n) =>
+      session && session.mode !== 'live' && n.to === '/patches'
+        ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }]
+        : session && session.mode !== 'live' && n.to === '/run'
+          ? [n, { to: '/changes', label: 'Changes', icon: GitPullRequestArrow }]
+          : [n],
+    ),
     ...(role === 'admin' || role === 'operator' || session?.mode === 'demo' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
     ...(role === 'admin'
       ? [
@@ -81,6 +87,8 @@ export function Layout() {
             { to: '/system', label: 'System', icon: Gauge },
           ]
         : []),
+    // everyone with the server (and the demo) can make API tokens for their scripts
+    ...(role && role !== 'none') || session?.mode === 'demo' ? [{ to: '/tokens', label: 'API tokens', icon: KeySquare }] : [],
   ]
   const pending = usePendingKeys()
 
@@ -109,7 +117,8 @@ export function Layout() {
           <kbd className="ml-auto rounded border border-zinc-200 px-1.5 font-sans text-[10px] dark:border-zinc-700" aria-hidden>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
         </button>
       </div>
-      <nav className="flex-1 space-y-0.5 px-2 py-2">
+      {/* scrolls on its own when the screen is too short for every page */}
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
         {items.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}

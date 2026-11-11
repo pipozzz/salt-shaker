@@ -1,0 +1,22 @@
+CREATE TABLE "change" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"reason" text NOT NULL,
+	"target" text NOT NULL,
+	"target_type" text NOT NULL,
+	"fun" text NOT NULL,
+	"args" text NOT NULL,
+	"batch_size" text,
+	"max_failures" integer DEFAULT 0 NOT NULL,
+	"status" text NOT NULL,
+	"requested_by" text NOT NULL,
+	"requested_by_id" text,
+	"requested_at" timestamp with time zone NOT NULL,
+	"decided_by" text,
+	"decided_at" timestamp with time zone,
+	"decision_note" text,
+	"minions" text,
+	"batches" text DEFAULT '[]' NOT NULL,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"error" text
+);

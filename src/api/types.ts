@@ -19,6 +19,8 @@ export interface Session {
   user: string
   eauth: string
   perms?: unknown[]
+  /** with the server: the minions this user is limited to, if an admin limited them */
+  scope?: { target: string; targetType: string } | null
 }
 
 export interface SaltEvent {

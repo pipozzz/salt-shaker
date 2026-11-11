@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+**Changes: batched rollouts and approvals**
+
+- On **Run**, **Roll out in batches** sends a command to a few minions at a time (a number, or a share like 25%) and stops when more minions fail than allowed; minions that don't answer within 15 minutes count as failed. Each rollout is a **change** with a reason, on the new **Changes** page: its batches, each minion's outcome as it goes, and a **Stop** button.
+- With `APPROVAL_REQUIRED=risky`, an operator's command that changes minions isn't run directly: it becomes a change that an admin other than the requester approves (or rejects with a reason) first. Requests, decisions and stops are audited, and the new **Approvals** and **Changes** notifications say when one waits or a rollout stopped. The overview lists changes waiting for approval and rollouts that stopped.
+- The demo has a change from Olga waiting for approval, and a rollout from earlier.
+
+**API tokens**
+
+- Personal **API tokens** for scripts and CI: a token acts as its user (role, limits, approvals) and everything it does is audited under their name. It's shown once, only its hash is kept, it can expire, and it stops when the user is disabled. The new [API reference](https://pipozzz.github.io/salt-shaker/reference/api/) shows how to run commands, roll out changes from a pipeline and read the vulnerability report.
+
+**Compliance**
+
+- **Preview a branch** shows what a branch of your states (a gitfs saltenv) would change before you merge it: the highstate is dry-run from the branch and from base on the same minions, and only the states whose outcome differs are listed (would fail, would change, new, not applied any more, no longer changes). Operators and viewers may now list salt environments (`fileserver.envs`).
+
+**Fixes**
+
+- The sidebar scrolls when the screen is too short for every page, instead of hiding the last ones (Users, System) below the edge.
+
+**Users & roles**
+
+- Admins can limit an operator to some minions (**Can run on** on the Users page, e.g. `G@roles:db`). The server checks every call they make against it: a target that reaches other minions is refused and audited, the rest runs on exactly the matching minions, and runners that change something (orchestrations) are refused. The target field shows limited users what they can run on.
+
 ## 1.15.0
 
 **Overview**

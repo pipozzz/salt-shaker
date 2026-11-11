@@ -1,7 +1,7 @@
 ---
 title: Query
 description: Ask minions questions in SQL with osquery.
-sidebar: { order: 6 }
+sidebar: { order: 7 }
 ---
 
 **Query** runs an [osquery](https://osquery.io) SQL query on a target and shows the answers of every minion as one table, with a `minion` column first. Ask about listening ports, users, SSH keys, processes, kernel modules, packages, files and [much more](https://osquery.io/schema/).

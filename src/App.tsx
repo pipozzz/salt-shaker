@@ -15,6 +15,9 @@ import { LoginPage } from './pages/Login'
 import { MinionDetailPage } from './pages/MinionDetail'
 import { MinionsPage } from './pages/Minions'
 import { OverviewPage } from './pages/Overview'
+import { BranchPreviewPage } from './pages/BranchPreview'
+import { TokensPage } from './pages/Tokens'
+import { ChangeDetailPage, ChangesPage } from './pages/Changes'
 import { OrchestratePage } from './pages/Orchestrate'
 import { PatchesPage } from './pages/Patches'
 import { RunPage } from './pages/Run'
@@ -60,11 +63,15 @@ function Gate() {
         <Route path="minions" element={<MinionsPage />} />
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
+        <Route path="compliance/preview" element={<BranchPreviewPage />} />
         <Route path="patches" element={<PatchesPage />} />
         {session.mode !== 'live' && <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />}
         <Route path="keys" element={<KeysPage />} />
         <Route path="run" element={<RunPage />} />
         <Route path="query" element={<QueryPage />} />
+        {/* changes are run by the server (the demo has its own) */}
+        {session.mode !== 'live' && <Route path="changes" element={<ChangesPage />} />}
+        {session.mode !== 'live' && <Route path="changes/:id" element={<ChangeDetailPage />} />}
         <Route path="orchestrate" element={<OrchestratePage />} />
         <Route path="jobs" element={<JobsSwitch />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />
@@ -76,6 +83,7 @@ function Gate() {
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="notifications" element={<NotificationsPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="system" element={<SystemPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator'))) && <Route path="audit" element={<AuditPage />} />}
+        {session.mode !== 'live' && <Route path="tokens" element={<TokensPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

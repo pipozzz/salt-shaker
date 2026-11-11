@@ -8,6 +8,8 @@ export interface ServerInfo {
   setupRequired: boolean
   sso: { name: string; providerId: string; rolesFromIdp: boolean } | null
   passwordLogin: 'all' | 'admins'
+  /** risky: operators' commands that change minions need an admin's approval (APPROVAL_REQUIRED) */
+  approval?: 'off' | 'risky'
 }
 
 export type Role = 'admin' | 'operator' | 'viewer' | 'none'
@@ -16,7 +18,14 @@ export const ROLES: Role[] = ['admin', 'operator', 'viewer', 'none']
 export interface Me {
   user: { id: string; name: string; username: string; role: Role }
   perms: unknown[]
+  scope?: UserScope | null
   expiresAt: string | null
+}
+
+/** The minions a user may run things on; none means the whole fleet. */
+export interface UserScope {
+  target: string
+  targetType: string
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -82,6 +91,7 @@ export function sessionFromMe(me: Me): Session {
     user: me.user.username || me.user.name,
     eauth: me.user.role,
     perms: me.perms,
+    scope: me.scope ?? null,
   }
 }
 
@@ -300,7 +310,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 // ---- automation (admin) ----
 
 export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
 
 export interface Schedule {
   id: number
@@ -424,6 +434,77 @@ export interface SystemStatus {
   notifications: { channels: number; enabled: number; failing: Array<{ name: string; error: string }> }
   schedules: { total: number; enabled: number }
   settings: { publicUrl: string; trustedOrigins: string[]; sso: { name: string; active: boolean } | null; passwordLogin: 'all' | 'admins'; presenceMinutes: number; metrics: boolean; trustProxy: boolean }
+}
+
+export type ChangeStatus = 'pending' | 'rejected' | 'queued' | 'running' | 'done' | 'stopped' | 'failed'
+
+/** One function on a target, run in batches, and approved first when the policy asks for it. */
+export interface Change {
+  id: number
+  reason: string
+  target: string
+  targetType: string
+  fun: string
+  args: { arg: unknown[]; kwarg: Record<string, unknown> }
+  batchSize: string | null
+  maxFailures: number
+  status: ChangeStatus
+  requestedBy: string
+  requestedById: string | null
+  requestedAt: string
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+  minions: string[] | null
+  batches: Array<{ jid: string | null; minions: string[]; startedAt: string }>
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+}
+
+export type MinionOutcome = 'ok' | 'failed' | 'running' | 'waiting'
+
+export interface ChangeInput {
+  reason: string
+  target: string
+  targetType: string
+  fun: string
+  arg: unknown[]
+  kwarg: Record<string, unknown>
+  batchSize: string
+  maxFailures: number
+}
+
+export const changes = {
+  list: () => request<{ changes: Change[]; approval: 'off' | 'risky' }>('/api/changes'),
+  get: (id: number) => request<{ change: Change; outcome: Record<string, MinionOutcome> }>(`/api/changes/${id}`),
+  create: (c: ChangeInput) => send<{ change: Change }>('POST', '/api/changes', c),
+  approve: (id: number, note?: string) => send('POST', `/api/changes/${id}/approve`, { note }),
+  reject: (id: number, note: string) => send('POST', `/api/changes/${id}/reject`, { note }),
+  stop: (id: number) => send('POST', `/api/changes/${id}/stop`, {}),
+}
+
+/** A personal API token, without the token itself (shown once, when made). */
+export interface ApiToken {
+  id: number
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  lastUsedAt: string | null
+}
+
+export const tokens = {
+  list: () => request<{ tokens: ApiToken[] }>('/api/tokens'),
+  create: (name: string, days: number | null) => send<ApiToken & { token: string }>('POST', '/api/tokens', { name, days }),
+  remove: (id: number) => send('DELETE', `/api/tokens/${id}`),
+}
+
+/** Admins limit users to the minions a target matches. */
+export const scopes = {
+  list: () => request<{ scopes: Array<UserScope & { userId: string; updatedBy: string | null; updatedAt: string }> }>('/api/scopes'),
+  set: (userId: string, s: UserScope) => send('PUT', `/api/scopes/${encodeURIComponent(userId)}`, s),
+  clear: (userId: string) => send('DELETE', `/api/scopes/${encodeURIComponent(userId)}`),
 }
 
 export const system = () => request<SystemStatus>('/api/system')

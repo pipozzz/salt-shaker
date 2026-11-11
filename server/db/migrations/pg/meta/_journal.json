@@ -85,6 +85,27 @@
       "when": 1794318228788,
       "tag": "0011_webhook_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794385874136,
+      "tag": "0012_user_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794386226580,
+      "tag": "0013_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794387342174,
+      "tag": "0014_api_tokens",
+      "breakpoints": true
     }
   ]
 }

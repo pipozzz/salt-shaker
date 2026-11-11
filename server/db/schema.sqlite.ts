@@ -222,3 +222,51 @@ export const savedQuery = sqliteTable('saved_query', {
   createdBy: text('created_by'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** Limits what a user may run on to the minions a target matches (admins set it; none: the whole fleet). */
+export const userScope = sqliteTable('user_scope', {
+  userId: text('user_id').primaryKey(),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+/**
+ * A change: one function on a target, run in batches with a stop on failures, and, when the policy
+ * says so, only after an admin approved it. Batches: JSON [{jid, minions, startedAt}].
+ */
+export const change = sqliteTable('change', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  reason: text('reason').notNull(),
+  target: text('target').notNull(),
+  targetType: text('target_type').notNull(),
+  fun: text('fun').notNull(),
+  args: text('args').notNull(),
+  batchSize: text('batch_size'),
+  maxFailures: integer('max_failures').notNull().default(0),
+  status: text('status').notNull(),
+  requestedBy: text('requested_by').notNull(),
+  requestedById: text('requested_by_id'),
+  requestedAt: integer('requested_at', { mode: 'timestamp_ms' }).notNull(),
+  decidedBy: text('decided_by'),
+  decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
+  decisionNote: text('decision_note'),
+  minions: text('minions'),
+  batches: text('batches').notNull().default('[]'),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  error: text('error'),
+})
+
+/** Personal API tokens for scripts and CI; only a hash of each is kept. */
+export const apiToken = sqliteTable('api_token', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  prefix: text('prefix').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+  lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+})

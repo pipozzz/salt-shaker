@@ -11,6 +11,7 @@ import { useAsync } from '../lib/hooks'
 import { overview, type AttentionItem, type AttentionLevel } from '../lib/overview'
 import { useSalt, useSession } from '../lib/session'
 import { useVulnApi } from '../lib/vulnapi'
+import { useChangesApi } from '../lib/changes'
 
 /** How the fleet is doing, and what needs someone's attention, worst first. */
 export function OverviewPage() {
@@ -34,6 +35,8 @@ export function OverviewPage() {
   )
   // the vulnerability report is the server's (or the demo's); live mode has none
   const vulns = useAsync(() => (mode === 'live' ? Promise.resolve(null) : vulnApi.report().catch(() => null)), [vulnApi, mode, refreshes])
+  const changesApi = useChangesApi()
+  const changes = useAsync(() => (changesApi ? changesApi.list().then((r) => r.changes).catch(() => null) : Promise.resolve(null)), [changesApi, refreshes])
   const trend = useAsync(() => (mode === 'live' ? Promise.resolve(null) : vulnApi.trend(90).catch(() => null)), [vulnApi, mode, refreshes])
 
   const o = overview({
@@ -44,6 +47,8 @@ export function OverviewPage() {
     updates: updates.data ?? null,
     vulns: vulns.data ?? null,
     failedJobs: failed.data ?? null,
+    changes: changes.data ?? null,
+    approver: mode === 'demo' || session?.eauth === 'admin',
   })
   const loading = keys.loading || compliance.loading || updates.loading || failed.loading || vulns.loading
   const minionsDown = o.minions.down ?? 0

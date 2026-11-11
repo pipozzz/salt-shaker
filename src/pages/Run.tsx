@@ -1,4 +1,5 @@
 import { useCanSchedule } from '../lib/automation'
+import { useChangesApi, useNeedsApproval } from '../lib/changes'
 import clsx from 'clsx'
 import { CalendarClock, CornerDownLeft, ExternalLink, History, Play, TriangleAlert } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
@@ -66,6 +67,15 @@ export function RunPage() {
   const isWrite = /^state\.(apply|highstate|sls)$/.test(fun) && !/test=(True|true)/.test(args)
   const isCmd = fun.startsWith('cmd.')
 
+  // batched rollouts and approvals go through a change (the server's, or the demo's)
+  const changesApi = useChangesApi()
+  const needsApproval = useNeedsApproval()(fun.trim(), args)
+  const [batched, setBatched] = useState(false)
+  const [batchSize, setBatchSize] = useState('25%')
+  const [maxFailures, setMaxFailures] = useState(0)
+  const [reason, setReason] = useState('')
+  const asChange = !!changesApi && (batched || needsApproval)
+
   const [confirming, setConfirming] = useState(false)
   const [typed, setTyped] = useState('')
   const level = confirmLevel(fun, args, matched)
@@ -84,6 +94,18 @@ export function RunPage() {
     setConfirming(false)
     setError(null)
     setSubmitting(true)
+    if (asChange) {
+      try {
+        const { arg, kwarg } = parseArgs(args)
+        const { change } = await changesApi!.create({ reason: reason.trim(), target: tgt.trim(), targetType: tgtType, fun: fun.trim(), arg, kwarg, batchSize: batched ? batchSize.trim() : '', maxFailures: batched ? maxFailures : 0 })
+        navigate(`/changes/${change.id}`)
+      } catch (err) {
+        setError(err as Error)
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
     try {
       const { arg, kwarg } = parseArgs(args)
       await start(tgt, tgtType, fun.trim(), arg, kwarg)
@@ -140,6 +162,36 @@ export function RunPage() {
                 </Field>
               </div>
 
+              {changesApi && (
+                <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={batched} onChange={(e) => setBatched(e.target.checked)} className="accent-accent-600" />
+                    Roll out in batches
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">a few minions at a time, stopping when too many fail</span>
+                  </label>
+                  {batched && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Batch size" hint="Minions at a time: a number, or a share like 25%">
+                        <Input value={batchSize} onChange={(e) => setBatchSize(e.target.value)} className="font-mono" aria-label="Batch size" />
+                      </Field>
+                      <Field label="Failures allowed" hint="It stops when more minions than this have failed">
+                        <Input type="number" min={0} value={maxFailures} onChange={(e) => setMaxFailures(Math.max(0, Number(e.target.value) || 0))} aria-label="Failures allowed" />
+                      </Field>
+                    </div>
+                  )}
+                  {needsApproval && (
+                    <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                      <TriangleAlert className="size-3.5" /> This changes minions, so an admin approves it first; it runs once they have.
+                    </p>
+                  )}
+                  {asChange && (
+                    <Field label="Why" hint="Shown to whoever approves it, and kept with the change">
+                      <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Roll out the new nginx config" required aria-label="Why" />
+                    </Field>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 {PRESETS.map((p) => (
                   <button
@@ -165,7 +217,7 @@ export function RunPage() {
                   </Button>
                 )}
                 <Button type="submit" variant={isWrite ? 'success' : 'primary'} className={canSchedule ? undefined : 'ml-auto'} icon={<Play className="size-4" />} loading={submitting} disabled={!allowed}>
-                  {isWrite ? 'Apply' : 'Run'}
+                  {needsApproval ? 'Request approval' : asChange ? 'Start rollout' : isWrite ? 'Apply' : 'Run'}
                   {matched?.length ? ` on ${matched.length}` : ''}
                   <CornerDownLeft className="size-3.5 opacity-60" />
                 </Button>
@@ -299,7 +351,7 @@ export function RunPage() {
               disabled={level === 'type' && typed !== String(matched?.length)}
               onClick={execute}
             >
-              Run on {matched ? matched.length : tgt}
+              {needsApproval ? 'Request approval for' : asChange ? 'Start rollout on' : 'Run on'} {matched ? matched.length : tgt}
             </Button>
           </div>
         </div>

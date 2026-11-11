@@ -195,7 +195,7 @@ function matchTarget(tgt: string, tgtType: string): string[] {
   return ids.filter((id) => re.test(id))
 }
 
-function stateResults(id: string, sls: string[], test: boolean) {
+function stateResults(id: string, sls: string[], test: boolean, saltenv?: string) {
   const g = minions[id].grains
   const states: Array<[string, string, string, Record<string, unknown>]> = [
     ['file', 'motd', '/etc/motd', { diff: `--- \n+++ \n@@ -1 +1 @@\n-Welcome\n+Managed by Salt — ${id}\n` }],
@@ -208,12 +208,21 @@ function stateResults(id: string, sls: string[], test: boolean) {
     states.push(['pkg', 'nginx', 'nginx', {}], ['service', 'nginx', 'nginx', {}], ['file', '/etc/nginx/sites-enabled/default', '/etc/nginx/sites-enabled/default', {}])
   }
   if (id.startsWith('db')) states.push(['pkg', 'postgresql', 'postgresql', {}], ['service', 'postgresql', 'postgresql', {}])
+  // the nginx-tls branch: a TLS config for the web tier (nginx reloads for it), and no ops user any more
+  const tls = saltenv === 'nginx-tls'
+  if (tls && (g.roles as string[]).includes('web')) {
+    states.push(['file', '/etc/nginx/conf.d/tls.conf', '/etc/nginx/conf.d/tls.conf', { diff: 'New file' }])
+    const svc = states.findIndex(([m, s]) => m === 'service' && s === 'nginx')
+    if (svc >= 0) states[svc] = ['service', 'nginx', 'nginx', { reload: true }]
+  }
+  if (tls) states.splice(states.findIndex(([m, s]) => m === 'user' && s === 'ops'), 1)
 
   const out: Record<string, unknown> = {}
   states.forEach(([mod, sid, name, changes], i) => {
     const fail = !test && id === 'web-02' && sid === 'nginx' && mod === 'service'
     // web-01's motd always drifts, so every compliance check has something to remediate; the rest is chance
-    const changed = Object.keys(changes).length > 0 && (id === 'web-01' || Math.random() > 0.3)
+    // with a saltenv named (a branch preview) the outcome is fixed, so base and the branch compare cleanly
+    const changed = Object.keys(changes).length > 0 && (id === 'web-01' || (saltenv ? sid !== 'motd' : Math.random() > 0.3))
     const fun = mod === 'pkg' ? 'installed' : mod === 'service' ? 'running' : mod === 'user' ? 'present' : mod === 'timezone' ? 'system' : 'managed'
     out[`${mod}_|-${sid}_|-${name}_|-${fun}`] = {
       __id__: sid,
@@ -256,7 +265,7 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
     case 'state.highstate':
     case 'state.sls': {
       const sls = String(arg[0] ?? '').split(',').filter(Boolean)
-      return stateResults(id, sls, kwarg.test === true || kwarg.test === 'True')
+      return stateResults(id, sls, kwarg.test === true || kwarg.test === 'True', typeof kwarg.saltenv === 'string' ? kwarg.saltenv : undefined)
     }
     case 'cmd.run': {
       const cmd = String(arg[0] ?? '')
@@ -438,6 +447,19 @@ export function demoJobHistory(since: number): HistoryJob[] {
     })
 }
 
+/** Which minions of a job have returned so far, and which of them failed. */
+export function demoJobProgress(jid: string) {
+  const j = jobs.find((x) => x.jid === jid)
+  const now = Date.now()
+  const done = Object.entries(j?.results ?? {}).filter(([, r]) => r.at <= now)
+  return { returned: done.map(([m]) => m), failed: done.filter(([, r]) => failedReturn(r.ret)).map(([m]) => m), minions: j?.minions ?? [] }
+}
+
+/** Which minions a target matches in the demo, like cache.grains on a real master. */
+export function demoMatch(tgt: string, tgtType: string) {
+  return matchTarget(tgt, tgtType)
+}
+
 /** Each answering minion's pending upgrades, like the server keeps from its latest patch scan. */
 export function demoPendingUpdates(checkedAt: string): Record<string, MinionUpdates> {
   return Object.fromEntries(Object.entries(upgrades).filter(([id]) => minions[id]?.up).map(([id, u]) => [id, { packages: Object.keys(u).length, jid: '', checkedAt }]))
@@ -583,6 +605,9 @@ export class MockTransport implements Transport {
 
     if (client === 'runner') {
       switch (fun) {
+        case 'fileserver.envs':
+          // base, and a gitfs branch with TLS for the web tier
+          return ['base', 'nginx-tls']
         case 'manage.status':
           // like a real master, this waits for minions that don't answer
           await sleep(1200)

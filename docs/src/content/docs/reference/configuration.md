@@ -19,6 +19,7 @@ The server is configured with environment variables.
 | `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
 | `AUDIT_RETENTION_DAYS` | forever | how long [audit log](/salt-shaker/guide/users-audit/#audit-log) entries are kept, e.g. `365`; unset or `0` keeps them all |
+| `APPROVAL_REQUIRED` | `off` | `risky`: an operator's command that changes minions becomes a [change](/salt-shaker/guide/changes/) an admin approves before it runs |
 | `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert; `0` turns it off |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/), e.g. `Europe/Bratislava` |
 | `PASSWORD_LOGIN` | `all` | `admins` allows passwords for admins only, as a break-glass next to [SSO](/salt-shaker/deploy/sso/) |

@@ -1,8 +1,8 @@
 import clsx from 'clsx'
-import { Bookmark, BookmarkCheck, Crosshair, Loader2, Share2, TriangleAlert, X } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Crosshair, Loader2, Lock, Share2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { TargetType } from '../api/types'
-import { useSalt } from '../lib/session'
+import { useSalt, useSession } from '../lib/session'
 import { useSavedTargets } from '../lib/targets'
 import { Button, Field, Input, Select } from './ui'
 
@@ -82,6 +82,7 @@ export function TargetField({
 
   return (
     <div className="space-y-2">
+      <ScopeNote />
       <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
         <Field label="Target" hint={<TargetPreview hint={TARGET_HINTS[tgtType]} preview={current} />}>
           <div className="relative">
@@ -219,3 +220,19 @@ function TargetPreview({ hint, preview }: { hint: string; preview: Preview | nul
     </span>
   )
 }
+
+/** For users an admin limited to some minions: what they can run on, before they try. */
+function ScopeNote() {
+  const { session } = useSession()
+  const s = session?.scope
+  if (!s) return null
+  return (
+    <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+      <Lock className="size-3.5 shrink-0" />
+      <span>
+        You can run on <span className="font-mono font-medium">{s.targetType === 'glob' ? '' : `${s.targetType}:`}{s.target}</span> only; a target that reaches other minions is refused.
+      </span>
+    </p>
+  )
+}
+

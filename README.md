@@ -13,12 +13,14 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 
 - **Overview:** the home page: minions responding, drift, pending patches, critical and high vulnerabilities and failed jobs at a glance, and what needs attention, worst first, each linking to where it gets fixed.
 - **Minions:** status, OS, IPs, CPU/RAM and roles at a glance, read from the master's cache, so it stays fast with large fleets and shows offline minions too. A fleet breakdown flags minions running an older Salt than the master. Each minion's page shows its grains and compiled pillar.
+- **Branch preview:** see what a branch of your states would change on the minions before you merge it.
 - **Compliance:** dry-runs the highstate (`test=True`) across a target, then groups minions into *in compliance*, *drifted*, *errors* and *no return*, with diffs of what would change. One click remediates the drifted minions. Past checks are kept, so you can follow drift over time.
 - **Patches:** pending package upgrades across the fleet, by package or by minion, showing installed → available versions. Upgrades one package where it's pending, everything on a minion, or just the upgrades that fix known vulnerabilities.
 - **Vulnerabilities:** known CVEs in the installed packages, from the distributions' security trackers via OSV.dev, with the fixed version and a one-click upgrade. A 90-day trend, CSV export, and risk acceptance with a reason and an expiry.
 - **Enrollment:** accept or reject keys after checking fingerprints. Generates bootstrap commands, including **pre-seeded keys**, so a new minion is trusted on first contact.
 - **Run:** any execution module against any target type. You see which minions the target matches before you run. Results stream in live, and state output is rendered with diffs. Risky commands on many minions need an explicit confirmation.
 - **Query:** ask minions questions in SQL with osquery (ports, users, SSH keys, processes…) and get one table across the fleet, with a library of ready-made queries, team-saved queries and CSV export. Installs osquery where it's missing.
+- **Changes:** roll a command out in batches, stopping when too many minions fail, and, with the approval policy on, have an admin approve operators' risky commands first.
 - **Orchestrate:** runs `state.orchestrate` files, with dry-run and pillar overrides, and shows step-by-step results with per-minion output.
 - **Jobs:** full results and *run again*. With the server, jobs are recorded from the event bus and kept for 90 days by default (the master keeps them about 24 hours). That includes jobs run from the salt CLI, along with who ran them.
 - **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
@@ -28,6 +30,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Schedules:** nightly compliance checks, weekly patch or vulnerability scans, watched osquery queries or any function, on a cron schedule.
 - **Notifications:** Slack-format, Microsoft Teams or JSON webhooks for drift, available upgrades, fixable critical or high vulnerabilities, changes in a watched query, risk acceptances about to end, failed jobs and minions waiting for approval.
 - **Audit log:** every change, plus every denied attempt, with who, what, where and the resulting jid. Salt's job cache records the user too.
+- **API tokens:** scripts and CI call the same API as the UI, acting as their user, with every call audited.
 - **⌘K / Ctrl+K** jumps to any page, minion, saved target, osquery query or recent command.
 - **Demo mode:** a simulated master in the browser, for trying it out, with made-up vulnerabilities, schedules, notification channels, users and an audit log of what you do in it.
 

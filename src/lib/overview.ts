@@ -1,4 +1,4 @@
-import type { HistoryJob, MinionCompliance, MinionUpdates, VulnAccepted, VulnMinion, VulnSummary } from '../api/server'
+import type { Change, HistoryJob, MinionCompliance, MinionUpdates, VulnAccepted, VulnMinion, VulnSummary } from '../api/server'
 import type { KeyList } from '../api/types'
 
 /*
@@ -17,6 +17,9 @@ export interface OverviewInput {
   vulns: { minions: VulnMinion[]; vulns: VulnSummary[]; accepted: VulnAccepted[] } | null
   /** failed jobs of the last day, newest first; null where there is no job history */
   failedJobs: HistoryJob[] | null
+  /** changes, newest first, and whether this user decides approvals (admins) */
+  changes?: Change[] | null
+  approver?: boolean
 }
 
 export type AttentionLevel = 'critical' | 'warning' | 'info'
@@ -129,6 +132,15 @@ export function overview(i: OverviewInput): Overview {
         action: 'See jobs',
       })
     }
+  }
+
+  // changes: what waits for an approver, and rollouts that stopped in the last day
+  if (i.changes) {
+    const waiting = i.changes.filter((c) => c.status === 'pending')
+    if (waiting.length && i.approver)
+      add({ id: 'approvals', level: 'warning', title: `${plural(waiting.length, 'change')} waiting for approval`, detail: waiting.map((c) => `#${c.id} ${c.fun} by ${c.requestedBy}`).join(', '), to: '/changes', action: 'Review' })
+    for (const c of i.changes.filter((c) => (c.status === 'stopped' || c.status === 'failed') && c.finishedAt && i.now - Date.parse(c.finishedAt) < DAY && !(c.error ?? '').startsWith('Stopped by')))
+      add({ id: `change-${c.id}`, level: 'critical', title: `Change #${c.id} ${c.status}: ${c.fun} on ${c.target}`, detail: c.error ?? undefined, to: `/changes/${c.id}`, action: 'See it' })
   }
 
   attention.sort((a, b) => LEVEL[a.level] - LEVEL[b.level])

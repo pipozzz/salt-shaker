@@ -21,6 +21,8 @@ export interface Config {
   auditDays: number
   /** Minutes between checks for minions that stopped responding; 0 turns the check off. */
   presenceMinutes: number
+  /** risky: operators' commands that change minions need an admin's approval first */
+  approval: 'off' | 'risky'
   /** Behind a reverse proxy: take the client IP from X-Forwarded-For instead of the socket. */
   trustProxy: boolean
   /** Who may sign in with a password; 'admins' keeps it as a break-glass when SSO is on. */
@@ -104,6 +106,7 @@ export function loadConfig(): Config {
     historyDays: Math.max(1, Number(process.env.JOB_RETENTION_DAYS ?? 90) || 90),
     auditDays: Math.max(0, Math.floor(Number(process.env.AUDIT_RETENTION_DAYS ?? 0)) || 0),
     presenceMinutes: Math.max(0, Number(process.env.PRESENCE_CHECK_MINUTES ?? 5) || 0),
+    approval: process.env.APPROVAL_REQUIRED === 'risky' ? 'risky' : 'off',
     osvApiUrl: (process.env.OSV_API_URL ?? 'https://api.osv.dev').replace(/\/+$/, ''),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }

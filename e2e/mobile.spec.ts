@@ -10,7 +10,7 @@ test('mobile menu closes after picking a page', async ({ page }) => {
 })
 
 // pages that grew wide tables or long rows: nothing may push the page sideways on a phone
-for (const path of ['/', '/minions', '/changes', '/changes/1', '/compliance/preview', '/compliance/hardening', '/vulnerabilities', '/vulnerabilities?view=packages&q=ssl', '/query', '/schedules', '/notifications', '/audit', '/users', '/system', '/patches']) {
+for (const path of ['/', '/minions', '/map', '/changes', '/changes/1', '/compliance/preview', '/compliance/hardening', '/vulnerabilities', '/vulnerabilities?view=packages&q=ssl', '/query', '/schedules', '/notifications', '/audit', '/users', '/system', '/patches']) {
   test(`${path} fits a phone`, async ({ page }) => {
     await page.goto(`${path}${path.includes('?') ? '&' : '?'}demo`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()

@@ -1,3 +1,4 @@
+import { SlackLinks } from '../components/SlackLinks'
 import { Check, Copy, KeySquare, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { demoTokens } from '../api/demo-tokens'
@@ -104,6 +105,8 @@ export function TokensPage() {
           </ul>
         )}
       </Card>
+
+      {session?.mode === 'server' && <SlackLinks />}
 
       {made && <TokenShown token={made} onClose={() => setMade(null)} />}
 

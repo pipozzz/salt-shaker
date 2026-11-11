@@ -120,6 +120,13 @@
       "when": 1794390957157,
       "tag": "0016_minion_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794394437513,
+      "tag": "0017_slack_link",
+      "breakpoints": true
     }
   ]
 }

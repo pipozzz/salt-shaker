@@ -531,6 +531,20 @@ export const tokens = {
   remove: (id: number) => send('DELETE', `/api/tokens/${id}`),
 }
 
+/** Slack accounts linked to the signed-in user, for the /salt command. */
+export interface SlackLink {
+  team: string
+  slackUser: string
+  slackName: string | null
+  linkedAt: string
+}
+
+export const slack = {
+  links: () => request<{ enabled: boolean; links: SlackLink[] }>('/api/slack/links'),
+  link: (code: string) => send<{ slackName: string }>('POST', '/api/slack/link', { code }),
+  unlink: () => send('DELETE', '/api/slack/links'),
+}
+
 /** Admins limit users to the minions a target matches. */
 export const scopes = {
   list: () => request<{ scopes: Array<UserScope & { userId: string; updatedBy: string | null; updatedAt: string }> }>('/api/scopes'),

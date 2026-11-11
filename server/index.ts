@@ -30,6 +30,7 @@ import { tokenRoutes, userForToken } from './tokens'
 import { KeyAutoAccept, keyRuleRoutes } from './keyrules'
 import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
+import { slackRoutes } from './slack'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
@@ -231,17 +232,18 @@ history.onEvent((tag, data) => void keyAutoAccept.onEvent(tag, data).catch((e) =
 /** Which minions a target matches, from the master's grains cache, for scoped users' calls. */
 const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await salt.call({ client: 'runner', fun: 'cache.grains', tgt, tgt_type: tgtType })) ?? {}) as Record<string, unknown>))
 
-app.post('/api/salt', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Not signed in' }, 401)
+/**
+ * One salt-api call on a user's behalf, with every check the console's calls get: the role's
+ * permissions, the user's scope, approvals, and the audit log. Used by /api/salt and Slack.
+ */
+async function saltAs(user: SessionUser, input: unknown, ip: string | null): Promise<{ status: number; body: { return?: unknown; error?: string; needsApproval?: boolean } }> {
   const username = user.username ?? user.name
-  const ip = clientIp(c)
-  const decision = authorize(user.role, username, await c.req.json().catch(() => null))
+  const decision = authorize(user.role, username, input)
   if (!decision.ok) {
     if (decision.status === 403 && decision.fun) {
       await audit({ userId: user.id, username, role: user.role, client: decision.client ?? '?', fun: decision.fun, outcome: 'denied', error: decision.reason, ip })
     }
-    return c.json({ error: decision.reason }, decision.status)
+    return { status: decision.status, body: { error: decision.reason } }
   }
   const { audited } = decision
   let { low } = decision
@@ -251,7 +253,7 @@ app.post('/api/salt', async (c) => {
     const narrowed = await checkScope(scope, low, expandTarget).catch((e: Error) => ({ ok: false as const, reason: `Couldn't check your access: ${e.message}` }))
     if (!narrowed.ok) {
       await audit({ userId: user.id, username, role: user.role, client: String(low.client), fun: String(low.fun), target: typeof low.tgt === 'string' ? low.tgt : null, targetType: typeof low.tgt_type === 'string' ? low.tgt_type : null, outcome: 'denied', error: narrowed.reason, ip })
-      return c.json({ error: narrowed.reason }, 403)
+      return { status: 403, body: { error: narrowed.reason } }
     }
     low = narrowed.low
   }
@@ -259,7 +261,7 @@ app.post('/api/salt', async (c) => {
   if (String(low.client).startsWith('local') && needsApproval(config.approval, user.role, String(low.fun), (low.kwarg ?? {}) as Record<string, unknown>)) {
     const reason = `${String(low.fun)} needs an admin's approval: request it as a change`
     await audit({ userId: user.id, username, role: user.role, client: String(low.client), fun: String(low.fun), target: typeof low.tgt === 'string' ? low.tgt : null, targetType: typeof low.tgt_type === 'string' ? low.tgt_type : null, outcome: 'denied', error: reason, ip })
-    return c.json({ error: reason, needsApproval: true }, 403)
+    return { status: 403, body: { error: reason, needsApproval: true } }
   }
   const base = {
     userId: user.id,
@@ -275,12 +277,19 @@ app.post('/api/salt', async (c) => {
   try {
     const ret = await salt.call(low)
     if (audited) await audit({ ...base, jid: jidOf(ret), outcome: 'ok' })
-    return c.json({ return: ret })
+    return { status: 200, body: { return: ret } }
   } catch (e) {
     const err = e instanceof UpstreamError ? e : new UpstreamError(String(e), 502)
     if (audited) await audit({ ...base, outcome: 'error', error: err.message })
-    return c.json({ error: err.message }, err.status as 400)
+    return { status: err.status, body: { error: err.message } }
   }
+}
+
+app.post('/api/salt', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  const res = await saltAs(user, await c.req.json().catch(() => null), clientIp(c))
+  return c.json(res.body, res.status as 200)
 })
 
 app.get('/api/salt/events', async (c) => {
@@ -436,6 +445,7 @@ app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))
 app.route('/api', keyRuleRoutes({ db, schema, audit }))
 app.route('/api', reportRoutes({ report: weeklyReport }))
+app.route('/api', slackRoutes({ db, schema, secret: config.slackSigningSecret, publicUrl: config.publicUrl, saltAs, audit }))
 app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0 }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))

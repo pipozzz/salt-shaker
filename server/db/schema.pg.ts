@@ -285,3 +285,16 @@ export const minionSeen = pgTable('minion_seen', {
   minion: text('minion').primaryKey(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
 })
+
+/** Which Salt Shaker user a Slack user acts as in /salt commands, linked by that user in the browser. */
+export const slackLink = pgTable(
+  'slack_link',
+  {
+    team: text('team').notNull(),
+    slackUser: text('slack_user').notNull(),
+    userId: text('user_id').notNull(),
+    slackName: text('slack_name'),
+    linkedAt: timestamp('linked_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.team, t.slackUser] })],
+)

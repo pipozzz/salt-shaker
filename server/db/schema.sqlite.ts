@@ -287,3 +287,16 @@ export const minionSeen = sqliteTable('minion_seen', {
   minion: text('minion').primaryKey(),
   lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** Which Salt Shaker user a Slack user acts as in /salt commands, linked by that user in the browser. */
+export const slackLink = sqliteTable(
+  'slack_link',
+  {
+    team: text('team').notNull(),
+    slackUser: text('slack_user').notNull(),
+    userId: text('user_id').notNull(),
+    slackName: text('slack_name'),
+    linkedAt: integer('linked_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.team, t.slackUser] })],
+)

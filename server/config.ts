@@ -23,6 +23,8 @@ export interface Config {
   presenceMinutes: number
   /** risky: operators' commands that change minions need an admin's approval first */
   approval: 'off' | 'risky'
+  /** the Slack app's signing secret, for the /salt command; null leaves Slack off */
+  slackSigningSecret: string | null
   /** Behind a reverse proxy: take the client IP from X-Forwarded-For instead of the socket. */
   trustProxy: boolean
   /** Who may sign in with a password; 'admins' keeps it as a break-glass when SSO is on. */
@@ -107,6 +109,7 @@ export function loadConfig(): Config {
     auditDays: Math.max(0, Math.floor(Number(process.env.AUDIT_RETENTION_DAYS ?? 0)) || 0),
     presenceMinutes: Math.max(0, Number(process.env.PRESENCE_CHECK_MINUTES ?? 5) || 0),
     approval: process.env.APPROVAL_REQUIRED === 'risky' ? 'risky' : 'off',
+    slackSigningSecret: process.env.SLACK_SIGNING_SECRET?.trim() || null,
     osvApiUrl: (process.env.OSV_API_URL ?? 'https://api.osv.dev').replace(/\/+$/, ''),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
   }

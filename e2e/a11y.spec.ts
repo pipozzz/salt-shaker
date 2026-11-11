@@ -64,6 +64,10 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
     await p.goto('/minions/db-01?tab=packages')
     await expect(p.getByText(/\d+ packages · debian 12/)).toBeVisible()
   }],
+  ['map', async (p) => {
+    await p.goto('/map')
+    await expect(p.getByRole('link', { name: 'cache-01: not answering' })).toBeVisible()
+  }],
   ['hardening checks', async (p) => {
     await p.goto('/compliance/hardening')
     await p.getByLabel('Target').fill('web-*')

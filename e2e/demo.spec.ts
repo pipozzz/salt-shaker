@@ -645,6 +645,18 @@ test('hardening checks score the minions and say who fails what', async ({ page 
   expect((await download).suggestedFilename()).toMatch(/^hardening-\d{4}-\d{2}-\d{2}\.csv$/)
 })
 
+test('the map groups minions and colours them by the chosen state', async ({ page }) => {
+  await openDemo(page, '/map')
+  const net = page.getByRole('region', { name: 'Network (/24): 10.0.2.0/24' })
+  await expect(net.getByRole('link', { name: 'cache-01: not answering' })).toBeVisible()
+  await page.getByLabel('Colour by').selectOption('vulns')
+  await expect(page.getByRole('link', { name: /^db-01: \d+ critical$/ })).toBeVisible()
+  await page.getByLabel('Group by').selectOption('os')
+  await expect(page.getByRole('region', { name: /^Operating system: Rocky/ })).toBeVisible()
+  await page.getByRole('link', { name: /^db-01:/ }).click()
+  await expect(page).toHaveURL(/\/minions\/db-01$/)
+})
+
 test('accepting a pending key moves it to accepted', async ({ page }) => {
   await openDemo(page, '/keys')
   const pending = page.locator('li', { hasText: 'worker-02' })

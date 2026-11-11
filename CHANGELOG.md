@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Map**
+
+- A **Map** of the fleet: every minion as a tile, grouped by network, role, operating system or platform (two levels), and coloured by whether it answers, its compliance, its vulnerabilities or its Salt version, with a legend and a bar per group. A tile opens the minion.
+
+**Slack**
+
+- A **/salt** command for Slack (`SLACK_SIGNING_SECRET`): `status`, `highstate <target> [test]` and `run <target> <function> [args]`. Each Slack user links their Salt Shaker user once (`/salt link`, confirmed in the browser) and acts with its role, limits and approvals; commands are audited under their name, posted in the channel with a link to the job, and followed by how the job went. See [Slack](https://pipozzz.github.io/salt-shaker/guide/slack/) for setting up the app.
+
 ## 1.19.1
 
 **Fixes**

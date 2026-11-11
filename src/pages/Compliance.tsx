@@ -100,9 +100,14 @@ export function CompliancePage() {
         title="Compliance"
         description="Dry-run the highstate across your fleet to find minions that drifted from their desired state."
         actions={
-          <Link to="/compliance/preview" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <GitCompare className="size-4" /> Preview a branch
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/compliance/hardening" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800">
+              <ShieldCheck className="size-4" /> Hardening checks
+            </Link>
+            <Link to="/compliance/preview" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800">
+              <GitCompare className="size-4" /> Preview a branch
+            </Link>
+          </div>
         }
       />
 

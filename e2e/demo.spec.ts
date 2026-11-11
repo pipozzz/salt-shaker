@@ -627,6 +627,20 @@ test('the weekly report shows how the fleet did and can be sent now', async ({ p
   await expect(page.getByRole('button', { name: 'Sent' })).toBeVisible()
 })
 
+test('hardening checks score the minions and say who fails what', async ({ page }) => {
+  await openDemo(page, '/compliance')
+  await page.getByRole('link', { name: 'Hardening checks' }).click()
+  await page.getByLabel('Target').fill('web-*,db-01')
+  await page.getByRole('button', { name: 'Run the checks' }).click()
+  // db-01 has a setuid shell in /tmp; web-02 takes SSH passwords
+  await expect(page.locator('li', { hasText: 'No setuid programs in temporary directories' }).getByText('fails on 1')).toBeVisible()
+  await expect(page.locator('li', { hasText: 'SSH takes keys, not passwords' }).locator('p.font-mono')).toHaveText('web-02')
+  await expect(page.locator('li', { has: page.getByRole('link', { name: 'db-01' }) }).getByText('93%')).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Evidence (CSV)' }).click()
+  expect((await download).suggestedFilename()).toMatch(/^hardening-\d{4}-\d{2}-\d{2}\.csv$/)
+})
+
 test('accepting a pending key moves it to accepted', async ({ page }) => {
   await openDemo(page, '/keys')
   const pending = page.locator('li', { hasText: 'worker-02' })

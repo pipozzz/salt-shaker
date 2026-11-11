@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Compliance**
+
+- **Hardening checks**: 15 common Linux hardening checks of the kind CIS benchmarks recommend (SSH, accounts, file permissions, network and kernel settings, auditd, time sync), read with osquery in one query per minion. Each minion gets a score, each check lists the minions that fail it, and **Evidence (CSV)** saves the results with the time and job for an audit.
+
 ## 1.18.0
 
 **Enrollment**

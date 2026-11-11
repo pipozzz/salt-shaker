@@ -15,6 +15,7 @@ import { LoginPage } from './pages/Login'
 import { MinionDetailPage } from './pages/MinionDetail'
 import { MinionsPage } from './pages/Minions'
 import { OverviewPage } from './pages/Overview'
+import { HardeningPage } from './pages/Hardening'
 import { BranchPreviewPage } from './pages/BranchPreview'
 import { TokensPage } from './pages/Tokens'
 import { ComparePage } from './pages/Compare'
@@ -66,6 +67,7 @@ function Gate() {
         <Route path="minions/:id" element={<MinionDetailPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="compliance/preview" element={<BranchPreviewPage />} />
+        <Route path="compliance/hardening" element={<HardeningPage />} />
         <Route path="patches" element={<PatchesPage />} />
         {session.mode !== 'live' && <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />}
         <Route path="keys" element={<KeysPage />} />

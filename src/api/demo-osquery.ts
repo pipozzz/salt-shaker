@@ -1,3 +1,4 @@
+import { CHECKS, isHardeningSql } from '../lib/hardening'
 import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
 
 /*
@@ -62,6 +63,7 @@ export function demoOsquery(id: string, os: string, release: string, cmd: string
     return 'osqueryi version 5.24.1'
   }
   if (!installed.has(id)) return `ERROR: Unable to run command '['osqueryi', '--json']', reason: [Errno 2] No such file or directory: 'osqueryi'`
+  if (isHardeningSql(stdin)) return JSON.stringify(hardening(id), null, 2)
   const t = tables(id, os, release)
   // the most specific table the query mentions decides the rows; anything else isn't in the demo
   const from = PRIORITY.find((name) => new RegExp(`\\b${name}\\b`, 'i').test(stdin))
@@ -71,3 +73,18 @@ export function demoOsquery(id: string, os: string, release: string, cmd: string
   if (limit) rows = rows.slice(0, Number(limit[1]))
   return JSON.stringify(rows, null, 2)
 }
+
+/** Which hardening checks each demo minion fails: a few gaps, and a planted setuid shell on db-01. */
+const FAILS: Record<string, string[]> = {
+  'web-01': ['tmp-mount', 'auditd'],
+  'web-02': ['ssh-password-auth', 'ssh-x11', 'tmp-mount', 'auditd'],
+  'db-01': ['suid-in-tmp'],
+  'cache-01': ['ssh-password-auth', 'tmp-mount', 'auditd', 'time-sync'],
+  'mon-01': ['ip-forward', 'tmp-mount'],
+}
+
+function hardening(id: string) {
+  const fails = FAILS[id] ?? ['tmp-mount', 'auditd']
+  return CHECKS.map((c) => ({ id: c.id, pass: fails.includes(c.id) ? '0' : '1' }))
+}
+

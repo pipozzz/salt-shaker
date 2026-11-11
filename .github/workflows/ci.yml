@@ -52,7 +52,8 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - run: npm ci
+      # the browser tests run the demo, which needs no native modules (the image has no compiler for better-sqlite3)
+      - run: npm ci --ignore-scripts
       # a no-op while the image matches @playwright/test; after a bump it fetches the matching Chromium (no apt)
       - run: npx playwright install chromium
       - run: npx playwright test

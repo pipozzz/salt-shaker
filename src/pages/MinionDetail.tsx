@@ -10,9 +10,9 @@ import { useAsync } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
 import { OsIcon } from './Minions'
 import { fmtMem, funTone, relTime } from '../lib/format'
-import { MinionVulnerabilities } from './Vulnerabilities'
+import { MinionPackagesList, MinionVulnerabilities } from './Vulnerabilities'
 
-const TABS = ['grains', 'pillar', 'jobs', 'vulns'] as const
+const TABS = ['grains', 'pillar', 'jobs', 'vulns', 'packages'] as const
 
 export function MinionDetailPage() {
   const { id = '' } = useParams()
@@ -115,7 +115,7 @@ export function MinionDetailPage() {
                 // job history is recorded by the server
                 ...(session?.mode === 'server' ? [{ value: 'jobs' as const, label: 'Jobs' }] : []),
                 // the vulnerability report is built by the server (the demo has a made-up one)
-                ...(session && session.mode !== 'live' ? [{ value: 'vulns' as const, label: 'Vulnerabilities' }] : []),
+                ...(session && session.mode !== 'live' ? [{ value: 'vulns' as const, label: 'Vulnerabilities' }, { value: 'packages' as const, label: 'Packages' }] : []),
               ]}
             />
           }
@@ -130,7 +130,8 @@ export function MinionDetailPage() {
         />
         {tab === 'jobs' && <MinionJobs id={id} />}
         {tab === 'vulns' && <MinionVulnerabilities id={id} />}
-        <div className={tab === 'jobs' || tab === 'vulns' ? 'hidden' : 'p-4 pl-8'}>
+        {tab === 'packages' && <MinionPackagesList id={id} />}
+        <div className={tab === 'jobs' || tab === 'vulns' || tab === 'packages' ? 'hidden' : 'p-4 pl-8'}>
           {tab === 'grains' && g && <JsonView value={filtered(g)} openDepth={1} />}
           {tab === 'pillar' && (
             <>

@@ -1,6 +1,6 @@
 import type { FindingRow } from '../lib/export'
 import { recordDemoAudit } from './demo-audit'
-import type { InstalledPackage, PackageSearch, Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
+import type { InstalledPackage, MinionPackages, PackageSearch, Severity, SeverityCounts, Vuln, VulnAccepted, VulnAcceptance, VulnAffected, VulnDay, VulnFinding, VulnFixes, VulnMinion, VulnStatus, VulnSummary } from './server'
 
 /*
  * The demo's vulnerability report. The real one is built by the server from package inventories
@@ -184,6 +184,24 @@ export const demoVulns = {
       }
     }
     return delay({ ...status(), minions: out })
+  },
+  minionPackages: (id: string) => {
+    const s = SCANNED[id]
+    if (!s) return Promise.reject(new Error('This minion has no inventory yet'))
+    const rpm = s.ecosystem.startsWith('Rocky')
+    const rows = new Map<string, MinionPackages['packages'][number]>()
+    for (const v of visible()) {
+      for (const [m, version, fixed, binaries] of v.hits) {
+        if (m !== id) continue
+        const r = rows.get(v.package) ?? { name: v.package, version, binaries, vulns: 0, fixable: 0, worst: null }
+        r.vulns++
+        if (fixed) r.fixable++
+        if (!r.worst || RANK[v.severity] < RANK[r.worst]) r.worst = v.severity
+        rows.set(v.package, r)
+      }
+    }
+    for (const [name, deb, rpmVersion, binaries] of COMMON) if (!rows.has(name)) rows.set(name, { name, version: rpm ? rpmVersion : deb, binaries: rpm ? [name] : binaries, vulns: 0, fixable: 0, worst: null })
+    return delay<MinionPackages>({ updating: false, minion: id, os: s.os, scannedAt: minionRow(id).scannedAt, packages: [...rows.values()].sort((a, b) => a.name.localeCompare(b.name)) })
   },
   packages: (q: string) => {
     const needle = q.toLowerCase()

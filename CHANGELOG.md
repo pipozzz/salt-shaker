@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Minions**
+
+- A **Packages** tab on each minion's page lists everything installed according to its latest vulnerability scan, with each package's version and its known vulnerabilities; filter by name or show only the vulnerable ones.
+
 ## 1.14.0
 
 **Demo**

@@ -499,6 +499,27 @@ export class VulnService {
    * inventories as the report, one entry per package version with the minions that have it.
    * Exact names come first, then by name and newest version.
    */
+  /**
+   * Everything installed on one minion, from its latest inventory, with the known vulnerabilities
+   * of each package (accepted ones left out). Null when the minion has no inventory.
+   */
+  async minionPackages(minion: string) {
+    const got = await this.get(0)
+    const m = got.report?.minions.find((x) => x.minion === minion)
+    const inv = m && this.parsed.get(`${m.jid}|${m.minion}`)?.inventory
+    if (!m || !inv) return null
+    const byPkg = new Map<string, Finding[]>()
+    for (const f of m.findings) byPkg.set(`${f.package}\0${f.version}`, [...(byPkg.get(`${f.package}\0${f.version}`) ?? []), f])
+    const packages = inv.packages
+      .map((p) => {
+        const found = byPkg.get(`${p.name}\0${p.version}`) ?? []
+        const worst = found.reduce<Severity | null>((w, f) => (!w || SEVERITIES.indexOf(f.vuln.severity) < SEVERITIES.indexOf(w) ? f.vuln.severity : w), null)
+        return { name: p.name, version: p.version, binaries: [...p.binaries].sort(), vulns: found.length, fixable: found.filter((f) => f.fixed).length, worst }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+    return { updating: got.updating, minion: m.minion, os: m.os, scannedAt: m.scannedAt, packages }
+  }
+
   async packages(q: string, limit = 200) {
     const got = await this.get(0)
     const needle = q.toLowerCase()

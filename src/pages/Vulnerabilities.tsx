@@ -1,3 +1,4 @@
+import { useVulnApi } from '../lib/vulnapi'
 import clsx from 'clsx'
 import { ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, ShieldOff, Undo2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
@@ -69,12 +70,6 @@ function VulnLink({ v }: { v: Pick<Vuln, 'id' | 'cves'> }) {
 function upgradeUrl(minions: string[], pkgs: string[]) {
   const args = `pkgs='${JSON.stringify([...new Set(pkgs)].sort())}' only_upgrade=True`
   return `/run?tgt=${encodeURIComponent(minions.join(','))}&tgt_type=list&fun=pkg.install&args=${encodeURIComponent(args)}`
-}
-
-/** The server's report, or the demo's made-up one. */
-function useVulnApi() {
-  const { session } = useSession()
-  return session?.mode === 'demo' ? demoVulns : serverVulns
 }
 
 /** The demo has no server to build the CSV, so it's made here, with the same filters. */
@@ -828,5 +823,84 @@ function FindingsTable({ findings }: { findings: VulnFinding[] }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+/** Everything installed on one minion, from its latest inventory, with the vulnerabilities of each package. */
+export function MinionPackagesList({ id }: { id: string }) {
+  const vulns = useVulnApi()
+  const [q, setQ] = useState('')
+  const [onlyVulnerable, setOnlyVulnerable] = useState(false)
+  const { data, error } = useAsync(() => vulns.minionPackages(id).catch((e: Error) => (/no inventory/i.test(e.message) ? null : Promise.reject(e))), [vulns, id])
+  if (error) return <div className="p-4"><ErrorBox error={error} /></div>
+  if (data === undefined) return <Spinner />
+  if (data === null)
+    return (
+      <Empty icon={<Search />} title="No package inventory yet">
+        A{' '}
+        <Link to="/vulnerabilities" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
+          vulnerability scan
+        </Link>{' '}
+        lists what's installed on this minion.
+      </Empty>
+    )
+  const needle = q.trim().toLowerCase()
+  const list = data.packages.filter((p) => (!onlyVulnerable || p.vulns > 0) && (!needle || p.name.toLowerCase().includes(needle) || p.binaries.some((b) => b.toLowerCase().includes(needle))))
+  const vulnerable = data.packages.filter((p) => p.vulns > 0).length
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 border-b border-zinc-100 p-3 dark:border-zinc-800">
+        <div className="relative min-w-48 flex-1">
+          <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter packages…" className="pl-9" aria-label="Filter packages" />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <input type="checkbox" checked={onlyVulnerable} onChange={(e) => setOnlyVulnerable(e.target.checked)} className="accent-accent-600" />
+          With vulnerabilities ({vulnerable})
+        </label>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {data.packages.length} packages · {data.os} · inventory {relTime(new Date(data.scannedAt))}
+        </span>
+      </div>
+      {list.length === 0 ? (
+        <Empty icon={<Search />} title="No package matches" />
+      ) : (
+        <div className="max-h-[32rem] overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white dark:bg-zinc-900">
+              <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                <th className="py-2 pr-3 pl-4 font-medium">Package</th>
+                <th className="px-3 py-2 font-medium">Version</th>
+                <th className="px-3 py-2 pr-4 font-medium">Vulnerabilities</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+              {list.map((p) => (
+                <tr key={`${p.name}|${p.version}`} className="align-top">
+                  <td className="py-2 pr-3 pl-4">
+                    <span className="font-mono font-medium">{p.name}</span>
+                    {p.binaries.some((b) => b !== p.name) && <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{p.binaries.join(', ')}</div>}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">{p.version}</td>
+                  <td className="px-3 py-2 pr-4">
+                    {p.worst ? (
+                      <Link to={`/minions/${encodeURIComponent(id)}?tab=vulns`} className="inline-flex items-center gap-1.5 hover:opacity-80">
+                        <SeverityBadge severity={p.worst} />
+                        <span className="text-xs whitespace-nowrap text-zinc-600 dark:text-zinc-400">
+                          {p.vulns} {p.vulns === 1 ? 'vuln' : 'vulns'}
+                          {p.fixable > 0 && `, ${p.fixable} with a fix`}
+                        </span>
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">none known</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }

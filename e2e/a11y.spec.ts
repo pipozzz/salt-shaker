@@ -56,6 +56,10 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
     await expect(p.getByText(/osquery is not installed/)).toBeVisible()
     await p.getByLabel('Group identical rows').check()
   }],
+  ['minion packages', async (p) => {
+    await p.goto('/minions/db-01?tab=packages')
+    await expect(p.getByText(/\d+ packages · debian 12/)).toBeVisible()
+  }],
   ['schedules', async (p) => {
     await p.goto('/schedules')
     await p.getByText('What changed in the last run').click()

@@ -28,7 +28,7 @@ To try it without a fleet, open the demo with `?demo=large` (606 minions).
 
 Each minion's page shows its grains and compiled pillar. Viewers don't see pillar data, since it often holds secrets.
 
-The **Vulnerabilities** tab lists the known vulnerabilities in the minion's packages from its latest [scan](/salt-shaker/guide/vulnerabilities/), with the installed and the fixed version.
+The **Vulnerabilities** tab lists the known vulnerabilities in the minion's packages from its latest [scan](/salt-shaker/guide/vulnerabilities/), with the installed and the fixed version. The **Packages** tab lists everything installed according to that scan, with each package's version and how many vulnerabilities it has; filter by name or show only the vulnerable ones. On Debian, Ubuntu and Alpine these are source packages, with the installed packages built from them underneath.
 
 The **Jobs** tab lists the recorded jobs that targeted the minion, newest first, with how each one ended on that minion: ok, changed, drift (a dry run that would change something), failed or no return. Jobs started from the salt CLI are included. The list covers the job history retention period (`JOB_RETENTION_DAYS`) and is not available in direct mode.
 

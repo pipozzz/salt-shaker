@@ -297,6 +297,16 @@ describe.each(testDialects)('vulnerability API (%s)', (dialect) => {
     })
     expect((await get('/vulns/packages?q=LIBSSL')).body.packages).toMatchObject([{ name: 'openssl', binaries: ['libssl3'], minions: ['web'] }])
     expect((await get('/vulns/packages?q=a')).status).toBe(400)
+    // everything installed on one minion, with its vulnerabilities
+    expect((await get('/vulns/minions/web/packages')).body).toMatchObject({
+      minion: 'web',
+      os: 'debian 12',
+      packages: [
+        { name: 'bash', version: '5.2.15-2', binaries: ['bash'], vulns: 1, fixable: 0, worst: 'low' },
+        { name: 'openssl', version: '3.0.11-1~deb12u2', binaries: ['libssl3'], vulns: 1, fixable: 1, worst: 'critical' },
+      ],
+    })
+    expect((await get('/vulns/minions/nope/packages')).status).toBe(404)
     expect((await get('/vulns/packages?q=bash', '')).status).toBe(401)
 
     const web = await get('/vulns/minions/web')

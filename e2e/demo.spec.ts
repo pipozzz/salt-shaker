@@ -224,6 +224,21 @@ test('grouped osquery rows put what only a few minions have first', async ({ pag
   await expect(page.getByText('Query edited since')).toHaveCount(0)
 })
 
+test("a minion page lists what's installed on it", async ({ page }) => {
+  await openDemo(page, '/minions/db-01?tab=packages')
+  await expect(page.getByText(/\d+ packages · debian 12/)).toBeVisible()
+  const pg = page.getByRole('row', { name: /postgresql-15/ })
+  await expect(pg).toContainText('15.8-0+deb12u1')
+  await expect(pg).toContainText('1 vuln, 1 with a fix')
+  await page.getByLabel('With vulnerabilities').check()
+  await expect(page.getByRole('row', { name: /^bash/ })).toHaveCount(0)
+  await page.getByLabel('Filter packages').fill('curl')
+  await expect(page.getByRole('row', { name: /curl/ })).toBeVisible()
+  await expect(pg).toHaveCount(0)
+  await page.getByRole('row', { name: /curl/ }).getByRole('link').click()
+  await expect(page).toHaveURL(/\/minions\/db-01\?tab=vulns$/)
+})
+
 test('a minion page opens Query on that minion', async ({ page }) => {
   await openDemo(page, '/minions/db-01')
   await page.getByRole('button', { name: 'Query', exact: true }).click()

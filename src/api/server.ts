@@ -499,6 +499,15 @@ export interface InstalledPackage {
   minions: string[]
 }
 
+/** Everything installed on one minion, from its latest inventory. */
+export interface MinionPackages {
+  updating: boolean
+  minion: string
+  os: string | null
+  scannedAt: string
+  packages: Array<{ name: string; version: string; binaries: string[]; vulns: number; fixable: number; worst: Severity | null }>
+}
+
 export interface PackageSearch {
   updating: boolean
   total: number
@@ -535,6 +544,7 @@ export const vulns = {
   byId: (id: string) => request<VulnStatus & { vuln: Vuln; minions: VulnAffected[]; acceptance: VulnAcceptance | null }>(`/api/vulns/by-id/${encodeURIComponent(id)}`),
   /** accept the risk of a vulnerability, for `days` or until withdrawn */
   accept: (id: string, note: string, days: number | null) => post<{ accepted: VulnAcceptance & { id: string } }>('/api/vulns/accepted', { id, note, days }),
+  minionPackages: (id: string) => request<MinionPackages>(`/api/vulns/minions/${encodeURIComponent(id)}/packages`),
   /** where packages whose name contains `q` are installed */
   packages: (q: string) => request<PackageSearch>(`/api/vulns/packages?q=${encodeURIComponent(q)}`),
   trend: (days = 90) => request<{ days: VulnDay[] }>(`/api/vulns/trend?days=${days}`),

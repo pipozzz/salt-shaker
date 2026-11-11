@@ -177,6 +177,13 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
     return c.json({ ...status(got), minion: minionFields(m), findings })
   })
 
+  /** Everything installed on one minion, from its latest inventory. */
+  r.get('/vulns/minions/:id/packages', async (c) => {
+    const found = await vulns.minionPackages(c.req.param('id'))
+    if (!found) return c.json({ error: 'This minion has no inventory yet' }, 404)
+    return c.json(found)
+  })
+
   /** The minions one vulnerability was found on. */
   r.get('/vulns/by-id/:id', async (c) => {
     const got = await vulns.get()

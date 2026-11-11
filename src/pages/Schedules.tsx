@@ -184,7 +184,7 @@ export function SchedulesPage() {
         description={
           <>
             Compliance checks, patch and vulnerability scans, watched osquery queries or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
-            <Link to="/notifications" className="text-accent-700 hover:underline dark:text-accent-400">
+            <Link to="/notifications" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
               Notifications
             </Link>
             .
@@ -253,7 +253,7 @@ export function SchedulesPage() {
                   )}
                   {started[s.id] && (
                     <p>
-                      <Link to={`/jobs/${started[s.id]}`} className="text-accent-700 hover:underline dark:text-accent-400">
+                      <Link to={`/jobs/${started[s.id]}`} className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
                         Started just now →
                       </Link>
                     </p>

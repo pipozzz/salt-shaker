@@ -249,7 +249,7 @@ export function PatchesPage() {
               {inventory.run.done ? (
                 <>
                   <PackageCheck className="size-3.5 text-emerald-600" /> Package inventory refreshed on {Object.keys(inventory.run.results).length} {Object.keys(inventory.run.results).length === 1 ? 'minion' : 'minions'};{' '}
-                  <Link to="/vulnerabilities" className="text-accent-700 hover:underline dark:text-accent-400">
+                  <Link to="/vulnerabilities" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
                     see the vulnerability report
                   </Link>
                 </>
@@ -387,7 +387,7 @@ export function PatchesPage() {
               <div className="border-t border-zinc-100 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 {failed.length > 0 && (
                   <p>
-                    Could not list upgrades on <span className="font-mono">{failed.join(', ')}</span> — <Link className="text-accent-700 hover:underline" to={`/jobs/${run.jid}`}>see the job</Link>.
+                    Could not list upgrades on <span className="font-mono">{failed.join(', ')}</span> — <Link className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100" to={`/jobs/${run.jid}`}>see the job</Link>.
                   </p>
                 )}
                 {noReturn.length > 0 && (

@@ -39,6 +39,43 @@ const PAGES: Array<[string, (p: Page) => Promise<void>]> = [
     await p.goto('/files')
     await expect(p.getByText('Maps states to minions')).toBeVisible()
   }],
+  ['vulnerabilities', async (p) => {
+    await p.goto('/vulnerabilities')
+    await expect(p.getByRole('img', { name: /^Vulnerabilities over/ })).toBeVisible()
+    await p.getByRole('button', { name: 'Show minions with DEMO-2026-0101' }).click()
+    await expect(p.getByRole('button', { name: 'Accept risk…' })).toBeVisible()
+  }],
+  ['installed packages', async (p) => {
+    await p.goto('/vulnerabilities?view=packages&q=ssl')
+    await expect(p.getByText(/versions? on \d+ minions?/)).toBeVisible()
+  }],
+  ['query with results', async (p) => {
+    await p.goto('/query')
+    await p.getByRole('button', { name: /Authorized SSH keys/ }).click()
+    await p.getByRole('button', { name: 'Run query' }).click()
+    await expect(p.getByText(/osquery is not installed/)).toBeVisible()
+    await p.getByLabel('Group identical rows').check()
+  }],
+  ['schedules', async (p) => {
+    await p.goto('/schedules')
+    await p.getByText('What changed in the last run').click()
+  }],
+  ['notifications', async (p) => {
+    await p.goto('/notifications')
+    await expect(p.getByText('Ops Slack')).toBeVisible()
+  }],
+  ['audit log', async (p) => {
+    await p.goto('/audit')
+    await expect(p.getByRole('button', { name: /vic denied/ })).toBeVisible()
+  }],
+  ['users', async (p) => {
+    await p.goto('/users')
+    await expect(p.getByText('Vic Viewer')).toBeVisible()
+  }],
+  ['system', async (p) => {
+    await p.goto('/system')
+    await expect(p.getByText('Connected').first()).toBeVisible()
+  }],
   ['command palette', async (p) => {
     await p.goto('/jobs')
     await p.keyboard.press('ControlOrMeta+k')

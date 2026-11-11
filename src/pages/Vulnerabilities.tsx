@@ -178,7 +178,7 @@ export function VulnerabilitiesPage() {
         description={
           <>
             Known vulnerabilities in the packages installed on your minions, from the distributions' security trackers via{' '}
-            <a href="https://osv.dev" target="_blank" rel="noreferrer" className="text-accent-700 hover:underline dark:text-accent-400">
+            <a href="https://osv.dev" target="_blank" rel="noreferrer" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
               OSV.dev
             </a>
             .
@@ -265,7 +265,7 @@ export function VulnerabilitiesPage() {
         <Card>
           <Empty icon={<ShieldCheck />} title="No package inventory yet">
             Scan a target to list each minion's packages; known vulnerabilities in them show up here. A{' '}
-            <Link to="/schedules" className="text-accent-700 hover:underline dark:text-accent-400">
+            <Link to="/schedules" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
               schedule
             </Link>{' '}
             of kind <em>Vulnerability scan</em> keeps them current.
@@ -462,7 +462,7 @@ function Affected({ id, canUpgrade, canAccept, onChanged }: { id: string; canUpg
         </tbody>
       </table>
       {fixable.length > 0 && canUpgrade && (
-        <Link to={upgradeUrl([...new Set(fixable.map((m) => m.minion))].sort(), fixable.flatMap((m) => (m.binaries.length ? m.binaries : [m.package])))} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700">
+        <Link to={upgradeUrl([...new Set(fixable.map((m) => m.minion))].sort(), fixable.flatMap((m) => (m.binaries.length ? m.binaries : [m.package])))} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-800">
           <Play className="size-3.5" /> Upgrade on {new Set(fixable.map((m) => m.minion)).size} {new Set(fixable.map((m) => m.minion)).size === 1 ? 'minion' : 'minions'}
         </Link>
       )}
@@ -764,7 +764,7 @@ export function MinionVulnerabilities({ id }: { id: string }) {
     return (
       <Empty icon={<ShieldCheck />} title="Not scanned yet">
         Scan it on the{' '}
-        <Link to="/vulnerabilities" className="text-accent-700 hover:underline dark:text-accent-400">
+        <Link to="/vulnerabilities" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
           Vulnerabilities
         </Link>{' '}
         page to check its packages.
@@ -782,7 +782,7 @@ export function MinionVulnerabilities({ id }: { id: string }) {
           </Link>
           {!m.error && ` · ${m.packages} packages`}
         </span>
-        <Link to={`/vulnerabilities?view=minions&q=${encodeURIComponent(id)}`} className="ml-auto text-xs text-accent-700 hover:underline dark:text-accent-400">
+        <Link to={`/vulnerabilities?view=minions&q=${encodeURIComponent(id)}`} className="ml-auto text-xs text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
           All minions →
         </Link>
       </div>

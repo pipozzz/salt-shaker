@@ -168,7 +168,7 @@ export function QueryPage() {
         description={
           <>
             Ask your minions questions in SQL with{' '}
-            <a href="https://osquery.io" target="_blank" rel="noreferrer" className="text-accent-700 hover:underline dark:text-accent-400">
+            <a href="https://osquery.io" target="_blank" rel="noreferrer" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
               osquery
             </a>
             : ports, users, processes, packages, files and more, as one table.
@@ -245,7 +245,7 @@ export function QueryPage() {
           ) : (
             <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
               One SELECT at a time, run with <code className="font-mono">osqueryi</code> on each minion; nothing changes. See the{' '}
-              <a href="https://osquery.io/schema/" target="_blank" rel="noreferrer" className="text-accent-700 hover:underline dark:text-accent-400">
+              <a href="https://osquery.io/schema/" target="_blank" rel="noreferrer" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
                 table reference
               </a>
               .
@@ -271,7 +271,7 @@ export function QueryPage() {
             ))}
             {OSQUERY_LIBRARY.map((l) => (
               <li key={l.name}>
-                <button type="button" className={clsx('block w-full px-4 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40', sql === l.sql && 'bg-accent-50 dark:bg-accent-950/30')} onClick={() => setSql(l.sql)}>
+                <button type="button" className={clsx('block w-full px-4 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40', sql === l.sql && 'bg-accent-50 dark:bg-accent-700/20')} onClick={() => setSql(l.sql)}>
                   <span className="block font-medium">{l.name}</span>
                   <span className="block text-xs text-zinc-500 dark:text-zinc-400">{l.description}</span>
                 </button>

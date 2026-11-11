@@ -77,7 +77,7 @@ function SaltApi({ s }: { s: SystemStatus }) {
             {a.keys.pending > 0 && (
               <>
                 {' · '}
-                <Link to="/keys" className="text-accent-700 hover:underline dark:text-accent-400">
+                <Link to="/keys" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
                   {a.keys.pending} pending
                 </Link>
               </>
@@ -173,12 +173,12 @@ function Automation({ s }: { s: SystemStatus }) {
   return (
     <Section title="Schedules & notifications" status={status}>
       <Row k="Schedules">
-        <Link to="/schedules" className="text-accent-700 hover:underline dark:text-accent-400">
+        <Link to="/schedules" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
           {s.schedules.enabled} of {s.schedules.total} enabled
         </Link>
       </Row>
       <Row k="Channels">
-        <Link to="/notifications" className="text-accent-700 hover:underline dark:text-accent-400">
+        <Link to="/notifications" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
           {n.enabled} of {n.channels} enabled
         </Link>
       </Row>

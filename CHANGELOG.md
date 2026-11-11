@@ -6,6 +6,11 @@
 
 - The demo has **Users** (a made-up team with every role, to try role changes and locking accounts) and a **System** page, so every page can be tried without a server.
 
+**Fixes**
+
+- On a phone, audit log entries show the call and its target on their own line instead of a few letters of it.
+- Links inside sentences are underlined, the **Upgrade on N minions** button has enough contrast, and the selected library query is readable in dark mode. The new pages (vulnerabilities, Query, schedules, notifications, audit log, users, system) are now part of the accessibility and phone-width checks.
+
 **Docs**
 
 - Screenshots for Compliance, Patches, Run, Users and the audit log, a gallery on the landing page, and a sharp, uncropped picture at the top of it.

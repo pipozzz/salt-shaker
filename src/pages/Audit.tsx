@@ -140,14 +140,15 @@ function Entry({ row }: { row: AuditRow }) {
   }
   return (
     <li>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+      {/* on a phone the call goes on its own line, so it isn't cut down to a few letters */}
+      <button onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left text-sm hover:bg-zinc-50 sm:flex-nowrap dark:hover:bg-zinc-800/30">
         <ChevronRight className={clsx('size-3.5 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400', open && 'rotate-90')} />
         <span className="w-20 shrink-0 text-xs text-zinc-500 dark:text-zinc-400" title={at.toLocaleString()}>
           {relTime(at)}
         </span>
         <span className="w-28 shrink-0 truncate font-mono text-xs font-medium">{row.username}</span>
         <Badge tone={row.outcome === 'ok' ? 'green' : row.outcome === 'denied' ? 'amber' : 'red'}>{row.outcome}</Badge>
-        <span className="truncate font-mono text-xs">
+        <span className="w-full min-w-0 truncate pl-[1.625rem] font-mono text-xs sm:w-auto sm:pl-0">
           {row.fun}
           {row.target && <span className="text-zinc-500 dark:text-zinc-400"> → {row.targetType && row.targetType !== 'glob' ? `${row.targetType}:` : ''}{row.target}</span>}
         </span>

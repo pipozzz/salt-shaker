@@ -5,8 +5,8 @@
  */
 import { Image } from 'astro:assets'
 import pkg from '../../../package.json'
-import minions from '../../screenshots/minions.png'
-import minionsDark from '../../screenshots/minions-dark.png'
+import overview from '../../screenshots/overview.png'
+import overviewDark from '../../screenshots/overview-dark.png'
 import compliance from '../../screenshots/compliance.png'
 import vulnerabilities from '../../screenshots/vulnerabilities.png'
 import patches from '../../screenshots/patches.png'
@@ -155,10 +155,10 @@ const icons: Record<string, string> = {
               <li><strong>amd64</strong> + arm64</li>
             </ul>
           </div>
-          <div class="browser hero-shot" aria-label="The Minions page">
+          <div class="browser hero-shot" aria-label="The Overview page">
             <div class="bar" aria-hidden="true"><span></span><span></span><span></span><em>salt.example.com</em></div>
-            <Image src={minions} alt="The Minions page: status, OS, IPs and Salt versions of every minion" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="light-only" loading="eager" />
-            <Image src={minionsDark} alt="" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="dark-only" loading="eager" />
+            <Image src={overview} alt="The Overview page: minions responding, drift, patches, vulnerabilities and failed jobs, with what needs attention first" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="light-only" loading="eager" />
+            <Image src={overviewDark} alt="" widths={[640, 960, 1440]} sizes="(min-width: 1100px) 640px, 100vw" class="dark-only" loading="eager" />
           </div>
         </div>
       </section>
@@ -535,6 +535,12 @@ const icons: Record<string, string> = {
   .hero-shot {
     transform: perspective(2000px) rotateY(-5deg);
     transform-origin: right center;
+  }
+  /* the overview's lower part is empty in the demo: show the tiles, the list and the chart */
+  .hero-shot img {
+    aspect-ratio: 1440 / 660;
+    object-fit: cover;
+    object-position: top left;
   }
   .dark-only {
     display: none;

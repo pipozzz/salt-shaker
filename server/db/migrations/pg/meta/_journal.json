@@ -113,6 +113,13 @@
       "when": 1794388140283,
       "tag": "0015_key_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794390957157,
+      "tag": "0016_minion_seen",
+      "breakpoints": true
     }
   ]
 }

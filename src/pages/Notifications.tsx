@@ -2,7 +2,7 @@ import { useAutomationApi } from '../lib/automation'
 import { BellRing, Check, Copy, KeyRound, Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { type Channel, type NotifyEvent } from '../api/server'
-import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { relTime } from '../lib/format'
 
@@ -24,6 +24,7 @@ const EVENT_SHORT: Record<NotifyEvent, string> = {
   job_failed: 'Failed jobs',
   pending_key: 'Pending keys',
   minion_down: 'Minions down',
+  report: 'Weekly report',
 }
 
 export function NotificationsPage() {
@@ -151,6 +152,8 @@ export function NotificationsPage() {
           </ul>
         )}
       </Card>
+
+      <WeeklyReportCard subscribed={list.data?.channels.filter((ch) => ch.enabled && ch.events.includes('report')).length ?? 0} onSent={list.reload} />
 
       {editing && (
         <ChannelModal channel={editing === 'new' ? null : editing} events={meta.data?.events} onClose={() => setEditing(null)} onSaved={list.reload} onSecret={(name, value) => setSecret({ name, value })} />
@@ -329,3 +332,65 @@ function ChannelModal({ channel, events, onClose, onSaved, onSecret }: { channel
     </Modal>
   )
 }
+
+/** This week's report as it would go out now, and a button to send it. */
+function WeeklyReportCard({ subscribed, onSent }: { subscribed: number; onSent: () => void }) {
+  const api = useAutomationApi()
+  const report = useAsync(() => api.weeklyReport(), [])
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const r = report.data?.report
+  return (
+    <Card className="mt-6">
+      <CardHeader
+        title="Weekly report"
+        subtitle={`How the fleet did over the last seven days, sent on Mondays at 8:00 (the server's time) to the channels that take Weekly report: ${subscribed === 1 ? '1 channel' : `${subscribed} channels`} now.`}
+        actions={
+          <Button
+            size="sm"
+            icon={sent ? <Check className="size-3.5" /> : <Send className="size-3.5" />}
+            loading={busy}
+            disabled={!subscribed}
+            title={subscribed ? undefined : 'Tick Weekly report on a channel first'}
+            onClick={async () => {
+              setBusy(true)
+              setError(null)
+              try {
+                await api.sendWeeklyReport()
+                setSent(true)
+                onSent()
+              } catch (e) {
+                setError(e as Error)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {sent ? 'Sent' : 'Send now'}
+          </Button>
+        }
+      />
+      <div className="p-4 text-sm">
+        {error && (
+          <div className="mb-3">
+            <ErrorBox error={error} />
+          </div>
+        )}
+        {report.error && <ErrorBox error={report.error} onRetry={report.reload} />}
+        {report.loading && !r && <Spinner />}
+        {r && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+            <p className="font-medium">{r.title}</p>
+            <ul className="mt-1 space-y-0.5 text-zinc-600 dark:text-zinc-400">
+              {r.lines.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+

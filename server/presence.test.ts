@@ -67,3 +67,11 @@ describe('PresenceWatcher', () => {
     expect(sent).toEqual(['minion_down: 2 minions stopped responding'])
   })
 })
+
+it('passes the minions that answered to onSeen', async () => {
+  const seen: string[][] = []
+  const salt = { call: async () => ({ up: ['a'], down: ['b'] }) } as unknown as SaltService
+  const notifier = { emit: async () => undefined } as unknown as Notifier
+  await new PresenceWatcher(salt, notifier, 60_000, 2, async (up) => void seen.push(up)).check()
+  expect(seen).toEqual([['a']])
+})

@@ -279,3 +279,9 @@ export const keyRule = pgTable('key_rule', {
   createdBy: text('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
+
+/** When each minion last answered the presence check (manage.status), for finding keys of machines that are gone. */
+export const minionSeen = pgTable('minion_seen', {
+  minion: text('minion').primaryKey(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+})

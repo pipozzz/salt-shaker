@@ -1,3 +1,4 @@
+import type { ReportMessage } from '../lib/report'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
@@ -310,7 +311,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 // ---- automation (admin) ----
 
 export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down' | 'report'
 
 export interface Schedule {
   id: number
@@ -413,6 +414,10 @@ export const automation = {
   updateChannel: (id: number, c: { name?: string; url?: string; events?: NotifyEvent[]; enabled?: boolean }) => send('PATCH', `/api/notifications/${id}`, c),
   deleteChannel: (id: number) => send('DELETE', `/api/notifications/${id}`),
   testChannel: (id: number) => send('POST', `/api/notifications/${id}/test`, {}),
+  /** this week's report as it stands (admins) */
+  weeklyReport: () => request<{ report: ReportMessage }>('/api/reports/weekly'),
+  /** sends it now to the channels that take the weekly report */
+  sendWeeklyReport: () => send<{ report: ReportMessage }>('POST', '/api/reports/weekly/send', {}),
 }
 
 /** GET /api/system (admins): whether this install works, without secrets. */
@@ -500,6 +505,15 @@ export const keyRules = {
   open: (pattern: string, hours: number, maxAccepts: number) => send<{ rule: KeyRule }>('POST', '/api/key-rules', { pattern, hours, maxAccepts }),
   close: (id: number) => send('POST', `/api/key-rules/${id}/close`, {}),
 }
+
+/** When minions last answered the presence check; `since` is when the first answer was kept. */
+export interface MinionsSeen {
+  seen: Record<string, string>
+  since: string | null
+  checking: boolean
+}
+
+export const minionsSeen = () => request<MinionsSeen>('/api/minions/seen')
 
 /** A personal API token, without the token itself (shown once, when made). */
 export interface ApiToken {

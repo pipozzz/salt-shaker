@@ -22,3 +22,9 @@ When you bring up a batch of servers, an admin can open an **enrollment window**
 
 Any machine that reaches the master can ask for any id, and nothing checks its fingerprint, so open a window only on a network you trust and for as short as you can. The pattern has to name the minions (`*` alone isn't allowed). Each accept is in the [audit log](/salt-shaker/guide/users-audit/#audit-log) as `rule:<pattern>`, and the **Pending keys** notification says which minion a window accepted. Only one server instance acts on it, the one that follows the master's event bus.
 
+## Keys of minions that are gone
+
+Machines get decommissioned while their keys stay accepted, and they go on being counted, targeted and scanned. **Quiet for a while** on the Keys page lists the accepted minions that don't answer now and haven't for 7, 30, 90 or 180 days, and **Delete keys** removes them all at once (each deletion is audited). A minion that is in fact still around asks again and waits in Pending.
+
+Salt doesn't keep when a minion last answered, so Salt Shaker records it at every presence check (`PRESENCE_CHECK_MINUTES`, every 5 minutes by default). A minion that hasn't answered since recording began is listed once recording has run longer than the chosen period. This needs the server; with `PRESENCE_CHECK_MINUTES=0` the dates stop moving.
+

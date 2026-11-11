@@ -28,6 +28,8 @@ import { scopeRoutes } from './routes/scopes'
 import { changeRoutes } from './routes/changes'
 import { tokenRoutes, userForToken } from './tokens'
 import { KeyAutoAccept, keyRuleRoutes } from './keyrules'
+import { recordSeen, seenRoutes } from './seen'
+import { reportRoutes, WeeklyReport } from './report'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
@@ -82,17 +84,20 @@ const history = new HistoryRecorder(db, schema, salt, config.historyDays, config
 const notifier = new Notifier(db, schema, config.publicUrl)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
-const presence = new PresenceWatcher(salt, notifier, config.presenceMinutes * 60_000)
+const weeklyReport = new WeeklyReport({ db, schema, accepted: acceptedMinions, send: (m) => notifier.emit('report', m) })
+const presence = new PresenceWatcher(salt, notifier, config.presenceMinutes * 60_000, 2, (up) => recordSeen(db, schema, up))
 // with several instances on one database, only the lease holder follows the event bus and watches
 // for minions going down, so jobs are recorded once and alerts aren't duplicated
 const eventsLeader = new Leader(db, schema, 'events', {
   onAcquire: () => {
     history.start()
     presence.start()
+    weeklyReport.start()
   },
   onLose: () => {
     history.stop()
     presence.stop()
+    weeklyReport.stop()
   },
 })
 eventsLeader.start()
@@ -430,6 +435,8 @@ app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))
 app.route('/api', keyRuleRoutes({ db, schema, audit }))
+app.route('/api', reportRoutes({ report: weeklyReport }))
+app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0 }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))

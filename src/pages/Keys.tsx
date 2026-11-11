@@ -1,4 +1,5 @@
 import { EnrollmentWindows } from '../components/EnrollmentWindows'
+import { QuietKeys } from '../components/QuietKeys'
 import clsx from 'clsx'
 import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -95,6 +96,7 @@ export function KeysPage() {
       {k && (
         <div className="space-y-6">
           <EnrollmentWindows onAccepted={reload} />
+          {canManage && <QuietKeys accepted={k.minions} onDeleted={reload} />}
           <Card className={clsx(k.minions_pre.length > 0 && 'ring-2 ring-amber-400/40 dark:ring-amber-500/30')}>
             <CardHeader
               title={

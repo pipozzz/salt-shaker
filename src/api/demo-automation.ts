@@ -2,7 +2,8 @@ import { Cron } from 'croner'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { checkQuery, osqueryCall, OSQUERY_LIBRARY } from '../lib/osquery'
 import { recordDemoAudit } from './demo-audit'
-import { demoJob } from './mock'
+import { reportMessage } from '../lib/report'
+import { demoJob, demoJobHistory, demoMinionStatus } from './mock'
 import type { automation, AutomationMeta, Channel, NotifyEvent, Schedule, ScheduleInput, ScheduleKind, ScheduleRun } from './server'
 
 /*
@@ -30,6 +31,7 @@ const EVENTS: Record<NotifyEvent, string> = {
   job_failed: 'A job failed on any minion',
   pending_key: 'A new minion is waiting for key approval',
   minion_down: 'A minion stopped responding, or is back',
+  report: 'A weekly summary of the fleet, on Mondays at 8:00',
 }
 
 /** a made-up secret in the server's format; the demo sends nothing it could sign */
@@ -122,7 +124,7 @@ seed(
 )
 
 const channels: Channel[] = [
-  { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'acceptance', 'job_failed'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
+  { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'acceptance', 'job_failed', 'report'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
   { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null, signed: true },
 ]
 
@@ -219,10 +221,33 @@ export const demoAutomation: typeof automation = {
     if (i >= 0) channels.splice(i, 1)
     return delay(undefined)
   },
+  weeklyReport: () => delay({ report: demoReport() }),
+  sendWeeklyReport: () => {
+    const at = new Date().toISOString()
+    for (const c of channels) if (c.enabled && c.events.includes('report')) c.lastSentAt = at
+    return delay({ report: demoReport() })
+  },
   // nothing leaves the browser in the demo
   testChannel: (cid) => {
     const c = channels.find((x) => x.id === cid)
     if (c) c.lastSentAt = new Date().toISOString()
     return delay(undefined)
   },
+}
+
+/** The demo's weekly report: its minions and jobs, and made-up totals for the rest. */
+function demoReport() {
+  const to = new Date()
+  const from = new Date(+to - 7 * 86400_000)
+  const { up, down } = demoMinionStatus()
+  const jobs = demoJobHistory(+from)
+  return reportMessage({
+    from,
+    to,
+    minions: { accepted: up.length + down.length, notAnswering: down.length, quiet: down.includes('cache-01') ? 1 : 0 },
+    jobs: { run: jobs.length, failed: jobs.filter((j) => j.failed > 0).length },
+    changes: { done: 1, stopped: 0, waiting: 1 },
+    vulns: { critical: 3, high: 7, fixable: 8, criticalBefore: 4, highBefore: 7 },
+    commands: { count: 37, people: 3 },
+  })
 }

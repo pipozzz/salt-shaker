@@ -532,6 +532,11 @@ function moveKey(id: string, to: keyof KeyList) {
 
 /** For the demo's enrollment windows: the keys waiting, and accepting one as the server would. */
 export const demoPendingKeys = () => [...keys.minions_pre]
+/** Who answers in the demo right now (what manage.status says, without its wait). */
+export function demoMinionStatus() {
+  return { up: keys.minions.filter((id) => minions[id]?.up), down: keys.minions.filter((id) => !minions[id]?.up) }
+}
+
 export function demoAcceptKey(id: string) {
   if (!keys.minions_pre.includes(id)) return false
   moveKey(id, 'minions')

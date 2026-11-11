@@ -41,8 +41,13 @@ With several server instances on one database, each scheduled run still starts e
 | Failed jobs | a job failed on any minion; failures of one job are combined into one alert |
 | Pending keys | a new minion is waiting for approval; at most once every 6 hours per minion |
 | Minions down | a minion missed two checks in a row (`manage.status`, every 5 minutes by default), and again once it answers |
+| Weekly report | Mondays at 8:00, server time: how the fleet did over the last seven days |
 
 Minions that are already down when the server starts are not reported, only the ones that go down while it is watching. Set `PRESENCE_CHECK_MINUTES` to change the interval, or to `0` to turn the check off.
+
+### Weekly report
+
+For people who don't open the console every day, the **Weekly report** sums up the last seven days in a few lines: how many minions are accepted, not answering and quiet for 30+ days; jobs run and failed; changes rolled out, stopped and waiting for approval; critical and high vulnerabilities with the change since a week earlier; and how many commands came from the console and the API, by how many people. It goes out on Mondays at 8:00 in the server's time zone (set `TZ` on the container to pick yours), once per week, to the channels that tick it. The Notifications page shows it as it stands now, with **Send now**.
 
 There are three formats:
 

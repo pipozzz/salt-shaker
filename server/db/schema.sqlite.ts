@@ -281,3 +281,9 @@ export const keyRule = sqliteTable('key_rule', {
   createdBy: text('created_by'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** When each minion last answered the presence check (manage.status), for finding keys of machines that are gone. */
+export const minionSeen = sqliteTable('minion_seen', {
+  minion: text('minion').primaryKey(),
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+})

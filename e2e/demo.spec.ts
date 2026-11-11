@@ -604,6 +604,29 @@ test('an enrollment window accepts the new keys that match it', async ({ page })
   await expect(page.getByText('closed', { exact: true })).toBeVisible()
 })
 
+test('keys of minions quiet for long can be deleted together', async ({ page }) => {
+  await openDemo(page, '/keys')
+  await expect(page.getByRole('heading', { name: 'Quiet for a while (1)' })).toBeVisible()
+  await expect(page.getByText(/last answered/)).toBeVisible()
+  // 180 days is longer than cache-01 has been quiet
+  await page.getByLabel('Quiet for at least').selectOption('180')
+  await expect(page.getByText('Every accepted minion answered within the last 180 days.')).toBeVisible()
+  await page.getByLabel('Quiet for at least').selectOption('30')
+  await page.getByRole('button', { name: 'Delete key', exact: true }).click()
+  await page.getByRole('heading', { name: 'Delete 1 key?' }).waitFor()
+  await page.getByRole('button', { name: 'Delete key', exact: true }).last().click()
+  await expect(page.getByRole('heading', { name: /Accepted\s*5/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Quiet for a while (0)' })).toBeVisible()
+})
+
+test('the weekly report shows how the fleet did and can be sent now', async ({ page }) => {
+  await openDemo(page, '/notifications')
+  await expect(page.getByText(/^Weekly report: 6 minions, \d+ failed jobs?, 3 critical vulnerabilities$/)).toBeVisible()
+  await expect(page.getByText('Minions: 6 accepted, 1 not answering, 1 quiet for 30+ days')).toBeVisible()
+  await page.getByRole('button', { name: 'Send now' }).click()
+  await expect(page.getByRole('button', { name: 'Sent' })).toBeVisible()
+})
+
 test('accepting a pending key moves it to accepted', async ({ page }) => {
   await openDemo(page, '/keys')
   const pending = page.locator('li', { hasText: 'worker-02' })

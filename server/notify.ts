@@ -16,6 +16,7 @@ export const EVENTS = {
   job_failed: 'A job failed on any minion',
   pending_key: 'A new minion is waiting for key approval',
   minion_down: 'A minion stopped responding, or is back',
+  report: 'A weekly summary of the fleet, on Mondays at 8:00',
 } as const
 export type NotifyEvent = keyof typeof EVENTS
 export const isEvent = (e: unknown): e is NotifyEvent => typeof e === 'string' && e in EVENTS

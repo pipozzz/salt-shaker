@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Enrollment**
+
+- **Quiet for a while** on the Keys page lists the accepted minions that don't answer and haven't for 7 to 180 days, usually machines that are gone, and deletes their keys together. The server now keeps when each minion last answered the presence check.
+
+**Notifications**
+
+- A **Weekly report** for channels that tick it, on Mondays at 8:00: minions accepted, not answering and quiet for long, jobs run and failed, changes, critical and high vulnerabilities with the change over the week, and commands by how many people. The Notifications page shows it as it stands and can send it now.
+
 ## 1.17.0
 
 **Enrollment**

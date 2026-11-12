@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.22.0
 
 **Fleet report**
 
@@ -13,6 +13,10 @@
 **Maintenance windows**
 
 - Admins set when changes are expected on **System → Maintenance windows** (weekdays, a local start time, how long, a time zone). A schedule tied to a window waits for it to open instead of running at its cron slot, and Run and Changes say when you're outside every window and when the next opens. See [Maintenance windows](https://pipozzz.github.io/salt-shaker/guide/schedules/#maintenance-windows).
+
+**Upgrading**
+
+- The database gains a table for maintenance windows, and schedules a column for theirs, when the server starts; nothing to do. Email stays off until you set `SMTP_URL`.
 
 ## 1.21.0
 

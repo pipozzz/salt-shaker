@@ -32,6 +32,7 @@ import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
 import { windowRoutes } from './windows'
+import { runbookRoutes, RunbookRunner } from './runbooks'
 import { smtpMailer } from './mail'
 import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
@@ -242,7 +243,7 @@ const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await sa
  * One salt-api call on a user's behalf, with every check the console's calls get: the role's
  * permissions, the user's scope, approvals, and the audit log. Used by /api/salt and Slack.
  */
-async function saltAs(user: SessionUser, input: unknown, ip: string | null): Promise<{ status: number; body: { return?: unknown; error?: string; needsApproval?: boolean } }> {
+async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts: { approved?: boolean } = {}): Promise<{ status: number; body: { return?: unknown; error?: string; needsApproval?: boolean } }> {
   const username = user.username ?? user.name
   const decision = authorize(user.role, username, input)
   if (!decision.ok) {
@@ -264,7 +265,8 @@ async function saltAs(user: SessionUser, input: unknown, ip: string | null): Pro
     low = narrowed.low
   }
   // with APPROVAL_REQUIRED=risky, an operator's command that changes minions goes through a change
-  if (String(low.client).startsWith('local') && needsApproval(config.approval, user.role, String(low.fun), (low.kwarg ?? {}) as Record<string, unknown>)) {
+  // a runbook run an admin approved has had its approval
+  if (!opts.approved && String(low.client).startsWith('local') && needsApproval(config.approval, user.role, String(low.fun), (low.kwarg ?? {}) as Record<string, unknown>)) {
     const reason = `${String(low.fun)} needs an admin's approval: request it as a change`
     await audit({ userId: user.id, username, role: user.role, client: String(low.client), fun: String(low.fun), target: typeof low.tgt === 'string' ? low.tgt : null, targetType: typeof low.tgt_type === 'string' ? low.tgt_type : null, outcome: 'denied', error: reason, ip })
     return { status: 403, body: { error: reason, needsApproval: true } }
@@ -444,10 +446,21 @@ scheduler.start()
 // batched rollouts and approved changes; claims each step in the database, so every instance can run it
 const changeRunner = new ChangeRunner({ db, schema, salt, notifier, audit, expand: expandTarget })
 changeRunner.start()
+
+/** Who a runbook run acts as: its starter, while their account still may run commands. */
+async function activeUser(id: string): Promise<SessionUser | null> {
+  const u = schema.user
+  const [row] = await db.select({ id: u.id, name: u.name, username: u.username, role: u.role, banned: u.banned }).from(u).where(eq(u.id, id)).limit(1)
+  if (!row || row.banned || !row.role || row.role === 'none' || row.role === 'viewer') return null
+  return { id: row.id, name: row.name, username: row.username, role: row.role }
+}
+const runbookRunner = new RunbookRunner({ db, schema, saltAs, loadUser: activeUser, notifier })
+runbookRunner.start()
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 // first: Slack signs its requests instead of signing in, and targetRoutes' guard covers every /api route after it
 app.route('/api', slackRoutes({ db, schema, secret: config.slackSigningSecret, publicUrl: config.publicUrl, saltAs, audit }))
 app.route('/api', windowRoutes({ db, schema, audit }))
+app.route('/api', runbookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))

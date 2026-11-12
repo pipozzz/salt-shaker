@@ -19,6 +19,8 @@ import { HardeningPage } from './pages/Hardening'
 import { SlackLinkPage } from './pages/SlackLink'
 import { MapPage } from './pages/Map'
 import { ReportPage } from './pages/Report'
+import { RunbooksPage } from './pages/Runbooks'
+import { RunbookRunPage } from './pages/RunbookRun'
 import { BranchPreviewPage } from './pages/BranchPreview'
 import { TokensPage } from './pages/Tokens'
 import { ComparePage } from './pages/Compare'
@@ -82,6 +84,9 @@ function Gate() {
         {session.mode !== 'live' && <Route path="changes" element={<ChangesPage />} />}
         {session.mode !== 'live' && <Route path="changes/:id" element={<ChangeDetailPage />} />}
         <Route path="orchestrate" element={<OrchestratePage />} />
+        {/* runbooks are kept and run by the server (the demo has its own) */}
+        {session.mode !== 'live' && <Route path="runbooks" element={<RunbooksPage />} />}
+        {session.mode !== 'live' && <Route path="runbooks/runs/:id" element={<RunbookRunPage />} />}
         <Route path="jobs" element={<JobsSwitch />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />

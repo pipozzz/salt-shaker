@@ -372,6 +372,35 @@ test('the demo has notification channels to try, and JSON webhooks get a signing
   await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
 })
 
+test('a runbook runs step by step and stops at the step that fails', async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  // listed by name: Restart a service safely comes first
+  await expect(page.getByRole('heading', { name: 'Restart a service safely' })).toBeVisible()
+  await page.getByRole('button', { name: 'Run…' }).first().click()
+  await page.getByLabel('Minions').fill('web-*')
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page).toHaveURL(/\/runbooks\/runs\/\d+$/)
+  const steps = page.getByRole('list', { name: 'Steps' })
+  await expect(steps.getByRole('listitem', { name: 'Check the configuration: done' })).toBeVisible()
+  // nginx won't restart on web-02 in the demo: the run stops there and skips the rest
+  await expect(steps.getByRole('listitem', { name: 'Restart: failed' })).toContainText('failed: web-02')
+  await expect(steps.getByRole('listitem', { name: 'Make sure it runs: skipped' })).toBeVisible()
+  await expect(page.getByText('Restart failed on 1 minion: web-02')).toBeVisible()
+
+  // admins write them; a step can only use the values it asks for
+  await page.getByRole('link', { name: 'Runbooks', exact: true }).first().click()
+  await page.getByRole('button', { name: 'New runbook' }).click()
+  await page.getByLabel('Runbook name').fill('Reboot')
+  await page.getByLabel('Step 1 target').fill('{{host}}')
+  await page.getByLabel('Step 1 function').fill('system.reboot')
+  await page.getByRole('button', { name: 'Create runbook' }).click()
+  await expect(page.getByText("Step 1 uses {{host}}, which isn't a parameter")).toBeVisible()
+  await page.getByRole('button', { name: 'Add a value' }).click()
+  await page.getByLabel('Value 1 name').fill('host')
+  await page.getByRole('button', { name: 'Create runbook' }).click()
+  await expect(page.getByText('Reboot', { exact: true })).toBeVisible()
+})
+
 test('a compliance schedule fixes the drift it finds with a change', async ({ page }) => {
   await openDemo(page, '/schedules')
   const nightly = page.getByRole('listitem').filter({ hasText: 'Nightly compliance' })
@@ -473,7 +502,7 @@ test('a command rolls out in batches from Run, and stops when a minion fails', a
   await expect(page.getByText('2 ok')).toBeVisible()
   await expect(page.getByText('Batch 2')).toBeVisible()
 
-  // a function the minions don't have fails on the first one, and the rest never start
+  // nginx won't restart on web-02 in the demo: the rollout stops there
   await page.goto(`/run?${new URLSearchParams({ tgt: 'web-*', fun: 'service.restart', args: 'nginx' })}`)
   await page.getByLabel('Roll out in batches').check()
   await page.getByLabel('Batch size').fill('1')
@@ -481,8 +510,8 @@ test('a command rolls out in batches from Run, and stops when a minion fails', a
   await page.getByRole('button', { name: /^Start rollout on 2/ }).click()
   await page.getByRole('button', { name: 'Start rollout on 2', exact: true }).last().click()
   await expect(page.getByText('stopped', { exact: true })).toBeVisible()
-  await expect(page.getByText('1 minion failed (web-01); at most 0 allowed')).toBeVisible()
-  await expect(page.getByText('1 failed · 1 waiting')).toBeVisible()
+  await expect(page.getByText('1 minion failed (web-02); at most 0 allowed')).toBeVisible()
+  await expect(page.getByText('1 ok · 1 failed')).toBeVisible()
 })
 
 test("an operator's change waits for an admin's approval", async ({ page }) => {

@@ -1,5 +1,6 @@
 import type { ReportMessage, ReportStats } from '../lib/report'
 import type { MaintenanceWindow } from '../lib/windows'
+import type { ResolvedStep, RunbookInput } from '../lib/runbook'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
@@ -312,7 +313,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 // ---- automation (admin) ----
 
 export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
-export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down' | 'report'
+export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down' | 'report' | 'runbook'
 
 export interface Schedule {
   id: number
@@ -592,6 +593,53 @@ export const peers = {
   status: (fresh = false) => request<{ peers: PeerStatus[] }>(`/api/peers/status${fresh ? '?fresh=1' : ''}`),
   add: (p: { name: string; url: string; token: string }) => send<{ id: number }>('POST', '/api/peers', p),
   remove: (id: number) => send('DELETE', `/api/peers/${id}`),
+}
+
+export interface Runbook extends RunbookInput {
+  id: number
+  createdBy: string | null
+  updatedAt: string
+}
+
+export type RunbookRunStatus = 'pending' | 'running' | 'done' | 'stopped' | 'failed' | 'rejected'
+
+export interface RunbookStepState extends ResolvedStep {
+  status: 'waiting' | 'starting' | 'running' | 'done' | 'failed' | 'skipped'
+  jid?: string | null
+  minions?: string[]
+  ok?: number
+  failed?: string[]
+  missing?: string[]
+  startedAt?: string
+  finishedAt?: string
+  error?: string
+}
+
+export interface RunbookRun {
+  id: number
+  runbookId: number | null
+  name: string
+  params: Record<string, string>
+  steps: RunbookStepState[]
+  cursor: number
+  status: RunbookRunStatus
+  startedBy: string
+  startedById: string
+  decidedBy: string | null
+  startedAt: string
+  finishedAt: string | null
+  error: string | null
+}
+
+/** Saved procedures: everyone with a role reads them, admins write them, operators run them. */
+export const runbooks = {
+  list: () => request<{ runbooks: Runbook[]; approval: 'off' | 'risky' }>('/api/runbooks'),
+  save: (rb: RunbookInput, id?: number) => send<{ runbook: Runbook }>(id ? 'PUT' : 'POST', id ? `/api/runbooks/${id}` : '/api/runbooks', rb),
+  remove: (id: number) => send('DELETE', `/api/runbooks/${id}`),
+  run: (id: number, params: Record<string, string>) => send<{ run: RunbookRun }>('POST', `/api/runbooks/${id}/run`, { params }),
+  runs: (runbookId?: number) => request<{ runs: RunbookRun[] }>(`/api/runbook-runs${runbookId ? `?runbook=${runbookId}` : ''}`),
+  getRun: (id: number) => request<{ run: RunbookRun }>(`/api/runbook-runs/${id}`),
+  act: (id: number, verb: 'stop' | 'approve' | 'reject') => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/${verb}`, {}),
 }
 
 export interface WindowsState {

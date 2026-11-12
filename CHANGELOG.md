@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks**
+
+- Save a procedure your team repeats as a **runbook**: a few steps, each a function on a target, with values asked for each time (`{{host}}`, `{{service}}`). Operators run it from **Runbooks**; each step runs as them, through the same role, scope and audit checks as Run, waits for its minions, and stops the run when it fails unless it may. With `APPROVAL_REQUIRED=risky`, an operator's run with a risky step waits for an admin. A new **Runbook runs** notification says how runs ended. See [Runbooks](https://pipozzz.github.io/salt-shaker/guide/runbooks/).
+
 ## 1.23.0
 
 **Fixing drift**

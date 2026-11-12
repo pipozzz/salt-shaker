@@ -37,6 +37,7 @@ const EVENTS: Record<NotifyEvent, string> = {
   pending_key: 'A new minion is waiting for key approval',
   minion_down: 'A minion stopped responding, or is back',
   report: 'A weekly summary of the fleet, on Mondays at 8:00',
+  runbook: 'A runbook run finished, stopped or failed',
 }
 
 /** a made-up secret in the server's format; the demo sends nothing it could sign */

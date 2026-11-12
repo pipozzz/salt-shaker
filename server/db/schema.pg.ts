@@ -325,3 +325,37 @@ export const maintenanceWindow = pgTable('maintenance_window', {
   createdBy: text('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
+
+/** Runbooks: saved procedures of a few steps with parameters (src/lib/runbook.ts). */
+export const runbook = pgTable('runbook', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description').notNull().default(''),
+  // JSON RunbookParam[] and RunbookStep[]
+  params: text('params').notNull(),
+  steps: text('steps').notNull(),
+  createdBy: text('created_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+})
+
+/** One run of a runbook: its values and how each step went, worked through by the runner. */
+export const runbookRun = pgTable('runbook_run', {
+  id: serial('id').primaryKey(),
+  runbookId: integer('runbook_id'),
+  name: text('name').notNull(),
+  params: text('params').notNull(),
+  // JSON: the resolved steps with their progress
+  steps: text('steps').notNull(),
+  // index of the step that runs now (or next)
+  cursor: integer('cursor').notNull().default(0),
+  // pending (waits for approval), running, done, stopped, failed, rejected
+  status: text('status').notNull(),
+  // bumped on every update, so two server instances never take the same step
+  version: integer('version').notNull().default(0),
+  startedBy: text('started_by').notNull(),
+  startedById: text('started_by_id').notNull(),
+  decidedBy: text('decided_by'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  error: text('error'),
+})

@@ -291,6 +291,11 @@ function execute(id: string, fun: string, arg: unknown[], kwarg: Record<string, 
       return applyUpgrades(id)
     case 'service.status':
       return id === 'web-02' && arg[0] === 'nginx' ? false : true
+    case 'service.restart':
+    case 'service.start':
+    case 'service.stop':
+      // web-02's nginx is broken in the demo: it won't come back
+      return id === 'web-02' && arg[0] === 'nginx' && fun !== 'service.stop' ? 'Job for nginx.service failed: the unit is not available.' : true
     case 'status.uptime':
       return { days: rand(1, 90), seconds: rand(1e5, 8e6), since_iso: '2026-09-14T08:12:44', users: 0 }
     case 'disk.usage':

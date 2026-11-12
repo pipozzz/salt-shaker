@@ -1,6 +1,6 @@
 import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
-import { Activity, BellRing, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -71,7 +71,9 @@ export function Layout() {
         ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }]
         : session && session.mode !== 'live' && n.to === '/run'
           ? [n, { to: '/changes', label: 'Changes', icon: GitPullRequestArrow }]
-          : [n],
+          : session && session.mode !== 'live' && n.to === '/orchestrate'
+            ? [n, { to: '/runbooks', label: 'Runbooks', icon: BookOpen }]
+            : [n],
     ),
     ...(role === 'admin' || role === 'operator' || session?.mode === 'demo' ? [{ to: '/audit', label: 'Audit log', icon: ScrollText }] : []),
     ...(role === 'admin'

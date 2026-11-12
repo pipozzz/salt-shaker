@@ -27,6 +27,7 @@ const EVENT_SHORT: Record<NotifyEvent, string> = {
   pending_key: 'Pending keys',
   minion_down: 'Minions down',
   report: 'Weekly report',
+  runbook: 'Runbook runs',
 }
 
 export function NotificationsPage() {

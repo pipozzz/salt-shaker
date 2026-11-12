@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks on a schedule**
+
+- A schedule can run a runbook with set values, for example *Sync and apply the highstate* on `web-*` every Tuesday night inside a maintenance window. The run acts as the schedule, a new one waits until the last has finished, and the schedule links to its runs; how they ended goes to **Runbook runs**. A runbook a schedule runs can't be deleted from under it. See [On a schedule](https://pipozzz.github.io/salt-shaker/guide/runbooks/#on-a-schedule).
+
 ## 1.24.0
 
 **Runbooks**

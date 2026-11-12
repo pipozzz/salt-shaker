@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RunbookInput } from '../src/lib/runbook'
-import { runbookRoutes, RunbookRunner, type StepState } from './runbooks'
+import { automationRoutes } from './routes/automation'
+import { Scheduler } from './scheduler'
+import type { Notifier } from './notify'
+import type { SaltService } from './salt'
+import { runbookRoutes, RunbookRunner, runbookScheduler, scheduleUser, type StepState } from './runbooks'
 import { openTestDatabase, testDialects } from './testdb'
 import type { Env, SessionUser } from './types'
 
@@ -48,7 +52,7 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     const notifier = { emit: async (event: string, msg: { title: string }) => void emitted.push(`${event}: ${msg.title}`) }
     const users: Record<string, SessionUser> = { a: ada, o: olga }
     let now = Date.parse('2026-11-12T10:00:00Z')
-    const runner = new RunbookRunner({ db, schema, saltAs, loadUser: async (id) => users[id] ?? null, notifier, now: () => now })
+    const runner = new RunbookRunner({ db, schema, saltAs, loadUser: async (id) => (id.startsWith('schedule:') ? scheduleUser(db, schema, id) : (users[id] ?? null)), notifier, now: () => now })
     const audited: string[] = []
     let user: SessionUser | null = null
     const app = new Hono<Env>()
@@ -56,7 +60,8 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
       c.set('user', user)
       await next()
     })
-    app.route('/api', runbookRoutes({ db, schema, runner, notifier, audit: async (r) => void audited.push(`${r.username} ${r.fun} ${r.target}`), approval }))
+    const deps = { db, schema, runner, notifier, audit: async (r: { username: string; fun: string; target?: string | null }) => void audited.push(`${r.username} ${r.fun} ${r.target}`), approval }
+    app.route('/api', runbookRoutes(deps))
     const call = async (as: SessionUser | null, method: string, path: string, body?: unknown) => {
       user = as
       const res = await app.request(`/api${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
@@ -66,7 +71,7 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
       await db.insert(schema.jobReturn).values(minions.map(([minion, ok]) => ({ jid: j, minion, success: ok, retcode: ok ? 0 : 1, returnedAt: new Date() })))
     }
     const run = async (id: number) => (await call(ada, 'GET', `/runbook-runs/${id}`)).body.run as { status: string; cursor: number; error: string | null; steps: StepState[] }
-    return { db, schema, call, calls, returns, run, runner, emitted, audited, advance: (ms: number) => (now += ms) }
+    return { db, schema, deps, call, calls, returns, run, runner, emitted, audited, advance: (ms: number) => (now += ms) }
   }
 
   it('admins write runbooks, everyone with a role reads them, viewers do not run them', async () => {
@@ -155,5 +160,67 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     // an admin's own run needs no approval
     const own = ((await call(ada, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
     expect((await run(own)).status).toBe('running')
+  })
+
+  it('a schedule runs a runbook as itself, one run at a time, and keeps its runbook from being deleted', async () => {
+    const { db, schema, deps, call, calls, returns, run, runner, audited } = await setup('risky')
+    const id = ((await call(ada, 'POST', '/runbooks', restart)).body.runbook as { id: number }).id
+    const [s] = await db
+      .insert(schema.schedule)
+      .values({ name: 'Nightly restart', kind: 'runbook', target: '', targetType: 'glob', cron: '0 3 * * *', args: JSON.stringify({ runbookId: id, params: { host: 'web-*' } }), createdAt: new Date() })
+      .returning()
+    const start = runbookScheduler(deps)
+
+    // an admin's rights, like every schedule: nothing waits for approval
+    const first = await start(s)
+    expect(first).toEqual({ run: expect.any(Number) })
+    const runId = (first as { run: number }).run
+    expect(await run(runId)).toMatchObject({ status: 'running', startedBy: 'schedule:Nightly restart' })
+    expect(calls[0]).toMatchObject({ user: 'schedule:Nightly restart', low: { tgt: 'web-*', arg: ['nginx -t'] } })
+    expect(audited.at(-1)).toBe(`schedule:Nightly restart runbook.run #${runId} Restart a service`)
+    expect(await start(s)).toEqual({ error: `Its last run, #${runId}, hasn't finished` })
+
+    expect(await call(ada, 'DELETE', `/runbooks/${id}`)).toEqual({ status: 400, body: { error: 'The schedule "Nightly restart" runs it; delete that schedule or pick another runbook for it first' } })
+
+    // once the schedule is gone, its run can't go on as it
+    await db.delete(schema.schedule)
+    await returns('j1', [['web-01', true], ['web-02', true]])
+    await runner.tick()
+    await runner.tick()
+    expect(await run(runId)).toMatchObject({ status: 'failed', error: 'Restart: schedule:Nightly restart can no longer run commands' })
+    expect(await start({ ...s, args: JSON.stringify({ runbookId: 999, params: {} }) })).toEqual({ error: 'Its runbook no longer exists' })
+  })
+
+  it('admins set a schedule to run a runbook with its values, and see how its runs went', async () => {
+    const { db, schema, deps, call } = await setup()
+    const id = ((await call(ada, 'POST', '/runbooks', restart)).body.runbook as { id: number }).id
+    const scheduler = new Scheduler(db, schema, {} as SaltService, deps.notifier as unknown as Notifier, async () => undefined)
+    scheduler.runbooks = runbookScheduler(deps)
+    const app = new Hono<Env>()
+    app.use('*', async (c, next) => {
+      c.set('user', ada)
+      await next()
+    })
+    app.route('/api', automationRoutes({ db, schema, scheduler, notifier: deps.notifier as unknown as Notifier, audit: async () => undefined }))
+    const req = async (method: string, path: string, body?: unknown) => {
+      const res = await app.request(`/api${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+    }
+    const schedule = (args: unknown) => ({ name: 'Nightly restart', kind: 'runbook', cron: '0 3 * * *', args })
+    expect(await req('POST', '/schedules', schedule({ runbookId: 999, params: {} }))).toEqual({ status: 400, body: { error: 'Choose a runbook' } })
+    expect(await req('POST', '/schedules', schedule({ runbookId: id, params: {} }))).toEqual({ status: 400, body: { error: 'Minion is required' } })
+    const made = await req('POST', '/schedules', schedule({ runbookId: id, params: { host: 'web-01' } }))
+    expect(made.status).toBe(200)
+    const sid = (made.body.schedule as { id: number }).id
+
+    const started = await req('POST', `/schedules/${sid}/run`)
+    expect(started.body).toEqual({ run: expect.any(Number) })
+    const [listed] = (await req('GET', '/schedules')).body.schedules as Array<Record<string, unknown>>
+    expect(listed).toMatchObject({ runbookName: 'Restart a service', target: '', args: { runbookId: id, params: { host: 'web-01' } }, lastSummary: { run: started.body.run, status: 'running' } })
+    expect(listed.recentRuns).toEqual([{ jid: `run:${started.body.run}`, run: started.body.run, startedAt: expect.anything(), status: 'running', detail: 'running' }])
+    // its last run hasn't finished: no second one, and the schedule says why
+    expect((await req('POST', `/schedules/${sid}/run`)).status).toBe(502)
+    const [again] = (await req('GET', '/schedules')).body.schedules as Array<{ lastSummary: unknown }>
+    expect(again.lastSummary).toEqual({ error: `Its last run, #${started.body.run}, hasn't finished` })
   })
 })

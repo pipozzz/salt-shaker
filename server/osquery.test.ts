@@ -97,7 +97,7 @@ describe.each(testDialects)('scheduled osquery queries (%s)', (dialect) => {
     const sch = new Scheduler(db, schema, salt, notifier, async () => undefined)
 
     const runOnce = async (rows: object[]) => {
-      const jid = (await sch.run(s))!
+      const { jid } = (await sch.run(s)) as { jid: string }
       await db.insert(schema.jobReturn).values({ jid, minion: 'web-01', ret: ret(rows), retcode: 0, success: true, returnedAt: new Date() })
       await sch.tick()
       const [done] = await db.select().from(schema.schedule).where(eq(schema.schedule.id, s.id))

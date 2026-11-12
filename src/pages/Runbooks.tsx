@@ -20,6 +20,7 @@ export function RunbooksPage() {
   const [editing, setEditing] = useState<Runbook | 'new' | null>(null)
   const [running, setRunning] = useState<Runbook | null>(null)
   const [removing, setRemoving] = useState<Runbook | null>(null)
+  const [removeError, setRemoveError] = useState<Error | null>(null)
   if (!api) return null
 
   return (
@@ -109,16 +110,40 @@ export function RunbooksPage() {
 
       {editing && <RunbookEditor runbook={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => setReloads((n) => n + 1)} />}
       {running && <RunModal runbook={running} onClose={() => setRunning(null)} />}
-      <Modal open={!!removing} onClose={() => setRemoving(null)} title={`Delete ${removing?.name}?`}>
+      <Modal
+        open={!!removing}
+        onClose={() => {
+          setRemoving(null)
+          setRemoveError(null)
+        }}
+        title={`Delete ${removing?.name}?`}
+      >
         <p className="text-sm text-zinc-600 dark:text-zinc-400">Its past runs stay in the list and in the audit log.</p>
+        {removeError && (
+          <div className="mt-3">
+            <ErrorBox error={removeError} />
+          </div>
+        )}
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={() => setRemoving(null)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setRemoving(null)
+              setRemoveError(null)
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="danger"
             onClick={async () => {
-              await api.remove(removing!.id)
-              setRemoving(null)
-              setReloads((n) => n + 1)
+              setRemoveError(null)
+              try {
+                await api.remove(removing!.id)
+                setRemoving(null)
+                setReloads((n) => n + 1)
+              } catch (e) {
+                setRemoveError(e as Error)
+              }
             }}
           >
             Delete

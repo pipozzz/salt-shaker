@@ -401,6 +401,31 @@ test('a runbook runs step by step and stops at the step that fails', async ({ pa
   await expect(page.getByText('Reboot', { exact: true })).toBeVisible()
 })
 
+test('a schedule runs a runbook, and its runbook stays while it does', async ({ page }) => {
+  await openDemo(page, '/schedules')
+  const web = page.getByRole('listitem').filter({ hasText: 'Web highstate' })
+  await expect(web.getByRole('link', { name: 'Sync and apply the highstate' })).toBeVisible()
+  await expect(web.getByText('target=web-*')).toBeVisible()
+  await web.getByRole('button', { name: 'Run now' }).click()
+  await expect(web.getByRole('link', { name: /run #\d+/ })).toBeVisible()
+  await web.getByRole('link', { name: 'Started just now →' }).click()
+  await expect(page).toHaveURL(/\/runbooks\/runs\/\d+$/)
+  await expect(page.getByText(/Started by schedule:Web highstate/)).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Steps' }).getByRole('listitem', { name: 'Sync modules: done' })).toBeVisible()
+
+  // the editor asks for the runbook's values
+  await page.goto('/schedules')
+  await page.getByRole('listitem').filter({ hasText: 'Web highstate' }).getByRole('button', { name: 'Edit' }).click()
+  await expect(page.getByRole('combobox', { name: 'Runbook', exact: true })).toHaveValue('2')
+  await expect(page.getByRole('textbox', { name: 'Minions' })).toHaveValue('web-*')
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.goto('/runbooks')
+  await page.getByRole('button', { name: 'Delete Sync and apply the highstate' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('The schedule "Web highstate" runs it')).toBeVisible()
+})
+
 test('a compliance schedule fixes the drift it finds with a change', async ({ page }) => {
   await openDemo(page, '/schedules')
   const nightly = page.getByRole('listitem').filter({ hasText: 'Nightly compliance' })
@@ -756,7 +781,7 @@ test('the other masters show on the overview, and admins add them on System', as
 
 test('schedules wait for a maintenance window, and Run says when the next one opens', async ({ page }) => {
   await openDemo(page, '/schedules')
-  await expect(page.getByTitle('Waits for this maintenance window when it comes due outside it')).toContainText('Patch nights')
+  await expect(page.getByRole('listitem').filter({ hasText: 'Weekly patch scan' }).getByTitle('Waits for this maintenance window when it comes due outside it')).toContainText('Patch nights')
 
   await page.goto('/run')
   await expect(page.getByRole('status').filter({ hasText: 'maintenance window' })).toContainText(/Patch nights|Inside the maintenance window/)

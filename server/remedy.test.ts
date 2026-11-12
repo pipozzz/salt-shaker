@@ -40,7 +40,7 @@ describe.each(testDialects)('fixing drift (%s)', (dialect) => {
 
     // web-02 and web-01 drifted, db-01 has errors (left for a person), cache-01 is fine
     const check = async () => {
-      const jid = (await sch.run(s))!
+      const { jid } = (await sch.run(s)) as { jid: string }
       await db.insert(schema.jobReturn).values([
         { jid, minion: 'web-02', summary: summary({ pending: 2 }), success: true, retcode: 0, returnedAt: new Date() },
         { jid, minion: 'web-01', summary: summary({ pending: 1 }), success: true, retcode: 0, returnedAt: new Date() },

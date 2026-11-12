@@ -36,6 +36,16 @@ With `APPROVAL_REQUIRED=risky`, an operator's run with a step that changes minio
 
 Notifications have a **Runbook runs** event for runs that finished, stopped or failed, and runs waiting for approval go to **Changes waiting for approval**.
 
+## On a schedule
+
+A [schedule](/salt-shaker/guide/schedules/) can run a runbook: on **Schedules → New schedule**, pick **A runbook** under *What to run*, choose the runbook and fill in its values, which are checked like a run's. *Sync and apply the highstate* on `web-*` every Tuesday at 22:00, inside a [maintenance window](/salt-shaker/guide/schedules/#maintenance-windows), is the demo's.
+
+- A scheduled run acts as the schedule, with an admin's rights like every schedule, so nothing waits for approval. Its steps are in the audit log as `schedule:<name>`.
+- A new run starts only once the last one has finished; until then the schedule says it's still going.
+- The schedule's summary links to its last run, and its bars to the last ten. How each ended goes to the **Runbook runs** notification.
+- With a window, the run *starts* inside it; its steps go on until they're done.
+- A runbook a schedule runs can't be deleted until the schedule is deleted or runs another one. Changes to the runbook apply from its next run.
+
 :::note
 Runs are kept in the database and worked through by whichever server instance gets to them first, so a run carries on when the instance that started it restarts. A step that was being started at that very moment is marked failed rather than run twice.
 :::

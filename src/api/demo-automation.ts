@@ -1,5 +1,6 @@
 import { Cron } from 'croner'
 import { demoRemedyChange } from './demo-changes'
+import { demoRunbookCheck, demoRunbookName, demoRunsBy, demoScheduledRun, setDemoRunbookUsers } from './demo-runbooks'
 import { demoTrendDays } from './demo-vulns'
 import { readRecipients } from '../lib/recipients'
 import { nextOpening, openingAt } from '../lib/windows'
@@ -22,6 +23,7 @@ const KINDS: Record<ScheduleKind, string> = {
   vulns: 'Vulnerability scan (package inventory)',
   osquery: 'osquery query (alert on changes)',
   function: 'Any function',
+  runbook: 'A runbook',
 }
 
 const EVENTS: Record<NotifyEvent, string> = {
@@ -129,6 +131,45 @@ seed(
   () => '2 ok · 0 failed',
 )
 
+// runs the highstate on the web servers in Patch nights, through the runbook (no runs yet)
+schedules.push({
+  id: ++id,
+  name: 'Web highstate',
+  kind: 'runbook',
+  fun: null,
+  args: { runbookId: 2, params: { target: 'web-*' } },
+  target: '',
+  targetType: 'glob',
+  cron: '0 22 * * 2',
+  windowId: 1,
+  remedy: null,
+  enabled: true,
+  createdBy: 'pam',
+  lastRunAt: null,
+  lastJid: null,
+  lastSummary: null,
+  recentRuns: [],
+})
+setDemoRunbookUsers((rid) => schedules.find((s) => s.kind === 'runbook' && s.args?.runbookId === rid)?.name ?? null)
+
+/** A runbook schedule's runs and its last one, from the runs it started (as the server does). */
+function runbookView(s: (typeof schedules)[number]) {
+  if (s.kind !== 'runbook') return {}
+  const runs = demoRunsBy(`schedule:${s.name}`)
+  const recentRuns: ScheduleRun[] = runs
+    .slice(0, 10)
+    .reverse()
+    .map((r) => ({
+      jid: `run:${r.id}`,
+      run: r.id,
+      startedAt: r.startedAt,
+      status: r.status === 'done' ? 'ok' : r.status === 'running' || r.status === 'pending' ? 'running' : 'failed',
+      detail: r.error ? `${r.status}: ${r.error}` : r.status,
+    }))
+  const last = recentRuns.find((r) => r.run === s.lastSummary?.run)
+  return { recentRuns, runbookName: s.args?.runbookId ? demoRunbookName(s.args.runbookId) : null, lastSummary: last ? { ...s.lastSummary, status: last.detail } : s.lastSummary }
+}
+
 const channels: Channel[] = [
   { id: 1, name: 'Ops Slack', kind: 'slack', url: 'https://hooks.slack.com/…7Qx2', events: ['drift', 'vulns', 'osquery', 'acceptance', 'job_failed', 'report'], enabled: true, lastSentAt: new Date(now - 3 * 3600_000).toISOString(), lastError: null },
   { id: 2, name: 'Incident webhook', kind: 'webhook', url: 'https://alerts.example.com/…ook', events: ['minion_down'], enabled: false, lastSentAt: null, lastError: null, signed: true },
@@ -144,7 +185,7 @@ function runsAt(s: (typeof schedules)[number]) {
 
 function view(s: (typeof schedules)[number]): Schedule {
   try {
-    return { ...s, windowId: s.windowId && demoWindowList.some((w) => w.id === s.windowId) ? s.windowId : null, nextRunAt: s.enabled ? (runsAt(s)?.toISOString() ?? null) : null, cronError: null }
+    return { ...s, ...runbookView(s), windowId: s.windowId && demoWindowList.some((w) => w.id === s.windowId) ? s.windowId : null, nextRunAt: s.enabled ? (runsAt(s)?.toISOString() ?? null) : null, cronError: null }
   } catch (e) {
     return { ...s, nextRunAt: null, cronError: e instanceof Error ? e.message : String(e) }
   }
@@ -154,7 +195,7 @@ function view(s: (typeof schedules)[number]): Schedule {
 function check(s: Partial<ScheduleInput>, current?: { id: number }) {
   if (!s.name?.trim()) return 'Name is required'
   if (schedules.some((x) => x.name === s.name!.trim() && x.id !== current?.id)) return 'A schedule with this name already exists'
-  if (!s.target?.trim()) return 'Target is required'
+  if (s.kind !== 'runbook' && !s.target?.trim()) return 'Target is required'
   try {
     if (!next(s.cron ?? '')) return `Invalid schedule "${s.cron}": never runs`
   } catch (e) {
@@ -164,6 +205,10 @@ function check(s: Partial<ScheduleInput>, current?: { id: number }) {
   const size = s.remedy?.batchSize?.trim()
   if (s.kind === 'compliance' && size && !/^(\d+|\d+(\.\d+)?%)$/.test(size)) return 'Batch size is a number of minions or a percentage, like 25%'
   if (s.kind === 'osquery') return checkQuery((s.args as { sql?: string } | null)?.sql ?? '')
+  if (s.kind === 'runbook') {
+    const a = s.args as { runbookId?: number; params?: Record<string, string> } | null
+    return a?.runbookId ? demoRunbookCheck(a.runbookId, a.params ?? {}) : 'Choose a runbook'
+  }
   return null
 }
 
@@ -173,7 +218,7 @@ export const demoAutomation: typeof automation = {
   createSchedule: (s) => {
     const error = check(s)
     if (error) return fail(error)
-    schedules.push({ ...s, windowId: s.windowId ?? null, remedy: s.remedy ?? null, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
+    schedules.push({ ...s, ...(s.kind === 'runbook' ? { target: '', targetType: 'glob' } : {}), windowId: s.windowId ?? null, remedy: s.remedy ?? null, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
     recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.create', target: s.name.trim(), args: JSON.stringify(s), outcome: 'ok' })
     return delay(undefined)
   },
@@ -197,6 +242,13 @@ export const demoAutomation: typeof automation = {
     const s = schedules.find((x) => x.id === sid)
     if (!s) return fail('Not found')
     const at = new Date()
+    if (s.kind === 'runbook') {
+      const r = s.args?.runbookId ? demoScheduledRun(s.args.runbookId, s.args.params ?? {}, `schedule:${s.name}`) : { error: 'Its runbook no longer exists' }
+      s.lastSummary = r
+      if ('error' in r) return fail('The run could not start; see the schedule for details')
+      s.lastRunAt = at.toISOString()
+      return delay(r)
+    }
     const job = start(s)
     if (!job) return fail('No minions matched the target')
     const jid = job.jid

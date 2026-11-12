@@ -10,6 +10,7 @@ import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useMaintenanceApi } from '../lib/maintenance'
+import { useRunbooksApi } from '../lib/runbooks'
 import { relTime } from '../lib/format'
 
 const PRESETS: Array<[string, string]> = [
@@ -21,8 +22,8 @@ const PRESETS: Array<[string, string]> = [
 ]
 const presetLabel = (cron: string) => PRESETS.find(([c]) => c === cron)?.[1]
 
-const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', vulns: 'red', osquery: 'amber', function: 'zinc' }
-const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', vulns: 'Vulnerability scan', osquery: 'osquery', function: 'Function' }
+const KIND_TONE: Record<ScheduleKind, Tone> = { compliance: 'accent', patches: 'blue', vulns: 'red', osquery: 'amber', function: 'zinc', runbook: 'green' }
+const KIND_LABEL: Record<ScheduleKind, string> = { compliance: 'Compliance', patches: 'Patch scan', vulns: 'Vulnerability scan', osquery: 'osquery', function: 'Function', runbook: 'Runbook' }
 
 /** "in 3h", "in 12m": relTime() only speaks about the past. */
 function untilTime(d: Date) {
@@ -37,6 +38,18 @@ function Summary({ s }: { s: Schedule }) {
   const sum = s.lastSummary
   if (!sum) return <span className="text-xs text-zinc-500 dark:text-zinc-400">{s.lastRunAt ? 'collecting results…' : 'never ran'}</span>
   if (typeof sum.error === 'string') return <span className="text-xs text-red-600 dark:text-red-400">{sum.error}</span>
+  if (s.kind === 'runbook' && typeof sum.run === 'number') {
+    const status = typeof sum.status === 'string' ? sum.status : ''
+    const tone: Tone = status.startsWith('done') ? 'green' : status.startsWith('running') || status.startsWith('pending') ? 'blue' : status ? 'red' : 'zinc'
+    return (
+      <Link to={`/runbooks/runs/${sum.run}`} title={status}>
+        <Badge tone={tone}>
+          run #{sum.run}
+          {status && ` · ${status.split(':')[0]}`}
+        </Badge>
+      </Link>
+    )
+  }
   if (s.kind === 'compliance') {
     const c = sum as { ok: number; drift: number; error: number; noreturn: number; remedyChange?: number; remedyMinions?: number; remedySkipped?: string }
     return (
@@ -120,6 +133,7 @@ const RUN_BAR: Record<ScheduleRun['status'], string> = {
 }
 
 function runLabel(kind: ScheduleKind, status: ScheduleRun['status']) {
+  if (kind === 'runbook') return { ok: 'done', failed: 'stopped or failed', running: 'running', changed: 'changed', noreturn: 'no return' }[status]
   if (status === 'changed') return kind === 'patches' ? 'updates available' : 'drifted'
   return { ok: 'ok', failed: 'failed', noreturn: 'some minions did not return', running: 'running' }[status]
 }
@@ -136,14 +150,14 @@ function RecentRuns({ s }: { s: Schedule }) {
           const text = `${relTime(new Date(r.startedAt))}: ${runLabel(s.kind, r.status)} (${r.detail})`
           return (
             <li key={r.jid}>
-              <Link to={`/jobs/${r.jid}`} aria-label={text} title={text} className="-my-1 block py-1 hover:opacity-70">
+              <Link to={r.run ? `/runbooks/runs/${r.run}` : `/jobs/${r.jid}`} aria-label={text} title={text} className="-my-1 block py-1 hover:opacity-70">
                 <span className={`block w-1.5 rounded-sm ${RUN_BAR[r.status]} ${r.status === 'failed' ? 'h-4' : 'h-3'}`} />
               </Link>
             </li>
           )
         })}
       </ul>
-      <Link to={`/jobs?q=${encodeURIComponent(`schedule:${s.name}`)}${failed ? '&result=failed' : ''}`} className="text-zinc-500 hover:text-accent-600 dark:text-zinc-400">
+      <Link to={s.kind === 'runbook' ? '/runbooks' : `/jobs?q=${encodeURIComponent(`schedule:${s.name}`)}${failed ? '&result=failed' : ''}`} className="text-zinc-500 hover:text-accent-600 dark:text-zinc-400">
         {failed ? `${failed} of ${runs.length} failed` : 'history'}
       </Link>
     </div>
@@ -193,7 +207,7 @@ export function SchedulesPage() {
         title="Schedules"
         description={
           <>
-            Compliance checks, patch and vulnerability scans, watched osquery queries or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
+            Compliance checks, patch and vulnerability scans, watched osquery queries, runbooks or any function, run by the server on a schedule. Times are in the server's time zone ({meta.data?.timezone ?? '…'}). Results go to{' '}
             <Link to="/notifications" className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
               Notifications
             </Link>
@@ -233,11 +247,28 @@ export function SchedulesPage() {
                     <span className="font-medium">{s.name}</span>
                     <Badge tone={KIND_TONE[s.kind]}>{KIND_LABEL[s.kind]}</Badge>
                   </p>
+                  {s.kind === 'runbook' ? (
+                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      {s.runbookName ? (
+                        <Link to="/runbooks" className="font-medium text-zinc-700 hover:text-accent-600 dark:text-zinc-300">
+                          {s.runbookName}
+                        </Link>
+                      ) : (
+                        <span className="text-red-600 dark:text-red-400">its runbook is gone</span>
+                      )}
+                      {Object.entries(s.args?.params ?? {}).map(([k, v]) => (
+                        <span key={k} className="ml-2 font-mono">
+                          {k}={v}
+                        </span>
+                      ))}
+                    </p>
+                  ) : (
                   <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
                     {s.kind === 'function' && `${s.fun} ${formatArgs([...(s.args?.arg ?? []), ...(s.args?.kwarg && Object.keys(s.args.kwarg).length ? [{ __kwarg__: true, ...s.args.kwarg }] : [])])} → `}
                     {s.targetType !== 'glob' && `${s.targetType}:`}
                     {s.target}
                   </p>
+                  )}
                 </div>
                 <div className="w-44 text-xs">
                   <p className="font-medium text-zinc-700 dark:text-zinc-300">{presetLabel(s.cron) ?? <span className="font-mono">{s.cron}</span>}</p>
@@ -269,7 +300,7 @@ export function SchedulesPage() {
                   )}
                   {started[s.id] && (
                     <p>
-                      <Link to={`/jobs/${started[s.id]}`} className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
+                      <Link to={started[s.id]} className="text-accent-700 underline underline-offset-2 hover:text-accent-800 dark:text-accent-400 dark:hover:text-accent-100">
                         Started just now →
                       </Link>
                     </p>
@@ -283,8 +314,8 @@ export function SchedulesPage() {
                     loading={busy === `run:${s.id}`}
                     onClick={() =>
                       act(`run:${s.id}`, async () => {
-                        const { jid } = await api.runSchedule(s.id)
-                        setStarted((m) => ({ ...m, [s.id]: jid }))
+                        const r = await api.runSchedule(s.id)
+                        setStarted((m) => ({ ...m, [s.id]: 'jid' in r ? `/jobs/${r.jid}` : `/runbooks/runs/${r.run}` }))
                       })
                     }
                   >
@@ -358,6 +389,11 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
   const [maxFailures, setMaxFailures] = useState(schedule?.remedy?.maxFailures ?? 0)
   const windowsApi = useMaintenanceApi()
   const windows = useAsync(() => (windowsApi ? windowsApi.list() : Promise.resolve(null)), [windowsApi])
+  const runbooksApi = useRunbooksApi()
+  const runbookList = useAsync(() => (runbooksApi ? runbooksApi.list() : Promise.resolve(null)), [runbooksApi])
+  const [runbookId, setRunbookId] = useState<number | null>(schedule?.args?.runbookId ?? null)
+  const runbook = runbookList.data?.runbooks.find((rb) => rb.id === runbookId) ?? (runbookId === null ? runbookList.data?.runbooks[0] : undefined)
+  const [values, setValues] = useState<Record<string, string>>(schedule?.args?.params ?? {})
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -373,7 +409,13 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
       cron: (preset === 'custom' ? cron : preset).trim(),
       windowId,
       remedy: kind === 'compliance' && fixDrift ? { batchSize: batchSize.trim() || null, maxFailures } : null,
-      ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : kind === 'osquery' ? { args: { sql: sql.trim() } } : {}),
+      ...(kind === 'function'
+        ? { fun: fun.trim(), args: parseArgs(args) }
+        : kind === 'osquery'
+          ? { args: { sql: sql.trim() } }
+          : kind === 'runbook'
+            ? { args: { runbookId: runbook?.id ?? 0, params: Object.fromEntries((runbook?.params ?? []).map((p) => [p.name, values[p.name] ?? p.default])) } }
+            : {}),
     }
     try {
       if (schedule) await api.updateSchedule(schedule.id, input)
@@ -460,14 +502,52 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
             </Select>
           </div>
         )}
-        <TargetField
-          tgt={tgt}
-          tgtType={tgtType}
-          onChange={(t, tt) => {
-            setTgt(t)
-            setTgtType(tt)
-          }}
-        />
+        {kind === 'runbook' && (
+          <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            {runbookList.data && !runbookList.data.runbooks.length ? (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                There are no runbooks yet.{' '}
+                <Link to="/runbooks" className="text-accent-700 underline underline-offset-2 dark:text-accent-400">
+                  Write one first
+                </Link>
+                .
+              </p>
+            ) : (
+              <Field label="Runbook" hint={runbook?.description || undefined}>
+                <Select value={runbook?.id ?? ''} onChange={(e) => setRunbookId(Number(e.target.value))} aria-label="Runbook">
+                  {runbookId !== null && !runbook && <option value="">(deleted)</option>}
+                  {runbookList.data?.runbooks.map((rb) => (
+                    <option key={rb.id} value={rb.id}>
+                      {rb.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            {!!runbook?.params.length && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {runbook.params.map((p) => (
+                  <Field key={p.name} label={p.label || p.name} hint={`{{${p.name}}}${p.required ? ', required' : ''}`}>
+                    <Input value={values[p.name] ?? p.default} onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))} className="font-mono" aria-label={p.label || p.name} />
+                  </Field>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Each run goes step by step on its own page and is audited as <span className="font-mono">schedule:{name.trim() || '…'}</span>, with an admin's rights like every schedule. A new run waits until the last one has finished; how it ended goes to the <strong>Runbook runs</strong> notification.
+            </p>
+          </div>
+        )}
+        {kind !== 'runbook' && (
+          <TargetField
+            tgt={tgt}
+            tgtType={tgtType}
+            onChange={(t, tt) => {
+              setTgt(t)
+              setTgtType(tt)
+            }}
+          />
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="When">
             <Select value={preset} onChange={(e) => setPreset(e.target.value)}>

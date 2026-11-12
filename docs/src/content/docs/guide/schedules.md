@@ -16,6 +16,7 @@ Both pages need the server, and only admins manage them; the demo has a few to t
 - **Patch scan**: `pkg.list_upgrades`, the same as [Patches](/salt-shaker/guide/patches/).
 - **Vulnerability scan**: lists the installed packages for [Vulnerabilities](/salt-shaker/guide/vulnerabilities/).
 - **osquery query**: runs a [Query](/salt-shaker/guide/query/#watching-a-query) and compares its rows with the previous run, so you hear about a new port, account or SSH key. **Watch…** on the Query page starts one from the query you're looking at.
+- **A runbook**, with its values: the steps of a [runbook](/salt-shaker/guide/runbooks/#on-a-schedule), one after another, each waiting for the last.
 - **Any function**, with arguments, for example `saltutil.sync_all`. **Schedule…** on the [Run](/salt-shaker/guide/run/) page starts one from the function and target you're about to run.
 
 You can pick a preset such as *Every day at 02:00* or *Weekdays at 06:00*, or write your own cron expression. Times use the server's time zone; in the container, set it with `TZ`.

@@ -110,6 +110,35 @@ function start(rb: Runbook, params: Record<string, string>, by = 'demo') {
 // an earlier run, for the history: Olga restarted nginx on web-01
 start(list[0], { host: 'web-01' }, 'olga')
 
+const live = (r: RunbookRun) => r.status === 'running' || r.status === 'pending'
+
+/** The demo's schedules say which of them runs a runbook, so a runbook in use isn't deleted. */
+let usedBy: (runbookId: number) => string | null = () => null
+export const setDemoRunbookUsers = (fn: typeof usedBy) => void (usedBy = fn)
+
+export const demoRunbookName = (id: number) => list.find((x) => x.id === id)?.name ?? null
+
+/** Whether a schedule could run it with these values: null, or why not. */
+export function demoRunbookCheck(id: number, params: Record<string, string>) {
+  const rb = list.find((x) => x.id === id)
+  if (!rb) return 'Choose a runbook'
+  const r = resolveRunbook(rb, params)
+  return 'error' in r ? r.error : null
+}
+
+/** A schedule's run, started as the schedule, unless its last one is still going. */
+export function demoScheduledRun(id: number, params: Record<string, string>, by: string): { run: number } | { error: string } {
+  const rb = list.find((x) => x.id === id)
+  if (!rb) return { error: 'Its runbook no longer exists' }
+  const going = runs.find((r) => r.startedBy === by && live(r))
+  if (going) return { error: `Its last run, #${going.id}, hasn't finished` }
+  const r = start(rb, params, by)
+  return 'error' in r ? { error: r.error } : { run: r.run.id }
+}
+
+/** The runs a schedule started, newest first. */
+export const demoRunsBy = (by: string) => runs.filter((r) => r.startedBy === by).map(copy)
+
 export const demoRunbooks: typeof runbooks = {
   list: () => delay({ runbooks: list.map((rb) => ({ ...rb })).sort((a, b) => a.name.localeCompare(b.name)), approval: 'off' as const }),
   save: (input, id) => {
@@ -125,6 +154,8 @@ export const demoRunbooks: typeof runbooks = {
     return delay({ runbook: { ...row } })
   },
   remove: (id) => {
+    const schedule = usedBy(id)
+    if (schedule) return fail(`The schedule "${schedule}" runs it; delete that schedule or pick another runbook for it first`)
     const i = list.findIndex((x) => x.id === id)
     if (i >= 0) {
       recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.delete', target: list[i].name, outcome: 'ok' })

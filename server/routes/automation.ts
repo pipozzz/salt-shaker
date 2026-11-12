@@ -1,13 +1,15 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, newWebhookSecret, type Notifier } from '../notify'
 import { validBatchSize } from '../changes'
 import { readRecipients } from '../mail'
+import { readScheduleArgs, scheduleStarter } from '../runbooks'
 import { recentScheduleRuns } from '../schedule-runs'
 import { nextRun, runsAt, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
 import { loadWindows } from '../windows'
 import { checkQuery } from '../../src/lib/osquery'
+import { resolveRunbook, type RunbookParam, type RunbookStep } from '../../src/lib/runbook'
 import type { AuditRow, Env } from '../types'
 
 export const TARGET_TYPES = ['glob', 'list', 'grain', 'compound', 'pcre', 'pillar', 'nodegroup']
@@ -93,7 +95,8 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
   const readSchedule = (body: Record<string, unknown>) => {
     const kind = str(body.kind, 'Kind', { max: 20 }) as ScheduleKind
     if (!(kind in SCHEDULE_KINDS)) throw new BadRequest('Unknown kind')
-    const targetType = str(body.targetType, 'Target type', { max: 20 })!
+    // a runbook's steps name their own targets
+    const targetType = kind === 'runbook' ? 'glob' : str(body.targetType, 'Target type', { max: 20 })!
     if (!TARGET_TYPES.includes(targetType)) throw new BadRequest('Unknown target type')
     const cron = str(body.cron, 'Schedule', { max: 100 })!
     validateCron(cron)
@@ -106,6 +109,14 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
       if (invalid) throw new BadRequest(invalid)
       args = JSON.stringify({ sql })
     }
+    if (kind === 'runbook') {
+      const a = (body.args ?? {}) as { runbookId?: unknown; params?: unknown }
+      const runbookId = Number(a.runbookId)
+      if (!Number.isInteger(runbookId) || runbookId <= 0) throw new BadRequest('Choose a runbook')
+      const given = a.params && typeof a.params === 'object' ? (a.params as Record<string, unknown>) : {}
+      const params = Object.fromEntries(Object.entries(given).map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 500) : String(v ?? '')]))
+      args = JSON.stringify({ runbookId, params })
+    }
     const windowId = body.windowId === null || body.windowId === undefined || body.windowId === '' ? null : Number(body.windowId)
     if (windowId !== null && !Number.isInteger(windowId)) throw new BadRequest('Unknown maintenance window')
     let remedy: string | null = null
@@ -117,7 +128,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
       if (!Number.isInteger(maxFailures) || maxFailures < 0) throw new BadRequest('Allowed failures is a whole number')
       remedy = JSON.stringify({ batchSize: batchSize || null, maxFailures })
     }
-    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron, windowId, remedy }
+    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: kind === 'runbook' ? '' : str(body.target, 'Target')!, targetType, cron, windowId, remedy }
   }
 
   const checkWindow = async (windowId: number | null) => {
@@ -126,10 +137,36 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     if (!w) throw new BadRequest('Unknown maintenance window')
   }
 
+  /** A runbook schedule names a runbook that exists, and gives it every value it needs. */
+  const checkRunbook = async (values: { kind: string; args: string | null }) => {
+    if (values.kind !== 'runbook') return
+    const a = readScheduleArgs(values.args)
+    const [rb] = a ? await db.select().from(schema.runbook).where(eq(schema.runbook.id, a.runbookId)) : []
+    if (!a || !rb) throw new BadRequest('Choose a runbook')
+    const resolved = resolveRunbook({ params: JSON.parse(rb.params) as RunbookParam[], steps: JSON.parse(rb.steps) as RunbookStep[] }, a.params)
+    if ('error' in resolved) throw new BadRequest(resolved.error)
+  }
+
+  /** How a runbook schedule's runs went, newest last, in the same buckets as a job's. */
+  const runbookRuns = async (scheduleId: number) => {
+    const t = schema.runbookRun
+    const rows = await db.select().from(t).where(eq(t.startedById, scheduleStarter(scheduleId))).orderBy(desc(t.id)).limit(10)
+    return rows.reverse().map((r) => ({
+      jid: `run:${r.id}`,
+      run: r.id,
+      startedAt: r.startedAt,
+      status: r.status === 'done' ? 'ok' : r.status === 'running' || r.status === 'pending' ? 'running' : 'failed',
+      detail: r.error ? `${r.status}: ${r.error}` : r.status,
+    }))
+  }
+
   r.get('/schedules', async (c) => {
     const rows = await db.select().from(t).orderBy(asc(t.name))
     const runs = await recentScheduleRuns(db, schema, rows)
     const windows = new Map((await loadWindows(db, schema)).map((w) => [w.id, w]))
+    const runbookNames = new Map((await db.select({ id: schema.runbook.id, name: schema.runbook.name }).from(schema.runbook)).map((rb) => [rb.id, rb.name]))
+    const fromRunbooks = new Map<number, Awaited<ReturnType<typeof runbookRuns>>>()
+    for (const s of rows) if (s.kind === 'runbook') fromRunbooks.set(s.id, await runbookRuns(s.id))
     return c.json({
       schedules: rows.map((s) => {
         let next: Date | null = null
@@ -139,7 +176,21 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
         } catch (e) {
           cronError = e instanceof Error ? e.message : String(e)
         }
-        return { ...s, remedy: s.remedy ? JSON.parse(s.remedy) : null, args: s.args ? JSON.parse(s.args) : null, lastSummary: s.lastSummary ? JSON.parse(s.lastSummary) : null, nextRunAt: next, cronError, recentRuns: runs.get(s.name) ?? [] }
+        const runbookRuns = fromRunbooks.get(s.id)
+        const summary = s.lastSummary ? (JSON.parse(s.lastSummary) as Record<string, unknown>) : null
+        // a runbook schedule's summary is the run it started, as it stands now
+        const lastRun = runbookRuns && summary && typeof summary.run === 'number' ? runbookRuns.find((r) => r.run === summary.run) : undefined
+        const runbookId = s.kind === 'runbook' ? readScheduleArgs(s.args)?.runbookId : undefined
+        return {
+          ...s,
+          remedy: s.remedy ? JSON.parse(s.remedy) : null,
+          args: s.args ? JSON.parse(s.args) : null,
+          lastSummary: lastRun ? { ...summary, status: lastRun.detail } : summary,
+          nextRunAt: next,
+          cronError,
+          recentRuns: runbookRuns ?? runs.get(s.name) ?? [],
+          ...(s.kind === 'runbook' ? { runbookName: (runbookId && runbookNames.get(runbookId)) || null } : {}),
+        }
       }),
     })
   })
@@ -147,6 +198,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
   r.post('/schedules', async (c) => {
     const values = readSchedule(await c.req.json())
     await checkWindow(values.windowId)
+    await checkRunbook(values)
     const exists = await db.select({ id: t.id }).from(t).where(eq(t.name, values.name))
     if (exists.length) throw new BadRequest('A schedule with this name already exists')
     const [row] = await db
@@ -167,6 +219,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
         ? { enabled: body.enabled }
         : { ...readSchedule({ ...current, args: current.args ? JSON.parse(current.args) : null, remedy: current.remedy ? JSON.parse(current.remedy) : null, ...body }), ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}) }
     if ('windowId' in changes) await checkWindow(changes.windowId)
+    if ('kind' in changes) await checkRunbook(changes)
     await db.update(t).set(changes).where(eq(t.id, id))
     await audit({ ...who(c), client: 'admin', fun: 'schedule.update', target: current.name, args: JSON.stringify(changes), outcome: 'ok' })
     return c.json({ ok: true })
@@ -184,8 +237,8 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
   r.post('/schedules/:id/run', async (c) => {
     const [s] = await db.select().from(t).where(eq(t.id, Number(c.req.param('id'))))
     if (!s) return c.json({ error: 'Not found' }, 404)
-    const jid = await scheduler.run(s)
-    return jid ? c.json({ jid }) : c.json({ error: 'The run could not start; see the schedule for details' }, 502)
+    const started = await scheduler.run(s)
+    return started ? c.json(started) : c.json({ error: 'The run could not start; see the schedule for details' }, 502)
   })
 
   // ---- notification channels ----

@@ -175,6 +175,77 @@ interface RouteDeps {
   approval: 'off' | 'risky'
 }
 
+type RunbookRow = Schema['runbook']['$inferSelect']
+type ScheduleRow = Schema['schedule']['$inferSelect']
+
+/** Starts a run as `starter`: waiting for an admin when it needs approval, running otherwise. */
+export async function startRun(d: Pick<RouteDeps, 'db' | 'schema' | 'runner' | 'notifier' | 'audit' | 'approval'>, rb: RunbookRow, given: Record<string, unknown>, starter: { userId: string; username: string; role: string | null }): Promise<{ run: RunRow } | { error: string }> {
+  const resolved = resolveRunbook(view(rb), given)
+  if ('error' in resolved) return { error: resolved.error! }
+  // like a change: with APPROVAL_REQUIRED=risky, an operator's run with a risky step waits for an admin
+  const pending = resolved.steps.some((s) => needsApproval(d.approval, starter.role, s.fun, s.kwarg))
+  const steps: StepState[] = resolved.steps.map((s) => ({ ...s, status: 'waiting' }))
+  const [run] = await d.db
+    .insert(d.schema.runbookRun)
+    .values({ runbookId: rb.id, name: rb.name, params: JSON.stringify(resolved.values), steps: JSON.stringify(steps), status: pending ? 'pending' : 'running', startedBy: starter.username, startedById: starter.userId, startedAt: new Date() })
+    .returning()
+  await d.audit({ userId: starter.userId, username: starter.username, role: starter.role, client: 'console', fun: 'runbook.run', target: `#${run.id} ${rb.name}`, args: JSON.stringify(resolved.values), outcome: 'ok' })
+  if (pending) await d.notifier.emit('approval', runMessage(run, 'pending'))
+  else await d.runner.tick()
+  return { run }
+}
+
+/** What a runbook schedule runs: which runbook, with which values. */
+export function readScheduleArgs(json: string | null): { runbookId: number; params: Record<string, string> } | null {
+  try {
+    const a = JSON.parse(json ?? '') as { runbookId?: unknown; params?: unknown }
+    if (!Number.isInteger(a.runbookId)) return null
+    const params = a.params && typeof a.params === 'object' ? Object.fromEntries(Object.entries(a.params).map(([k, v]) => [k, String(v ?? '')])) : {}
+    return { runbookId: a.runbookId as number, params }
+  } catch {
+    return null
+  }
+}
+
+/** Schedules that run a runbook, with the one each runs. */
+export async function scheduledRunbooks(db: Db, schema: Schema) {
+  const s = schema.schedule
+  const rows = await db.select({ id: s.id, name: s.name, args: s.args }).from(s).where(eq(s.kind, 'runbook'))
+  return rows.flatMap((r) => {
+    const a = readScheduleArgs(r.args)
+    return a ? [{ id: r.id, name: r.name, ...a }] : []
+  })
+}
+
+/** The id a schedule's runs are started by; the schedule stands in for a person. */
+export const scheduleStarter = (scheduleId: number) => `schedule:${scheduleId}`
+
+/**
+ * Who a scheduled run acts as: the schedule itself, with an admin's rights like every schedule,
+ * for as long as it exists. Its steps are audited as `schedule:<name>`.
+ */
+export async function scheduleUser(db: Db, schema: Schema, id: string): Promise<SessionUser | null> {
+  const n = Number(id.slice('schedule:'.length))
+  if (!Number.isInteger(n)) return null
+  const [row] = await db.select({ name: schema.schedule.name }).from(schema.schedule).where(eq(schema.schedule.id, n))
+  return row ? { id, name: `schedule:${row.name}`, username: `schedule:${row.name}`, role: 'admin' } : null
+}
+
+/** Starts a runbook schedule's run, unless its last one is still going. */
+export function runbookScheduler(d: Pick<RouteDeps, 'db' | 'schema' | 'runner' | 'notifier' | 'audit' | 'approval'>) {
+  return async (s: ScheduleRow): Promise<{ run: number } | { error: string }> => {
+    const a = readScheduleArgs(s.args)
+    const [rb] = a ? await d.db.select().from(d.schema.runbook).where(eq(d.schema.runbook.id, a.runbookId)) : []
+    if (!a || !rb) return { error: 'Its runbook no longer exists' }
+    const runs = d.schema.runbookRun
+    const starter = scheduleStarter(s.id)
+    const [live] = await d.db.select({ id: runs.id }).from(runs).where(and(eq(runs.startedById, starter), inArray(runs.status, ['pending', 'running'])))
+    if (live) return { error: `Its last run, #${live.id}, hasn't finished` }
+    const started = await startRun(d, rb, a.params, { userId: starter, username: `schedule:${s.name}`, role: 'admin' })
+    return 'error' in started ? { error: started.error } : { run: started.run.id }
+  }
+}
+
 /** Everyone with a role reads runbooks and their runs; admins write them; operators and admins run them. */
 export function runbookRoutes(d: RouteDeps) {
   const r = new Hono<Env>()
@@ -219,6 +290,8 @@ export function runbookRoutes(d: RouteDeps) {
     if (m.role !== 'admin') return c.json({ error: 'Only admins write runbooks' }, 403)
     const [row] = await d.db.select().from(t).where(eq(t.id, Number(c.req.param('id'))))
     if (!row) return c.json({ error: 'Not found' }, 404)
+    const user = (await scheduledRunbooks(d.db, d.schema)).find((x) => x.runbookId === row.id)
+    if (user) return c.json({ error: `The schedule "${user.name}" runs it; delete that schedule or pick another runbook for it first` }, 400)
     await d.db.delete(t).where(eq(t.id, row.id))
     await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.delete', target: row.name, outcome: 'ok' })
     return c.json({ ok: true })
@@ -230,19 +303,9 @@ export function runbookRoutes(d: RouteDeps) {
     const [rb] = await d.db.select().from(t).where(eq(t.id, Number(c.req.param('id'))))
     if (!rb) return c.json({ error: 'Not found' }, 404)
     const body = (await c.req.json().catch(() => ({}))) as { params?: Record<string, unknown> }
-    const resolved = resolveRunbook(view(rb), body.params ?? {})
-    if ('error' in resolved) return c.json({ error: resolved.error }, 400)
-    // like a change: with APPROVAL_REQUIRED=risky, an operator's run with a risky step waits for an admin
-    const pending = resolved.steps.some((s) => needsApproval(d.approval, m.role, s.fun, s.kwarg))
-    const steps: StepState[] = resolved.steps.map((s) => ({ ...s, status: 'waiting' }))
-    const [run] = await d.db
-      .insert(runs)
-      .values({ runbookId: rb.id, name: rb.name, params: JSON.stringify(resolved.values), steps: JSON.stringify(steps), status: pending ? 'pending' : 'running', startedBy: m.username, startedById: m.userId, startedAt: new Date() })
-      .returning()
-    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'console', fun: 'runbook.run', target: `#${run.id} ${rb.name}`, args: JSON.stringify(resolved.values), outcome: 'ok' })
-    if (pending) await d.notifier.emit('approval', runMessage(run, 'pending'))
-    else await d.runner.tick()
-    return c.json({ run: runView(run) }, 201)
+    const started = await startRun(d, rb, body.params ?? {}, { userId: m.userId, username: m.username, role: m.role })
+    if ('error' in started) return c.json({ error: started.error }, 400)
+    return c.json({ run: runView(started.run) }, 201)
   })
 
   r.get('/runbook-runs', async (c) => {

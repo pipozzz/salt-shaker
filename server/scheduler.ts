@@ -18,6 +18,7 @@ export const SCHEDULE_KINDS = {
   vulns: 'Vulnerability scan (package inventory)',
   osquery: 'osquery query (alert on changes)',
   function: 'Any function',
+  runbook: 'A runbook',
 } as const
 export type ScheduleKind = keyof typeof SCHEDULE_KINDS
 
@@ -99,6 +100,9 @@ export class Scheduler {
   /** for vulnerability scans: matches the inventories once they're in */
   vulns: VulnService | null = null
 
+  /** for runbook schedules: starts a run of the runbook, as the schedule */
+  runbooks: ((s: ScheduleRow) => Promise<{ run: number } | { error: string }>) | null = null
+
   constructor(db: Db, schema: Schema, salt: SaltService, notifier: Notifier, audit: Scheduler['audit']) {
     this.db = db
     this.schema = schema
@@ -152,7 +156,8 @@ export class Scheduler {
   }
 
   /** Starts a schedule's job now (from the tick, or "Run now" in the UI). */
-  async run(s: ScheduleRow) {
+  async run(s: ScheduleRow): Promise<{ jid: string } | { run: number } | null> {
+    if (s.kind === 'runbook') return this.runRunbook(s)
     const low = lowstateFor(s)
     const who = `schedule:${s.name}`
     try {
@@ -166,11 +171,24 @@ export class Scheduler {
       await this.record(ret.jid, low, ret.minions ?? [], who)
       await this.audit({ username: who, client: 'local_async', fun: low.fun, target: s.target, targetType: s.targetType, jid: ret.jid, outcome: 'ok' })
       this.pending.set(ret.jid, { schedule: s, minions: ret.minions ?? [], deadline: Date.now() + RESULT_DEADLINE_MS })
-      return ret.jid
+      return { jid: ret.jid }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
       await this.audit({ username: who, client: 'local_async', fun: low.fun, target: s.target, targetType: s.targetType, jid: null, outcome: 'error', error })
       await this.db.update(this.schema.schedule).set({ lastSummary: JSON.stringify({ error }) }).where(eq(this.schema.schedule.id, s.id))
+      return null
+    }
+  }
+
+  /** A runbook schedule starts a run; the run's steps and how it ended are on its own page. */
+  private async runRunbook(s: ScheduleRow) {
+    const summary = (v: unknown) => this.db.update(this.schema.schedule).set({ lastSummary: JSON.stringify(v) }).where(eq(this.schema.schedule.id, s.id))
+    try {
+      const r = this.runbooks ? await this.runbooks(s) : { error: 'Runbooks are not available' }
+      await summary(r)
+      return 'run' in r ? r : null
+    } catch (e) {
+      await summary({ error: e instanceof Error ? e.message : String(e) })
       return null
     }
   }

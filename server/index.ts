@@ -32,7 +32,7 @@ import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
 import { windowRoutes } from './windows'
-import { runbookRoutes, RunbookRunner } from './runbooks'
+import { runbookRoutes, RunbookRunner, runbookScheduler, scheduleUser } from './runbooks'
 import { smtpMailer } from './mail'
 import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
@@ -449,6 +449,8 @@ changeRunner.start()
 
 /** Who a runbook run acts as: its starter, while their account still may run commands. */
 async function activeUser(id: string): Promise<SessionUser | null> {
+  // a scheduled run acts as its schedule
+  if (id.startsWith('schedule:')) return scheduleUser(db, schema, id)
   const u = schema.user
   const [row] = await db.select({ id: u.id, name: u.name, username: u.username, role: u.role, banned: u.banned }).from(u).where(eq(u.id, id)).limit(1)
   if (!row || row.banned || !row.role || row.role === 'none' || row.role === 'viewer') return null
@@ -456,6 +458,7 @@ async function activeUser(id: string): Promise<SessionUser | null> {
 }
 const runbookRunner = new RunbookRunner({ db, schema, saltAs, loadUser: activeUser, notifier })
 runbookRunner.start()
+scheduler.runbooks = runbookScheduler({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval })
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 // first: Slack signs its requests instead of signing in, and targetRoutes' guard covers every /api route after it
 app.route('/api', slackRoutes({ db, schema, secret: config.slackSigningSecret, publicUrl: config.publicUrl, saltAs, audit }))

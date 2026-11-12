@@ -312,7 +312,7 @@ export const parseStoredArgs = (args: string | null): unknown[] => {
 
 // ---- automation (admin) ----
 
-export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function'
+export type ScheduleKind = 'compliance' | 'patches' | 'vulns' | 'osquery' | 'function' | 'runbook'
 export type NotifyEvent = 'drift' | 'patches' | 'vulns' | 'osquery' | 'acceptance' | 'approval' | 'change' | 'schedule' | 'job_failed' | 'pending_key' | 'minion_down' | 'report' | 'runbook'
 
 export interface Schedule {
@@ -320,7 +320,7 @@ export interface Schedule {
   name: string
   kind: ScheduleKind
   fun: string | null
-  args: { arg?: unknown[]; kwarg?: Record<string, unknown>; sql?: string } | null
+  args: { arg?: unknown[]; kwarg?: Record<string, unknown>; sql?: string; runbookId?: number; params?: Record<string, string> } | null
   target: string
   targetType: string
   cron: string
@@ -337,6 +337,8 @@ export interface Schedule {
   windowId: number | null
   /** compliance checks: fix the drift they find with a change */
   remedy: ScheduleRemedy | null
+  /** runbook schedules: the runbook it runs, null once it's gone */
+  runbookName?: string | null
 }
 
 export interface ScheduleRemedy {
@@ -351,13 +353,15 @@ export interface ScheduleRun {
   startedAt: string
   status: 'ok' | 'changed' | 'failed' | 'noreturn' | 'running'
   detail: string
+  /** runbook schedules: the run it started, instead of a job */
+  run?: number
 }
 
 export interface ScheduleInput {
   name: string
   kind: ScheduleKind
   fun?: string | null
-  args?: { arg: unknown[]; kwarg: Record<string, unknown> } | { sql: string } | null
+  args?: { arg: unknown[]; kwarg: Record<string, unknown> } | { sql: string } | { runbookId: number; params: Record<string, string> } | null
   target: string
   targetType: string
   cron: string
@@ -427,7 +431,7 @@ export const automation = {
   createSchedule: (s: ScheduleInput) => send('POST', '/api/schedules', s),
   updateSchedule: (id: number, s: Partial<ScheduleInput> & { enabled?: boolean }) => send('PATCH', `/api/schedules/${id}`, s),
   deleteSchedule: (id: number) => send('DELETE', `/api/schedules/${id}`),
-  runSchedule: (id: number) => send<{ jid: string }>('POST', `/api/schedules/${id}/run`, {}),
+  runSchedule: (id: number) => send<{ jid: string } | { run: number }>('POST', `/api/schedules/${id}/run`, {}),
   channels: () => request<{ channels: Channel[] }>('/api/notifications'),
   createChannel: (c: { name: string; kind: string; url: string; events: NotifyEvent[] }) => send<{ id: number; secret?: string }>('POST', '/api/notifications', c),
   /** a new signing secret for a JSON webhook; the old one stops working */

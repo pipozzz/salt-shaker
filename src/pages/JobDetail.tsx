@@ -6,8 +6,7 @@ import { ResultActions, ResultView } from '../components/ResultView'
 import { StopJobModal } from '../components/StopJob'
 import { Badge, Button, Card, CardHeader, ErrorBox, Spinner } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { history, parseStoredArgs } from '../api/server'
-import { SaltError, type JobDetail } from '../api/types'
+import { jobResults, loadJobDetail } from '../lib/job-detail'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { funTone } from '../lib/format'
 
@@ -19,29 +18,9 @@ export function JobDetailPage() {
   const { session } = useSession()
   const fromServer = session?.mode === 'server'
   // with the server, prefer its history (kept for weeks); the master's cache only keeps ~24h
-  const { data, error, loading, reload } = useAsync(async (): Promise<JobDetail> => {
-    if (fromServer) {
-      try {
-        const { job, returns } = await history.job(jid)
-        return {
-          jid,
-          Function: job.fun,
-          Arguments: parseStoredArgs(job.args),
-          Target: job.target ?? '',
-          'Target-type': job.targetType ?? 'glob',
-          User: job.shakerUser ?? job.saltUser ?? '',
-          StartTime: job.startedAt,
-          Minions: JSON.parse(job.minions ?? '[]') as string[],
-          Result: Object.fromEntries(returns.map((r) => [r.minion, { return: r.ret, retcode: r.retcode ?? undefined, success: r.success ?? undefined }])),
-        }
-      } catch (e) {
-        if (!(e instanceof SaltError && e.status === 404)) throw e
-      }
-    }
-    return salt.job(jid)
-  }, [salt, jid, fromServer])
+  const { data, error, loading, reload } = useAsync(() => loadJobDetail(salt, fromServer, jid), [salt, jid, fromServer])
 
-  const results = Object.fromEntries(Object.entries(data?.Result ?? {}).map(([id, r]) => [id, r.return]))
+  const results = jobResults(data)
   const missing = (data?.Minions ?? []).filter((m) => !(m in results))
   const target = Array.isArray(data?.Target) ? data.Target.join(',') : data?.Target
   // of the minions that haven't returned, which are still working on it

@@ -1,13 +1,16 @@
 import clsx from 'clsx'
-import { ArrowLeft, Check, CircleDashed, CircleX, Loader2, Minus, Square } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, CircleDashed, CircleX, Loader2, Minus, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { RunbookStepState } from '../api/server'
+import { ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, PageHeader, Spinner } from '../components/ui'
 import { formatArgs } from '../api/salt'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
+import { jobResults, loadJobDetail } from '../lib/job-detail'
 import { RUN_STATUS, useRunbookRole, useRunbooksApi } from '../lib/runbooks'
+import { useSalt, useSession } from '../lib/session'
 
 const STEP_ICON: Record<RunbookStepState['status'], { icon: typeof Check; cls: string; label: string }> = {
   waiting: { icon: CircleDashed, cls: 'text-zinc-400', label: 'waiting' },
@@ -136,6 +139,7 @@ export function RunbookRunPage() {
                         </p>
                       )}
                       {s.error && <p className="mt-1 text-xs text-red-700 dark:text-red-400">{s.error}</p>}
+                      {s.jid && <StepOutput key={s.jid} name={s.name} jid={s.jid} minions={s.minions ?? []} open={s.status === 'failed'} refresh={s.status === 'running' ? tick : 0} />}
                     </div>
                   </li>
                 )
@@ -145,5 +149,38 @@ export function RunbookRunPage() {
         </>
       )}
     </>
+  )
+}
+
+/**
+ * What each minion returned for a step, under the step, as on its job's page. Loaded when opened;
+ * a failed step starts open, and a running one refreshes with the run.
+ */
+function StepOutput({ name, jid, minions, open: startOpen, refresh }: { name: string; jid: string; minions: string[]; open: boolean; refresh: number }) {
+  const [open, setOpen] = useState(startOpen)
+  const salt = useSalt()
+  const { session } = useSession()
+  const fromServer = session?.mode === 'server'
+  const job = useAsync(() => (open ? loadJobDetail(salt, fromServer, jid) : Promise.resolve(null)), [open, salt, fromServer, jid, refresh])
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`${open ? 'Hide' : 'Show'} the output of ${name}`}
+        className="inline-flex items-center gap-0.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      >
+        <ChevronRight className={clsx('size-3.5 transition-transform', open && 'rotate-90')} aria-hidden />
+        Output
+      </button>
+      {open && (
+        <div className="mt-2">
+          {job.error && <ErrorBox error={job.error} onRetry={job.reload} />}
+          {!job.data && job.loading && <Spinner />}
+          {job.data && <ResultView results={jobResults(job.data)} expected={minions} />}
+        </div>
+      )}
+    </div>
   )
 }

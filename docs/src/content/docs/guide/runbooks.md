@@ -26,7 +26,7 @@ A value is put *into* an argument, after the arguments are split: a value of `ng
 2. waits for its minions to return, for up to 15 minutes; a minion that doesn't return counts as failed;
 3. stops the run when it fails on any minion, unless it may fail. The steps after it are skipped.
 
-The run's page shows each step with its minions, which failed and a link to its job, and refreshes while it runs. Whoever started it, or an admin, can **Stop** it: the step that's running finishes, and nothing after it starts. **Recent runs** lists them all; operators and viewers see them too.
+The run's page shows each step with its minions, which failed and a link to its job, and refreshes while it runs. **Output** under a step shows what each minion returned, failures first, as on the job's page; a step that failed shows it right away. Whoever started it, or an admin, can **Stop** it: the step that's running finishes, and nothing after it starts. **Recent runs** lists them all; operators and viewers see them too.
 
 Viewers read runbooks and their runs but don't run them.
 

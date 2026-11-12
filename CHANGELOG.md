@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks**
+
+- A run's page shows what each minion returned under each step, failures first, without opening the job; a step that failed shows it right away, and a running one fills in as minions return.
+
 ## 1.26.0
 
 **Runbooks from a webhook**

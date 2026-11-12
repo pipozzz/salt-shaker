@@ -386,6 +386,11 @@ test('a runbook runs step by step and stops at the step that fails', async ({ pa
   await expect(steps.getByRole('listitem', { name: 'Restart: failed' })).toContainText('failed: web-02')
   await expect(steps.getByRole('listitem', { name: 'Make sure it runs: skipped' })).toBeVisible()
   await expect(page.getByText('Restart failed on 1 minion: web-02')).toBeVisible()
+  // the failed step shows what each minion returned; the others open on request
+  await expect(steps.getByRole('listitem', { name: 'Restart: failed' })).toContainText('Job for nginx.service failed: the unit is not available.')
+  const check = steps.getByRole('listitem', { name: 'Check the configuration: done' })
+  await check.getByRole('button', { name: 'Show the output of Check the configuration' }).click()
+  await expect(check).toContainText('nginx -t: executed on web-01')
 
   // admins write them; a step can only use the values it asks for
   await page.getByRole('link', { name: 'Runbooks', exact: true }).first().click()

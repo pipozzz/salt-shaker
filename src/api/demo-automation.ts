@@ -1,4 +1,5 @@
 import { Cron } from 'croner'
+import { readRecipients } from '../lib/recipients'
 import { nextOpening, openingAt } from '../lib/windows'
 import { demoWindowList } from './demo-windows'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
@@ -202,8 +203,10 @@ export const demoAutomation: typeof automation = {
   channels: () => delay({ channels: channels.map((c) => ({ ...c })) }),
   createChannel: (c) => {
     if (!c.name.trim()) return fail('Name is required')
-    if (!/^https?:\/\//.test(c.url)) return fail('Webhook URL must use http or https')
-    const masked = (() => {
+    const recipients = c.kind === 'email' ? readRecipients(c.url) : null
+    if (recipients && 'error' in recipients) return fail(recipients.error)
+    if (!recipients && !/^https?:\/\//.test(c.url)) return fail('Webhook URL must use http or https')
+    const masked = recipients ? recipients.to.join(', ') : (() => {
       const u = new URL(c.url)
       return `${u.protocol}//${u.host}/…${(u.pathname + u.search).slice(-4)}`
     })()

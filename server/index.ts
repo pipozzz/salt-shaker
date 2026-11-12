@@ -32,6 +32,7 @@ import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
 import { windowRoutes } from './windows'
+import { smtpMailer } from './mail'
 import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
@@ -87,6 +88,7 @@ const acceptedMinions = async () => (await keyList())?.ids ?? null
 const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions })
 const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
+if (config.smtpUrl) notifier.mail = smtpMailer(config.smtpUrl, config.smtpFrom)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
 const weeklyReport = new WeeklyReport({ db, schema, accepted: acceptedMinions, send: (m) => notifier.emit('report', m) })

@@ -25,6 +25,10 @@ export interface Config {
   approval: 'off' | 'risky'
   /** the Slack app's signing secret, for the /salt command; null leaves Slack off */
   slackSigningSecret: string | null
+  /** SMTP for email notifications, e.g. smtp://user:pass@mail.example.com:587; null leaves email off */
+  smtpUrl: string | null
+  /** the sender of those emails */
+  smtpFrom: string
   /** what this instance (and its master) is called in the instance switcher, e.g. prod-eu */
   instanceName: string
   /** Behind a reverse proxy: take the client IP from X-Forwarded-For instead of the socket. */
@@ -112,6 +116,8 @@ export function loadConfig(): Config {
     presenceMinutes: Math.max(0, Number(process.env.PRESENCE_CHECK_MINUTES ?? 5) || 0),
     approval: process.env.APPROVAL_REQUIRED === 'risky' ? 'risky' : 'off',
     slackSigningSecret: process.env.SLACK_SIGNING_SECRET?.trim() || null,
+    smtpUrl: process.env.SMTP_URL?.trim() || null,
+    smtpFrom: process.env.SMTP_FROM?.trim() || `Salt Shaker <salt-shaker@${hostOf(process.env.PUBLIC_URL) ?? 'localhost'}>`,
     instanceName: process.env.INSTANCE_NAME?.trim() || hostOf(process.env.PUBLIC_URL) || 'salt-shaker',
     osvApiUrl: (process.env.OSV_API_URL ?? 'https://api.osv.dev').replace(/\/+$/, ''),
     trustedOrigins: (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),

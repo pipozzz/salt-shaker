@@ -21,6 +21,8 @@ The server is configured with environment variables.
 | `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
 | `AUDIT_RETENTION_DAYS` | forever | how long [audit log](/salt-shaker/guide/users-audit/#audit-log) entries are kept, e.g. `365`; unset or `0` keeps them all |
 | `APPROVAL_REQUIRED` | `off` | `risky`: an operator's command that changes minions becomes a [change](/salt-shaker/guide/changes/) an admin approves before it runs |
+| `SMTP_URL` | off | SMTP server for [email notifications](/salt-shaker/guide/schedules/#email), e.g. `smtp://user:pass@smtp.example.com:587` |
+| `SMTP_FROM` | `Salt Shaker <salt-shaker@…>` | the sender of those emails; defaults to the host of `PUBLIC_URL` |
 | `SLACK_SIGNING_SECRET` | off | the Slack app's signing secret, for the [/salt command](/salt-shaker/guide/slack/) |
 | `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert and the last-answered dates behind *Quiet for a while* on the Keys page; `0` turns it off |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/) and the [weekly report](/salt-shaker/guide/schedules/#weekly-report), e.g. `Europe/Bratislava` |

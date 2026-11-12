@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { Db, Schema } from './db'
 import type { JobRet } from './history'
+import { mailFor, readRecipients, type SendMail } from './mail'
 import { jobFailedMessage, pendingKeyMessage, type Message } from './summaries'
 
 export const EVENTS = {
@@ -21,7 +22,7 @@ export const EVENTS = {
 export type NotifyEvent = keyof typeof EVENTS
 export const isEvent = (e: unknown): e is NotifyEvent => typeof e === 'string' && e in EVENTS
 
-export const CHANNEL_KINDS = ['slack', 'teams', 'webhook'] as const
+export const CHANNEL_KINDS = ['slack', 'teams', 'webhook', 'email'] as const
 export type ChannelKind = (typeof CHANNEL_KINDS)[number]
 
 const ICON = { info: 'ℹ️', warning: '⚠️', error: '🔴' }
@@ -81,6 +82,8 @@ export class Notifier {
   private publicUrl: string
   private failures = new Map<string, { fun: string; by: string | null; minions: Set<string> }>()
   private pendingSeen = new Map<string, number>()
+  /** sends email channels' messages; null when SMTP_URL isn't set */
+  mail: SendMail | null = null
 
   constructor(db: Db, schema: Schema, publicUrl: string) {
     this.db = db
@@ -104,20 +107,7 @@ export class Notifier {
     const t = this.schema.notificationChannel
     let error: string | null = null
     try {
-      const body = JSON.stringify(payloadFor(kind, event, msg, this.publicUrl))
-      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'User-Agent': 'salt-shaker' }
-      if (secret && kind === 'webhook') {
-        const ts = Math.floor(Date.now() / 1000)
-        headers['X-Salt-Shaker-Timestamp'] = String(ts)
-        headers['X-Salt-Shaker-Signature'] = `sha256=${signWebhook(secret, ts, body)}`
-      }
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body,
-        signal: AbortSignal.timeout(10_000),
-      })
-      if (!res.ok) error = `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`
+      error = kind === 'email' ? await this.sendMail(url, msg) : await this.post(kind, url, event, msg, secret)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     }
@@ -128,6 +118,27 @@ export class Notifier {
     }
     if (error) console.warn(`notify: channel ${id} failed: ${error}`)
     return error
+  }
+
+  private async post(kind: string, url: string, event: NotifyEvent, msg: Message, secret?: string | null) {
+    const body = JSON.stringify(payloadFor(kind, event, msg, this.publicUrl))
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'User-Agent': 'salt-shaker' }
+    if (secret && kind === 'webhook') {
+      const ts = Math.floor(Date.now() / 1000)
+      headers['X-Salt-Shaker-Timestamp'] = String(ts)
+      headers['X-Salt-Shaker-Signature'] = `sha256=${signWebhook(secret, ts, body)}`
+    }
+    const res = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(10_000) })
+    return res.ok ? null : `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`
+  }
+
+  /** For email channels the "url" column holds the recipients. */
+  private async sendMail(recipients: string, msg: Message) {
+    const r = readRecipients(recipients)
+    if ('error' in r) return r.error
+    if (!this.mail) return 'Email is off: set SMTP_URL on the server'
+    await this.mail(mailFor(msg, r.to, this.publicUrl))
+    return null
   }
 
   /** Fed by the history recorder for every job return. */

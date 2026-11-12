@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, newWebhookSecret, type Notifier } from '../notify'
+import { readRecipients } from '../mail'
 import { recentScheduleRuns } from '../schedule-runs'
 import { nextRun, runsAt, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
 import { loadWindows } from '../windows'
@@ -39,6 +40,17 @@ function validateUrl(url: string) {
   if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new BadRequest('Webhook URL must use http or https')
 }
 
+/** Where a channel sends: a webhook URL, or for email a clean list of recipients. */
+function readDestination(kind: string, raw: string) {
+  if (kind !== 'email') {
+    validateUrl(raw)
+    return raw
+  }
+  const r = readRecipients(raw)
+  if ('error' in r) throw new BadRequest(r.error)
+  return r.to.join(', ')
+}
+
 /** Webhook URLs embed secrets; show only enough to recognize them. */
 export function maskUrl(url: string) {
   try {
@@ -70,7 +82,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
   }
 
   r.get('/automation/meta', (c) =>
-    c.json({ kinds: SCHEDULE_KINDS, events: EVENTS, channelKinds: CHANNEL_KINDS, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+    c.json({ kinds: SCHEDULE_KINDS, events: EVENTS, channelKinds: CHANNEL_KINDS, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, email: !!notifier.mail }),
   )
 
   // ---- schedules ----
@@ -178,15 +190,15 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
   r.get('/notifications', async (c) => {
     const rows = await db.select().from(n).orderBy(asc(n.name))
     // the secret is shown once, when it's made; the list only says whether there is one
-    return c.json({ channels: rows.map(({ url, secret, ...ch }) => ({ ...ch, url: maskUrl(url), events: JSON.parse(ch.events), signed: !!secret })) })
+    // recipients aren't secret, webhook URLs are
+    return c.json({ channels: rows.map(({ url, secret, ...ch }) => ({ ...ch, url: ch.kind === 'email' ? url : maskUrl(url), events: JSON.parse(ch.events), signed: !!secret })) })
   })
 
   r.post('/notifications', async (c) => {
     const body = (await c.req.json()) as Record<string, unknown>
     const kind = str(body.kind, 'Kind', { max: 20 })!
     if (!(CHANNEL_KINDS as readonly string[]).includes(kind)) throw new BadRequest('Unknown channel kind')
-    const url = str(body.url, 'Webhook URL', { max: 2000 })!
-    validateUrl(url)
+    const url = readDestination(kind, str(body.url, kind === 'email' ? 'Recipients' : 'Webhook URL', { max: 2000 })!)
     const secret = kind === 'webhook' ? newWebhookSecret() : null
     const values = { name: str(body.name, 'Name', { max: 80 })!, kind, url, events: readEvents(body.events), enabled: true, secret, createdAt: new Date() }
     const [row] = await db.insert(n).values(values).returning({ id: n.id })
@@ -204,12 +216,9 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     if (body.events !== undefined) changes.events = readEvents(body.events)
     if (typeof body.enabled === 'boolean') changes.enabled = body.enabled
     // the URL is only replaced when a new one is sent; the masked one never comes back
-    if (typeof body.url === 'string' && body.url.trim()) {
-      validateUrl(body.url.trim())
-      changes.url = body.url.trim()
-    }
+    if (typeof body.url === 'string' && body.url.trim()) changes.url = readDestination(current.kind, body.url.trim())
     await db.update(n).set(changes).where(eq(n.id, id))
-    await audit({ ...who(c), client: 'admin', fun: 'notification.update', target: current.name, args: JSON.stringify({ ...changes, url: changes.url ? maskUrl(changes.url) : undefined }), outcome: 'ok' })
+    await audit({ ...who(c), client: 'admin', fun: 'notification.update', target: current.name, args: JSON.stringify({ ...changes, url: changes.url ? (current.kind === 'email' ? changes.url : maskUrl(changes.url)) : undefined }), outcome: 'ok' })
     return c.json({ ok: true })
   })
 

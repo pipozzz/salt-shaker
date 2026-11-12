@@ -372,6 +372,21 @@ test('the demo has notification channels to try, and JSON webhooks get a signing
   await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
 })
 
+test('a notification channel can send email to a list of people', async ({ page }) => {
+  await openDemo(page, '/notifications')
+  await page.getByRole('button', { name: 'Add channel' }).click()
+  await page.getByLabel('Name').fill('Management')
+  await page.getByLabel('Format').selectOption('email')
+  await page.getByLabel('Recipients').fill('cto@example.com, nope')
+  await page.getByRole('button', { name: 'Add channel' }).last().click()
+  await expect(page.getByText('"nope" is not an email address')).toBeVisible()
+  await page.getByLabel('Recipients').fill('CTO@example.com, ops@example.com')
+  await page.getByRole('button', { name: 'Add channel' }).last().click()
+  const mgmt = page.getByRole('listitem').filter({ hasText: 'Management' })
+  await expect(mgmt.getByText('Email', { exact: true })).toBeVisible()
+  await expect(mgmt).toContainText('cto@example.com, ops@example.com')
+})
+
 test('the demo audits what is done in it, and what was denied', async ({ page }) => {
   await openDemo(page, `/run?${new URLSearchParams({ tgt: 'web-01', tgt_type: 'list', fun: 'cmd.run', args: "'hostname'" })}`)
   await page.getByRole('button', { name: 'Run on 1' }).click()

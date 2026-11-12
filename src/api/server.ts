@@ -357,7 +357,8 @@ export interface ScheduleInput {
 export interface Channel {
   id: number
   name: string
-  kind: 'slack' | 'teams' | 'webhook'
+  kind: 'slack' | 'teams' | 'webhook' | 'email'
+  /** a masked webhook URL, or for email the recipients */
   url: string
   events: NotifyEvent[]
   enabled: boolean
@@ -371,6 +372,8 @@ export interface AutomationMeta {
   kinds: Record<ScheduleKind, string>
   events: Record<NotifyEvent, string>
   timezone: string
+  /** whether the server can send email (SMTP_URL is set) */
+  email?: boolean
 }
 
 const send = <T>(method: string, path: string, body?: unknown) => request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })

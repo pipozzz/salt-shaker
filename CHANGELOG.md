@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Email notifications**
+
+- A notification channel can now be **Email**: up to 20 recipients, each message as a plain email with a link back, so the weekly report and alerts reach people outside chat. Set `SMTP_URL` (and `SMTP_FROM`) on the server; see [Email](https://pipozzz.github.io/salt-shaker/guide/schedules/#email).
+
 **Maintenance windows**
 
 - Admins set when changes are expected on **System → Maintenance windows** (weekdays, a local start time, how long, a time zone). A schedule tied to a window waits for it to open instead of running at its cron slot, and Run and Changes say when you're outside every window and when the next opens. See [Maintenance windows](https://pipozzz.github.io/salt-shaker/guide/schedules/#maintenance-windows).

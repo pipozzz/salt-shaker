@@ -37,7 +37,7 @@ Removing a window frees the schedules that waited for it; they run on their cron
 
 ## Notifications
 
-**Notifications** sends alerts to webhooks. Each channel picks which events it gets:
+**Notifications** sends alerts to chat webhooks and by email. Each channel picks which events it gets:
 
 | Event | When |
 | --- | --- |
@@ -58,10 +58,11 @@ Minions that are already down when the server starts are not reported, only the 
 
 For people who don't open the console every day, the **Weekly report** sums up the last seven days in a few lines: how many minions are accepted, not answering and quiet for 30+ days; jobs run and failed; changes rolled out, stopped and waiting for approval; critical and high vulnerabilities with the change since a week earlier; and how many commands came from the console and the API, by how many people. It goes out on Mondays at 8:00 in the server's time zone (set `TZ` on the container to pick yours), once per week, to the channels that tick it. The Notifications page shows it as it stands now, with **Send now**.
 
-There are three formats:
+There are four formats:
 
 - **Slack-compatible**, for Slack incoming webhooks. Mattermost and Rocket.Chat accept it too, and so does Discord if you append `/slack` to its webhook URL.
 - **Microsoft Teams**, an Adaptive Card with a link back. In Teams, add the *Post to a channel when a webhook request is received* workflow to the channel (channel **⋯ → Workflows**) and paste the URL it gives you. The older Office 365 connectors are retired and are not supported.
+- **Email**, for people who don't live in chat: up to 20 recipients per channel (use a mailing list for more), each message as a plain email with a link back. The weekly report is a good fit. Email needs an SMTP server, set once on the server, see [Email](#email) below.
 - **Generic JSON webhook**, for anything else:
 
 ```json
@@ -75,6 +76,18 @@ There are three formats:
   "at": "2026-11-01T19:25:33.211Z"
 }
 ```
+
+### Email
+
+Set `SMTP_URL` on the server to send email, with the credentials and port in the URL:
+
+```sh
+SMTP_URL=smtp://salt-shaker:app-password@smtp.example.com:587   # STARTTLS
+SMTP_URL=smtps://salt-shaker:app-password@smtp.example.com:465  # TLS from the start
+SMTP_FROM="Salt Shaker <salt-shaker@example.com>"
+```
+
+`SMTP_FROM` defaults to `salt-shaker@` the host of `PUBLIC_URL`; most mail servers only accept a sender they're allowed to send as. Characters like `@` or `:` in the user name or password must be percent-encoded (`%40`, `%3A`). Without `SMTP_URL` you can still add email channels, but **Test** and every message say that email is off, and the error shows on the channel.
 
 ### Signed webhooks
 

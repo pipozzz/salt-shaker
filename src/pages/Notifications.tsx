@@ -10,6 +10,7 @@ const FORMAT: Record<Channel['kind'], { label: string; placeholder: string }> = 
   slack: { label: 'Slack format', placeholder: 'https://hooks.slack.com/services/…' },
   teams: { label: 'Microsoft Teams', placeholder: 'https://….logic.azure.com/workflows/…' },
   webhook: { label: 'JSON webhook', placeholder: 'https://alerts.example.com/salt' },
+  email: { label: 'Email', placeholder: 'ops@example.com, cto@example.com' },
 }
 
 const EVENT_SHORT: Record<NotifyEvent, string> = {
@@ -156,7 +157,7 @@ export function NotificationsPage() {
       <WeeklyReportCard subscribed={list.data?.channels.filter((ch) => ch.enabled && ch.events.includes('report')).length ?? 0} onSent={list.reload} />
 
       {editing && (
-        <ChannelModal channel={editing === 'new' ? null : editing} events={meta.data?.events} onClose={() => setEditing(null)} onSaved={list.reload} onSecret={(name, value) => setSecret({ name, value })} />
+        <ChannelModal channel={editing === 'new' ? null : editing} events={meta.data?.events} emailOff={meta.data?.email === false} onClose={() => setEditing(null)} onSaved={list.reload} onSecret={(name, value) => setSecret({ name, value })} />
       )}
 
       <Modal open={!!rotating} onClose={() => setRotating(null)} title={rotating?.signed ? 'New signing secret?' : 'Sign this webhook?'}>
@@ -252,7 +253,7 @@ function SecretModal({ name, value, onClose }: { name: string; value: string; on
   )
 }
 
-function ChannelModal({ channel, events, onClose, onSaved, onSecret }: { channel: Channel | null; events?: Record<NotifyEvent, string>; onClose: () => void; onSaved: () => void; onSecret: (name: string, secret: string) => void }) {
+function ChannelModal({ channel, events, emailOff, onClose, onSaved, onSecret }: { channel: Channel | null; events?: Record<NotifyEvent, string>; emailOff?: boolean; onClose: () => void; onSaved: () => void; onSecret: (name: string, secret: string) => void }) {
   const api = useAutomationApi()
   const [name, setName] = useState(channel?.name ?? '')
   const [kind, setKind] = useState<Channel['kind']>(channel?.kind ?? 'slack')
@@ -292,12 +293,28 @@ function ChannelModal({ channel, events, onClose, onSaved, onSecret }: { channel
               <option value="slack">Slack-compatible</option>
               <option value="teams">Microsoft Teams</option>
               <option value="webhook">Generic JSON webhook</option>
+              <option value="email">Email</option>
             </Select>
           </Field>
         </div>
-        <Field label="Webhook URL" hint={channel ? `Currently ${channel.url}. Leave empty to keep it.` : 'Stored on the server and never shown in full again.'}>
-          <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={FORMAT[kind].placeholder} required={!channel} className="font-mono" />
-        </Field>
+        {kind === 'email' ? (
+          <Field
+            label="Recipients"
+            hint={
+              emailOff
+                ? 'Email is off on this server: set SMTP_URL (and SMTP_FROM) to send. You can add the channel now.'
+                : channel
+                  ? `Currently ${channel.url}. Leave empty to keep them.`
+                  : 'Up to 20 addresses, separated by commas. Use a mailing list for more.'
+            }
+          >
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={FORMAT.email.placeholder} required={!channel} aria-label="Recipients" />
+          </Field>
+        ) : (
+          <Field label="Webhook URL" hint={channel ? `Currently ${channel.url}. Leave empty to keep it.` : 'Stored on the server and never shown in full again.'}>
+            <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={FORMAT[kind].placeholder} required={!channel} className="font-mono" />
+          </Field>
+        )}
         <fieldset className="space-y-2">
           <legend className="mb-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">Send when</legend>
           {Object.entries(events ?? EVENT_SHORT).map(([key, label]) => (

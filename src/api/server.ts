@@ -334,6 +334,15 @@ export interface Schedule {
   recentRuns: ScheduleRun[]
   /** the maintenance window it waits for, if any */
   windowId: number | null
+  /** compliance checks: fix the drift they find with a change */
+  remedy: ScheduleRemedy | null
+}
+
+export interface ScheduleRemedy {
+  /** minions at a time: a number or a share like 25%; null for all at once */
+  batchSize: string | null
+  /** it stops when more minions than this have failed */
+  maxFailures: number
 }
 
 export interface ScheduleRun {
@@ -352,6 +361,7 @@ export interface ScheduleInput {
   targetType: string
   cron: string
   windowId?: number | null
+  remedy?: ScheduleRemedy | null
 }
 
 export interface Channel {

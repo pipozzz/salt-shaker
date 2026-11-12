@@ -31,6 +31,35 @@ function add(c: Omit<Change, 'id'>) {
 }
 // one waiting for approval
 add({ reason: 'Patch openssl on the database servers (DEMO-2026-0101)', target: 'db-*', targetType: 'glob', fun: 'pkg.install', args: { arg: [], kwarg: { pkgs: ['openssl', 'libssl3'], only_upgrade: true } }, batchSize: '1', maxFailures: 0, status: 'pending', requestedBy: 'olga', requestedById: 'u2', requestedAt: ago(14), decidedBy: null, decidedAt: null, decisionNote: null, minions: null, batches: [], startedAt: null, finishedAt: null, error: null })
+// last night's compliance check found web-02 drifted, and its schedule fixed it
+export const demoRemedyChange = (() => {
+  const at = new Date()
+  at.setHours(2, 6, 0, 0)
+  if (+at > Date.now()) at.setDate(at.getDate() - 1)
+  const iso = (d: Date) => d.toISOString()
+  const job = demoJob('web-02', 'list', 'state.apply', [], {}, 'schedule:Nightly compliance', at, true)
+  return add({
+    reason: 'Fix the drift that "Nightly compliance" found',
+    target: 'web-02',
+    targetType: 'list',
+    fun: 'state.apply',
+    args: { arg: [], kwarg: {} },
+    batchSize: '50%',
+    maxFailures: 1,
+    status: 'done',
+    requestedBy: 'schedule:Nightly compliance',
+    requestedById: null,
+    requestedAt: iso(at),
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: null,
+    minions: ['web-02'],
+    batches: [{ jid: job?.jid ?? null, minions: ['web-02'], startedAt: iso(at) }],
+    startedAt: iso(at),
+    finishedAt: iso(new Date(+at + 3 * 60_000)),
+    error: null,
+  }).id
+})()
 
 const find = (id: number) => list.find((c) => c.id === id)
 
@@ -96,7 +125,8 @@ function outcome(c: Change): Record<string, MinionOutcome> {
 const audit = (fun: string, c: Change, args?: object) => recordDemoAudit({ username: 'demo', client: 'console', fun, target: `#${c.id} ${c.fun} → ${c.target}`, args: args ? JSON.stringify(args) : null, outcome: 'ok' })
 
 export const demoChanges: typeof changes = {
-  list: () => delay({ changes: list.map((c) => ({ ...c, batches: [...c.batches] })), approval: 'risky' as const }),
+  // newest first, like the server (the seeded ones aren't added in time order)
+  list: () => delay({ changes: [...list].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)).map((c) => ({ ...c, batches: [...c.batches] })), approval: 'risky' as const }),
   get: (id: number) => {
     const c = find(id)
     return c ? delay({ change: { ...c, batches: [...c.batches] }, outcome: outcome(c) }) : fail('Not found')

@@ -38,13 +38,19 @@ function Summary({ s }: { s: Schedule }) {
   if (!sum) return <span className="text-xs text-zinc-500 dark:text-zinc-400">{s.lastRunAt ? 'collecting results…' : 'never ran'}</span>
   if (typeof sum.error === 'string') return <span className="text-xs text-red-600 dark:text-red-400">{sum.error}</span>
   if (s.kind === 'compliance') {
-    const c = sum as { ok: number; drift: number; error: number; noreturn: number }
+    const c = sum as { ok: number; drift: number; error: number; noreturn: number; remedyChange?: number; remedyMinions?: number; remedySkipped?: string }
     return (
       <span className="flex flex-wrap gap-1">
         <Badge tone="green">{c.ok} ok</Badge>
         {c.drift > 0 && <Badge tone="amber">{c.drift} drifted</Badge>}
         {c.error > 0 && <Badge tone="red">{c.error} {c.error === 1 ? 'error' : 'errors'}</Badge>}
         {c.noreturn > 0 && <Badge>{c.noreturn} no return</Badge>}
+        {c.remedyChange && (
+          <Link to={`/changes/${c.remedyChange}`} title={`Fixing ${c.remedyMinions} drifted ${c.remedyMinions === 1 ? 'minion' : 'minions'}`}>
+            <Badge tone="blue">fixing in #{c.remedyChange}</Badge>
+          </Link>
+        )}
+        {c.remedySkipped && <Badge title={`Not fixed: ${c.remedySkipped}`}>not fixed</Badge>}
       </span>
     )
   }
@@ -238,6 +244,7 @@ export function SchedulesPage() {
                   <p className="text-zinc-500 dark:text-zinc-400">
                     {s.cronError ? <span className="text-red-600">{s.cronError}</span> : s.nextRunAt ? `next ${untilTime(new Date(s.nextRunAt))}` : 'paused'}
                   </p>
+                  {s.remedy && <p className="text-zinc-500 dark:text-zinc-400">fixes drift{s.remedy.batchSize ? `, ${s.remedy.batchSize} at a time` : ''}</p>}
                   {windowName(s.windowId) && (
                     <p className="text-zinc-500 dark:text-zinc-400" title="Waits for this maintenance window when it comes due outside it">
                       in <span className="font-medium text-zinc-700 dark:text-zinc-300">{windowName(s.windowId)}</span>
@@ -346,6 +353,9 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
   const [preset, setPreset] = useState(presetLabel(initialCron) ? initialCron : 'custom')
   const [cron, setCron] = useState(initialCron)
   const [windowId, setWindowId] = useState<number | null>(schedule?.windowId ?? null)
+  const [fixDrift, setFixDrift] = useState(!!schedule?.remedy)
+  const [batchSize, setBatchSize] = useState(schedule?.remedy?.batchSize ?? '25%')
+  const [maxFailures, setMaxFailures] = useState(schedule?.remedy?.maxFailures ?? 0)
   const windowsApi = useMaintenanceApi()
   const windows = useAsync(() => (windowsApi ? windowsApi.list() : Promise.resolve(null)), [windowsApi])
   const [error, setError] = useState<Error | null>(null)
@@ -362,6 +372,7 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
       targetType: tgtType,
       cron: (preset === 'custom' ? cron : preset).trim(),
       windowId,
+      remedy: kind === 'compliance' && fixDrift ? { batchSize: batchSize.trim() || null, maxFailures } : null,
       ...(kind === 'function' ? { fun: fun.trim(), args: parseArgs(args) } : kind === 'osquery' ? { args: { sql: sql.trim() } } : {}),
     }
     try {
@@ -393,6 +404,30 @@ function ScheduleModal({ schedule, draft, kinds, onClose, onSaved }: { schedule:
             </Select>
           </Field>
         </div>
+        {kind === 'compliance' && (
+          <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={fixDrift} onChange={(e) => setFixDrift(e.target.checked)} className="accent-accent-600" />
+              Fix the drift it finds
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">applies the highstate to the drifted minions, as a change</span>
+            </label>
+            {fixDrift && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Batch size" hint="Minions at a time: a number, or a share like 25%">
+                    <Input value={batchSize} onChange={(e) => setBatchSize(e.target.value)} className="font-mono" aria-label="Batch size" />
+                  </Field>
+                  <Field label="Failures allowed" hint="It stops when more minions than this have failed">
+                    <Input type="number" min={0} value={maxFailures} onChange={(e) => setMaxFailures(Math.max(0, Number(e.target.value) || 0))} aria-label="Failures allowed" />
+                  </Field>
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Minions with errors are left for a person. With a window under <strong>Only in</strong>, the check and the fix both happen inside it; a new fix waits until the last one has finished.
+                </p>
+              </>
+            )}
+          </div>
+        )}
         {kind === 'function' && (
           <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr]">
             <Field label="Function">

@@ -141,6 +141,13 @@
       "when": 1794420096980,
       "tag": "0019_maintenance_window",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1794471552025,
+      "tag": "0020_schedule_remedy",
+      "breakpoints": true
     }
   ]
 }

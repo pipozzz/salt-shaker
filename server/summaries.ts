@@ -22,6 +22,11 @@ export function complianceStatus(summary: string | null): 'ok' | 'drift' | 'erro
   return s.pending + s.changed ? 'drift' : 'ok'
 }
 
+/** The minions a compliance check found drifted (pending changes, no errors): what a remedy applies. */
+export function driftedMinions(returns: Array<Pick<StoredReturn, 'summary'> & { minion: string }>) {
+  return returns.filter((r) => complianceStatus(r.summary) === 'drift').map((r) => r.minion).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+}
+
 /** Same buckets as the Compliance page. */
 export function complianceCounts(returns: Array<Pick<StoredReturn, 'summary'>>, expectedMinions: number): ComplianceCounts {
   const counts = { ok: 0, drift: 0, error: 0, noreturn: 0 }

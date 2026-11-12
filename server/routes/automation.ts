@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
 import { CHANNEL_KINDS, EVENTS, isEvent, newWebhookSecret, type Notifier } from '../notify'
+import { validBatchSize } from '../changes'
 import { readRecipients } from '../mail'
 import { recentScheduleRuns } from '../schedule-runs'
 import { nextRun, runsAt, SCHEDULE_KINDS, type ScheduleKind, type Scheduler } from '../scheduler'
@@ -107,7 +108,16 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     }
     const windowId = body.windowId === null || body.windowId === undefined || body.windowId === '' ? null : Number(body.windowId)
     if (windowId !== null && !Number.isInteger(windowId)) throw new BadRequest('Unknown maintenance window')
-    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron, windowId }
+    let remedy: string | null = null
+    if (kind === 'compliance' && body.remedy && typeof body.remedy === 'object') {
+      const r = body.remedy as { batchSize?: unknown; maxFailures?: unknown }
+      const batchSize = typeof r.batchSize === 'string' ? r.batchSize.trim() : ''
+      if (!validBatchSize(batchSize)) throw new BadRequest('Batch size is a number of minions or a percentage, like 25%')
+      const maxFailures = Number(r.maxFailures ?? 0)
+      if (!Number.isInteger(maxFailures) || maxFailures < 0) throw new BadRequest('Allowed failures is a whole number')
+      remedy = JSON.stringify({ batchSize: batchSize || null, maxFailures })
+    }
+    return { name: str(body.name, 'Name', { max: 80 })!, kind, fun, args, target: str(body.target, 'Target')!, targetType, cron, windowId, remedy }
   }
 
   const checkWindow = async (windowId: number | null) => {
@@ -129,7 +139,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
         } catch (e) {
           cronError = e instanceof Error ? e.message : String(e)
         }
-        return { ...s, args: s.args ? JSON.parse(s.args) : null, lastSummary: s.lastSummary ? JSON.parse(s.lastSummary) : null, nextRunAt: next, cronError, recentRuns: runs.get(s.name) ?? [] }
+        return { ...s, remedy: s.remedy ? JSON.parse(s.remedy) : null, args: s.args ? JSON.parse(s.args) : null, lastSummary: s.lastSummary ? JSON.parse(s.lastSummary) : null, nextRunAt: next, cronError, recentRuns: runs.get(s.name) ?? [] }
       }),
     })
   })
@@ -155,7 +165,7 @@ export function automationRoutes(deps: { db: Db; schema: Schema; scheduler: Sche
     const changes =
       Object.keys(body).length === 1 && typeof body.enabled === 'boolean'
         ? { enabled: body.enabled }
-        : { ...readSchedule({ ...current, args: current.args ? JSON.parse(current.args) : null, ...body }), ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}) }
+        : { ...readSchedule({ ...current, args: current.args ? JSON.parse(current.args) : null, remedy: current.remedy ? JSON.parse(current.remedy) : null, ...body }), ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}) }
     if ('windowId' in changes) await checkWindow(changes.windowId)
     await db.update(t).set(changes).where(eq(t.id, id))
     await audit({ ...who(c), client: 'admin', fun: 'schedule.update', target: current.name, args: JSON.stringify(changes), outcome: 'ok' })

@@ -136,6 +136,8 @@ export const schedule = pgTable('schedule', {
   lastSummary: text('last_summary'),
   // waits for this maintenance window when it comes due outside it
   windowId: integer('window_id'),
+  // compliance checks: fix the drift they find with a change, JSON {batchSize, maxFailures}; null leaves it
+  remedy: text('remedy'),
 })
 
 /** Where alerts go: a Slack-compatible incoming webhook or a generic JSON webhook. */

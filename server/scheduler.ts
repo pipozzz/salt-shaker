@@ -1,5 +1,5 @@
 import { Cron } from 'croner'
-import { and, desc, eq, isNull, ne } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm'
 import type { Db, Schema } from './db'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../src/lib/inventory'
 import { osqueryCall } from '../src/lib/osquery'
@@ -7,7 +7,7 @@ import { osqueryDiff, osqueryMessage } from './osquery'
 import { isDryRun } from './history'
 import type { Notifier } from './notify'
 import type { SaltService } from './salt'
-import { acceptanceMessages, complianceCounts, complianceMessage, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
+import { acceptanceMessages, complianceCounts, complianceMessage, driftedMinions, failureSummary, functionMessage, patchMessage, patchSummary, vulnMessage } from './summaries'
 import { vulnScanSummary, type VulnService } from './vulns'
 import { loadWindows } from './windows'
 import { nextOpening, openingAt, type MaintenanceWindow } from '../src/lib/windows'
@@ -57,6 +57,22 @@ export function lowstateFor(s: Pick<ScheduleRow, 'id' | 'name' | 'kind' | 'fun' 
     return { ...base, fun: 'cmd.run', arg: call.arg, kwarg: call.kwarg as Record<string, unknown> }
   }
   return { ...base, fun: s.fun ?? 'test.ping', arg: args.arg ?? [], kwarg: args.kwarg ?? {} }
+}
+
+/** How a compliance schedule fixes the drift it finds: a change in batches, stopped by failures. */
+export interface Remedy {
+  batchSize: string | null
+  maxFailures: number
+}
+
+export function readRemedy(json: string | null): Remedy | null {
+  if (!json) return null
+  try {
+    const r = JSON.parse(json) as Partial<Remedy>
+    return { batchSize: typeof r.batchSize === 'string' && r.batchSize.trim() ? r.batchSize.trim() : null, maxFailures: Math.max(0, Math.floor(Number(r.maxFailures) || 0)) }
+  } catch {
+    return null
+  }
 }
 
 const TICK_MS = 20_000
@@ -174,6 +190,42 @@ export class Scheduler {
     await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
   }
 
+  /**
+   * A compliance schedule with a remedy applies the highstate to the minions it found drifted, as a
+   * change: in batches, stopped when too many fail, on the Changes page. Minions with errors are
+   * left for a person. Nothing starts outside the schedule's window, or while its last fix runs.
+   */
+  private async remediate(s: ScheduleRow, rows: Array<{ minion: string; summary: string | null }>, jid: string) {
+    const remedy = readRemedy(s.remedy)
+    if (!remedy) return null
+    const drifted = driftedMinions(rows)
+    if (!drifted.length) return null
+    const window = s.windowId ? (await loadWindows(this.db, this.schema)).find((w) => w.id === s.windowId) : undefined
+    if (window && !openingAt(window, new Date())) return { remedySkipped: `the window ${window.name} has closed` }
+    const t = this.schema.change
+    const who = `schedule:${s.name}`
+    const [running] = await this.db.select({ id: t.id }).from(t).where(and(eq(t.requestedBy, who), inArray(t.status, ['pending', 'queued', 'running'])))
+    if (running) return { remedySkipped: `its last fix, change #${running.id}, hasn't finished` }
+    const target = drifted.join(',')
+    const [row] = await this.db
+      .insert(t)
+      .values({
+        reason: `Fix the drift that "${s.name}" found (job ${jid})`,
+        target,
+        targetType: 'list',
+        fun: 'state.apply',
+        args: JSON.stringify({ arg: [], kwarg: {} }),
+        batchSize: remedy.batchSize,
+        maxFailures: remedy.maxFailures,
+        status: 'queued',
+        requestedBy: who,
+        requestedAt: new Date(),
+      })
+      .returning({ id: t.id })
+    await this.audit({ username: who, client: 'change', fun: 'change.request', target: `#${row.id} state.apply → ${target}`, targetType: 'list', jid: null, outcome: 'ok' })
+    return { remedyChange: row.id, remedyMinions: drifted.length }
+  }
+
   private acceptancesCheckedAt = 0
 
   /** Announces accepted risks that end soon or have ended; every few minutes is plenty. */
@@ -224,8 +276,11 @@ export class Scheduler {
       let summary: unknown
       if (s.kind === 'compliance') {
         const c = complianceCounts(rows, p.minions.length)
-        summary = c
+        const remedy = await this.remediate(s, rows, jid)
+        summary = { ...c, ...(remedy ?? {}) }
         const msg = complianceMessage(s.name, target, c, jid)
+        if (remedy && 'remedyChange' in remedy) msg.lines.push(`Fixing ${remedy.remedyMinions} drifted ${remedy.remedyMinions === 1 ? 'minion' : 'minions'} in change #${remedy.remedyChange}`)
+        if (remedy && 'remedySkipped' in remedy) msg.lines.push(`Not fixed: ${remedy.remedySkipped}`)
         if (c.drift + c.error > 0) await this.notifier.emit('drift', msg)
         await this.notifier.emit('schedule', msg)
       } else if (s.kind === 'patches') {

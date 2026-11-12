@@ -26,6 +26,15 @@ Each schedule shows when it runs next, a summary of its last run with a link to 
 With several server instances on one database, each scheduled run still starts exactly once.
 :::
 
+### Fixing drift
+
+A compliance check can also fix what it finds: tick **Fix the drift it finds** on the schedule and pick a batch size and how many failures are allowed. When a check finds drifted minions, it starts a [change](/salt-shaker/guide/changes/) that applies the highstate to just those minions, in batches, stopped when more fail than allowed. The change is on the Changes page and in the audit log as `schedule:<name>`, and the drift notification says which change is fixing it.
+
+- **Minions with errors are left alone.** A state that fails in a dry run will likely fail for real too; those need a person.
+- **One fix at a time.** While the last fix is still running (or waiting), a new check reports the drift but doesn't start another.
+- **In a window.** Tie the schedule to a [maintenance window](#maintenance-windows) so that both the check and the fix happen inside it. A check that finishes after the window has closed reports the drift and leaves the fix for next time.
+- **No approval.** An admin set the schedule up, so its fixes don't wait for approval, even with `APPROVAL_REQUIRED=risky`.
+
 ### Maintenance windows
 
 A maintenance window says when changes are expected, for example *Tuesday and Thursday from 22:00 for 4 hours*. Admins add them on **System → Maintenance windows**, each with its own time zone, so *22:00 Europe/Bratislava* stays 22:00 there across daylight saving changes. A window can run past midnight and lasts at most 24 hours.

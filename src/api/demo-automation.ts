@@ -1,4 +1,5 @@
 import { Cron } from 'croner'
+import { demoRemedyChange } from './demo-changes'
 import { demoTrendDays } from './demo-vulns'
 import { readRecipients } from '../lib/recipients'
 import { nextOpening, openingAt } from '../lib/windows'
@@ -66,7 +67,7 @@ const start = (s: Kind & { name: string; target: string; targetType: string }, w
 
 const next = (cron: string, from = new Date()) => new Cron(cron, { paused: true }).nextRun(from)
 
-type Seed = Kind & { name: string; target: string; targetType: string; cron: string; windowId?: number }
+type Seed = Kind & { name: string; target: string; targetType: string; cron: string; windowId?: number; remedy?: Schedule['remedy'] }
 
 /** the last ten runs, one per cron slot before now, each a job in the demo's history */
 function history(s: Seed, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string): ScheduleRun[] {
@@ -86,10 +87,10 @@ const schedules: Array<Omit<Schedule, 'nextRunAt' | 'cronError'>> = []
 function seed(s: Seed & Pick<Schedule, 'lastSummary'>, status: (i: number) => ScheduleRun['status'], detail: (i: number) => string) {
   const recentRuns = history(s, status, detail)
   const last = recentRuns[recentRuns.length - 1]
-  schedules.push({ enabled: true, windowId: null, ...s, recentRuns, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
+  schedules.push({ enabled: true, windowId: null, remedy: null, ...s, recentRuns, id: ++id, createdBy: 'demo', lastRunAt: last?.startedAt ?? null, lastJid: last?.jid ?? null })
 }
 seed(
-  { name: 'Nightly compliance', kind: 'compliance', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 2 * * *', lastSummary: { ok: 4, drift: 1, error: 0, noreturn: 1 } },
+  { name: 'Nightly compliance', kind: 'compliance', fun: null, args: null, target: '*', targetType: 'glob', cron: '0 2 * * *', remedy: { batchSize: '50%', maxFailures: 1 }, lastSummary: { ok: 4, drift: 1, error: 0, noreturn: 1, remedyChange: demoRemedyChange, remedyMinions: 1 } },
   (i) => (i === 6 ? 'failed' : i > 7 ? 'changed' : 'ok'),
   (i) => (i > 7 ? '4 ok · 1 drifted · 0 errors · 1 no return' : i === 6 ? '4 ok · 0 drifted · 1 error' : '5 ok · 0 drifted · 0 errors'),
 )
@@ -159,6 +160,8 @@ function check(s: Partial<ScheduleInput>, current?: { id: number }) {
     return `Invalid schedule "${s.cron}": ${e instanceof Error ? e.message : e}`
   }
   if (s.kind === 'function' && !s.fun) return 'Function is required'
+  const size = s.remedy?.batchSize?.trim()
+  if (s.kind === 'compliance' && size && !/^(\d+|\d+(\.\d+)?%)$/.test(size)) return 'Batch size is a number of minions or a percentage, like 25%'
   if (s.kind === 'osquery') return checkQuery((s.args as { sql?: string } | null)?.sql ?? '')
   return null
 }
@@ -169,7 +172,7 @@ export const demoAutomation: typeof automation = {
   createSchedule: (s) => {
     const error = check(s)
     if (error) return fail(error)
-    schedules.push({ ...s, windowId: s.windowId ?? null, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
+    schedules.push({ ...s, windowId: s.windowId ?? null, remedy: s.remedy ?? null, name: s.name.trim(), fun: s.fun ?? null, args: (s.args as Schedule['args']) ?? null, id: ++id, enabled: true, createdBy: 'demo', lastRunAt: null, lastJid: null, lastSummary: null, recentRuns: [] })
     recordDemoAudit({ username: 'demo', client: 'admin', fun: 'schedule.create', target: s.name.trim(), args: JSON.stringify(s), outcome: 'ok' })
     return delay(undefined)
   },

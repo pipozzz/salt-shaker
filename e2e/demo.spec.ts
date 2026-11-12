@@ -372,6 +372,23 @@ test('the demo has notification channels to try, and JSON webhooks get a signing
   await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
 })
 
+test('a compliance schedule fixes the drift it finds with a change', async ({ page }) => {
+  await openDemo(page, '/schedules')
+  const nightly = page.getByRole('listitem').filter({ hasText: 'Nightly compliance' })
+  await expect(nightly.getByText('fixes drift, 50% at a time')).toBeVisible()
+  await nightly.getByRole('link', { name: /fixing in #\d+/ }).click()
+  await expect(page.getByText('Fix the drift that "Nightly compliance" found')).toBeVisible()
+  await expect(page.getByText('schedule:Nightly compliance').first()).toBeVisible()
+
+  await page.goto('/schedules')
+  await page.getByRole('listitem').filter({ hasText: 'Nightly compliance' }).getByRole('button', { name: 'Edit' }).click()
+  await expect(page.getByLabel('Fix the drift it finds')).toBeChecked()
+  await expect(page.getByLabel('Batch size')).toHaveValue('50%')
+  await page.getByLabel('Batch size').fill('lots')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/Batch size is a number of minions or a percentage/)).toBeVisible()
+})
+
 test('the fleet report puts the week on one page and prints it', async ({ page }) => {
   await openDemo(page, '/notifications')
   await page.getByRole('link', { name: 'Printable report' }).click()

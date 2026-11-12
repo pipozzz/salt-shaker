@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Fleet report**
+
+- A **Report** page for admins puts the last seven days on one page to hand on: the weekly report's numbers with the change since last week, compliance and who needs a look, minions not answering, the 30-day vulnerability trend and the most exposed minions. **Print or save as PDF** prints it without the menus, on white. See [Printable report](https://pipozzz.github.io/salt-shaker/guide/schedules/#printable-report).
+
 **Email notifications**
 
 - A notification channel can now be **Email**: up to 20 recipients, each message as a plain email with a link back, so the weekly report and alerts reach people outside chat. Set `SMTP_URL` (and `SMTP_FROM`) on the server; see [Email](https://pipozzz.github.io/salt-shaker/guide/schedules/#email).

@@ -18,6 +18,7 @@ import { OverviewPage } from './pages/Overview'
 import { HardeningPage } from './pages/Hardening'
 import { SlackLinkPage } from './pages/SlackLink'
 import { MapPage } from './pages/Map'
+import { ReportPage } from './pages/Report'
 import { BranchPreviewPage } from './pages/BranchPreview'
 import { TokensPage } from './pages/Tokens'
 import { ComparePage } from './pages/Compare'
@@ -90,6 +91,8 @@ function Gate() {
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="schedules" element={<SchedulesPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="notifications" element={<NotificationsPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="system" element={<SystemPage />} />}
+        {/* built from the weekly report, which admins see */}
+        {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="reports" element={<ReportPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator'))) && <Route path="audit" element={<AuditPage />} />}
         {session.mode !== 'live' && <Route path="tokens" element={<TokensPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />

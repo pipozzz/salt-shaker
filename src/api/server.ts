@@ -1,4 +1,4 @@
-import type { ReportMessage } from '../lib/report'
+import type { ReportMessage, ReportStats } from '../lib/report'
 import type { MaintenanceWindow } from '../lib/windows'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
@@ -376,6 +376,9 @@ export interface AutomationMeta {
   email?: boolean
 }
 
+/** The weekly report's numbers as JSON: its dates as ISO strings. */
+export type ReportStatsJson = Omit<ReportStats, 'from' | 'to'> & { from: string; to: string }
+
 const send = <T>(method: string, path: string, body?: unknown) => request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
 
 export interface SharedTarget {
@@ -422,7 +425,7 @@ export const automation = {
   deleteChannel: (id: number) => send('DELETE', `/api/notifications/${id}`),
   testChannel: (id: number) => send('POST', `/api/notifications/${id}/test`, {}),
   /** this week's report as it stands (admins) */
-  weeklyReport: () => request<{ report: ReportMessage }>('/api/reports/weekly'),
+  weeklyReport: () => request<{ report: ReportMessage; stats: ReportStatsJson }>('/api/reports/weekly'),
   /** sends it now to the channels that take the weekly report */
   sendWeeklyReport: () => send<{ report: ReportMessage }>('POST', '/api/reports/weekly/send', {}),
 }

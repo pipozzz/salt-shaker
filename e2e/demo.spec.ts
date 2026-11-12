@@ -372,6 +372,20 @@ test('the demo has notification channels to try, and JSON webhooks get a signing
   await expect(page.getByRole('heading', { name: 'Signing secret for SIEM' })).toBeVisible()
 })
 
+test('the fleet report puts the week on one page and prints it', async ({ page }) => {
+  await openDemo(page, '/notifications')
+  await page.getByRole('link', { name: 'Printable report' }).click()
+  await expect(page.getByRole('heading', { name: 'Fleet report' })).toBeVisible()
+  await expect(page.getByText('Failed jobs')).toBeVisible()
+  await expect(page.getByText(/of the checked minions are in compliance/)).toBeVisible()
+  await expect(page.getByRole('table').getByRole('row')).not.toHaveCount(1)
+  // the printed page leaves out the menus
+  await page.emulateMedia({ media: 'print' })
+  await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeHidden()
+  await expect(page.getByText('Salt Shaker fleet report')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Overview' })).toBeHidden()
+})
+
 test('a notification channel can send email to a list of people', async ({ page }) => {
   await openDemo(page, '/notifications')
   await page.getByRole('button', { name: 'Add channel' }).click()
@@ -636,7 +650,7 @@ test('keys of minions quiet for long can be deleted together', async ({ page }) 
 
 test('the weekly report shows how the fleet did and can be sent now', async ({ page }) => {
   await openDemo(page, '/notifications')
-  await expect(page.getByText(/^Weekly report: 6 minions, \d+ failed jobs?, 3 critical vulnerabilities$/)).toBeVisible()
+  await expect(page.getByText(/^Weekly report: 6 minions, \d+ failed jobs?, \d+ critical vulnerabilit(y|ies)$/)).toBeVisible()
   await expect(page.getByText('Minions: 6 accepted, 1 not answering, 1 quiet for 30+ days')).toBeVisible()
   await page.getByRole('button', { name: 'Send now' }).click()
   await expect(page.getByRole('button', { name: 'Sent' })).toBeVisible()

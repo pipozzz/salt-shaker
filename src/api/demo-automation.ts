@@ -1,11 +1,12 @@
 import { Cron } from 'croner'
+import { demoTrendDays } from './demo-vulns'
 import { readRecipients } from '../lib/recipients'
 import { nextOpening, openingAt } from '../lib/windows'
 import { demoWindowList } from './demo-windows'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
 import { checkQuery, osqueryCall, OSQUERY_LIBRARY } from '../lib/osquery'
 import { recordDemoAudit } from './demo-audit'
-import { reportMessage } from '../lib/report'
+import { reportMessage, type ReportStats } from '../lib/report'
 import { demoJob, demoJobHistory, demoMinionStatus } from './mock'
 import type { automation, AutomationMeta, Channel, NotifyEvent, Schedule, ScheduleInput, ScheduleKind, ScheduleRun } from './server'
 
@@ -234,7 +235,10 @@ export const demoAutomation: typeof automation = {
     if (i >= 0) channels.splice(i, 1)
     return delay(undefined)
   },
-  weeklyReport: () => delay({ report: demoReport() }),
+  weeklyReport: () => {
+    const stats = demoReportStats()
+    return delay({ report: reportMessage(stats), stats: { ...stats, from: stats.from.toISOString(), to: stats.to.toISOString() } })
+  },
   sendWeeklyReport: () => {
     const at = new Date().toISOString()
     for (const c of channels) if (c.enabled && c.events.includes('report')) c.lastSentAt = at
@@ -250,17 +254,24 @@ export const demoAutomation: typeof automation = {
 
 /** The demo's weekly report: its minions and jobs, and made-up totals for the rest. */
 function demoReport() {
+  return reportMessage(demoReportStats())
+}
+
+function demoReportStats(): ReportStats {
   const to = new Date()
   const from = new Date(+to - 7 * 86400_000)
   const { up, down } = demoMinionStatus()
   const jobs = demoJobHistory(+from)
-  return reportMessage({
+  // the same numbers as the demo's vulnerability trend
+  const trend = demoTrendDays(8)
+  const [weekAgo, today] = [trend[0], trend[trend.length - 1]]
+  return {
     from,
     to,
     minions: { accepted: up.length + down.length, notAnswering: down.length, quiet: down.includes('cache-01') ? 1 : 0 },
     jobs: { run: jobs.length, failed: jobs.filter((j) => j.failed > 0).length },
     changes: { done: 1, stopped: 0, waiting: 1 },
-    vulns: { critical: 3, high: 7, fixable: 8, criticalBefore: 4, highBefore: 7 },
+    vulns: { critical: today.critical, high: today.high, fixable: today.fixable, criticalBefore: weekAgo.critical, highBefore: weekAgo.high },
     commands: { count: 37, people: 3 },
-  })
+  }
 }

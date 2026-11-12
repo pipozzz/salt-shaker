@@ -1,6 +1,6 @@
 import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
-import { Activity, BellRing, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -78,6 +78,7 @@ export function Layout() {
       ? [
           { to: '/schedules', label: 'Schedules', icon: CalendarClock },
           { to: '/notifications', label: 'Notifications', icon: BellRing },
+          { to: '/reports', label: 'Report', icon: FileText },
           { to: '/users', label: 'Users', icon: Users },
           { to: '/system', label: 'System', icon: Gauge },
         ]
@@ -85,6 +86,7 @@ export function Layout() {
         ? [
             { to: '/schedules', label: 'Schedules', icon: CalendarClock },
             { to: '/notifications', label: 'Notifications', icon: BellRing },
+            { to: '/reports', label: 'Report', icon: FileText },
             { to: '/users', label: 'Users', icon: Users },
             { to: '/system', label: 'System', icon: Gauge },
           ]
@@ -189,9 +191,9 @@ export function Layout() {
       <EventNotifications />
       <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
       {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} pages={items} />}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-zinc-200 bg-zinc-100/60 lg:block dark:border-zinc-800 dark:bg-zinc-900/40">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 print:!hidden border-r border-zinc-200 bg-zinc-100/60 lg:block dark:border-zinc-800 dark:bg-zinc-900/40">{sidebar}</aside>
 
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-zinc-50/90 px-4 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
+      <header className="sticky top-0 z-20 flex h-14 print:hidden items-center gap-3 border-b border-zinc-200 bg-zinc-50/90 px-4 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
         <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-md p-1.5 hover:bg-zinc-200/60 dark:hover:bg-zinc-800" aria-label="Open menu">
           <Menu className="size-5" />
         </button>
@@ -211,8 +213,8 @@ export function Layout() {
         </div>
       )}
 
-      <main className="lg:pl-60">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main className="lg:pl-60 print:pl-0">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
           <Outlet />
         </div>
       </main>

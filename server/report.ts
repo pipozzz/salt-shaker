@@ -132,10 +132,15 @@ export class WeeklyReport {
     return true
   }
 
-  async message(now = this.now()) {
+  /** The last seven days' numbers, for the report page. */
+  async stats(now = this.now()) {
     const accepted = await this.d.accepted()
     if (!accepted) throw new Error("The master didn't list its minions")
-    return reportMessage(await reportStats(this.d.db, this.d.schema, accepted, now))
+    return reportStats(this.d.db, this.d.schema, accepted, now)
+  }
+
+  async message(now = this.now()) {
+    return reportMessage(await this.stats(now))
   }
 
   async send(now = this.now()) {
@@ -154,7 +159,10 @@ export function reportRoutes({ report }: { report: WeeklyReport }) {
     if (user.role !== 'admin') return c.json({ error: 'Admins only' }, 403)
     await next()
   })
-  r.get('/reports/weekly', async (c) => c.json({ report: await report.message() }))
+  r.get('/reports/weekly', async (c) => {
+    const stats = await report.stats()
+    return c.json({ report: reportMessage(stats), stats })
+  })
   r.post('/reports/weekly/send', async (c) => c.json({ report: await report.send() }))
   return r
 }

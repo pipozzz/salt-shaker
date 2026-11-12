@@ -1,6 +1,7 @@
 import { useAutomationApi } from '../lib/automation'
-import { BellRing, Check, Copy, KeyRound, Pencil, Plus, Send, Trash2 } from 'lucide-react'
+import { BellRing, Check, Copy, FileText, KeyRound, Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { type Channel, type NotifyEvent } from '../api/server'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Switch } from '../components/ui'
 import { useAsync } from '../lib/hooks'
@@ -364,6 +365,10 @@ function WeeklyReportCard({ subscribed, onSent }: { subscribed: number; onSent: 
         title="Weekly report"
         subtitle={`How the fleet did over the last seven days, sent on Mondays at 8:00 (the server's time) to the channels that take Weekly report: ${subscribed === 1 ? '1 channel' : `${subscribed} channels`} now.`}
         actions={
+          <div className="flex gap-2">
+          <Link to="/reports" className="inline-flex items-center gap-1.5 rounded-md px-2 text-sm font-medium text-accent-700 hover:underline dark:text-accent-400">
+            <FileText className="size-3.5" aria-hidden /> Printable report
+          </Link>
           <Button
             size="sm"
             icon={sent ? <Check className="size-3.5" /> : <Send className="size-3.5" />}
@@ -386,6 +391,7 @@ function WeeklyReportCard({ subscribed, onSent }: { subscribed: number; onSent: 
           >
             {sent ? 'Sent' : 'Send now'}
           </Button>
+          </div>
         }
       />
       <div className="p-4 text-sm">

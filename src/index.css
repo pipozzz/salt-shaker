@@ -18,4 +18,10 @@ html { color-scheme: light; }
 html.dark { color-scheme: dark; }
 body { @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100; }
 
+/* printed pages (the fleet report) are white, whatever the theme */
+@media print {
+  @page { margin: 12mm; }
+  body { @apply bg-white; }
+}
+
 ::selection { @apply bg-accent-500/30; }

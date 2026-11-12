@@ -58,6 +58,10 @@ Minions that are already down when the server starts are not reported, only the 
 
 For people who don't open the console every day, the **Weekly report** sums up the last seven days in a few lines: how many minions are accepted, not answering and quiet for 30+ days; jobs run and failed; changes rolled out, stopped and waiting for approval; critical and high vulnerabilities with the change since a week earlier; and how many commands came from the console and the API, by how many people. It goes out on Mondays at 8:00 in the server's time zone (set `TZ` on the container to pick yours), once per week, to the channels that tick it. The Notifications page shows it as it stands now, with **Send now**.
 
+#### Printable report
+
+**Report** in the sidebar (admins) puts the same seven days on one page to hand on: the numbers above, how many minions are in compliance and which need a look, which minions don't answer, the vulnerability trend of the last 30 days and the minions with the most critical and high vulnerabilities. **Print or save as PDF** opens the browser's print dialog; pick *Save as PDF* there for a file. The printed page leaves out the menus and is white in either theme. **Printable report** on the weekly report card opens it too.
+
 There are four formats:
 
 - **Slack-compatible**, for Slack incoming webhooks. Mattermost and Rocket.Chat accept it too, and so does Discord if you append `/slack` to its webhook URL.

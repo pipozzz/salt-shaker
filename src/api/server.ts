@@ -636,6 +636,42 @@ export interface RunbookRun {
 }
 
 /** Saved procedures: everyone with a role reads them, admins write them, operators run them. */
+/** A webhook that starts a runbook; its secret is shown only when it's made or replaced. */
+export interface RunbookHook {
+  id: number
+  name: string
+  runbookId: number
+  /** values it sets */
+  params: Record<string, string>
+  /** values a call may set */
+  fromRequest: string[]
+  enabled: boolean
+  createdBy: string | null
+  createdAt: string
+  lastCalledAt: string | null
+  lastRunId: number | null
+  lastError: string | null
+}
+
+export type RunbookHookInput = Pick<RunbookHook, 'name' | 'runbookId' | 'params' | 'fromRequest'>
+
+/** What a call to a webhook answers: the run it started. */
+export interface HookCall {
+  run: number
+  status: RunbookRunStatus
+  path: string
+}
+
+export const runbookHooks = {
+  list: () => request<{ hooks: RunbookHook[] }>('/api/runbook-hooks'),
+  create: (h: RunbookHookInput) => send<{ hook: RunbookHook; secret: string }>('POST', '/api/runbook-hooks', h),
+  update: (id: number, h: Partial<RunbookHookInput> & { enabled?: boolean }) => send<{ hook: RunbookHook }>('PATCH', `/api/runbook-hooks/${id}`, h),
+  remove: (id: number) => send('DELETE', `/api/runbook-hooks/${id}`),
+  rotate: (id: number) => send<{ secret: string }>('POST', `/api/runbook-hooks/${id}/secret`, {}),
+  /** a call with this body, as a tool would send it */
+  test: (id: number, body: string) => request<HookCall>(`/api/runbook-hooks/${id}/test`, { method: 'POST', body: body.trim() || '{}' }),
+}
+
 export const runbooks = {
   list: () => request<{ runbooks: Runbook[]; approval: 'off' | 'risky' }>('/api/runbooks'),
   save: (rb: RunbookInput, id?: number) => send<{ runbook: Runbook }>(id ? 'PUT' : 'POST', id ? `/api/runbooks/${id}` : '/api/runbooks', rb),

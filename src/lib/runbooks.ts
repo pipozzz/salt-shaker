@@ -1,5 +1,5 @@
-import { demoRunbooks } from '../api/demo-runbooks'
-import { runbooks } from '../api/server'
+import { demoRunbookHooks, demoRunbooks } from '../api/demo-runbooks'
+import { runbookHooks, runbooks } from '../api/server'
 import { useSession } from './session'
 
 /** Runbooks: the server's, the demo's, or none (live mode keeps nothing). */
@@ -7,6 +7,15 @@ export function useRunbooksApi() {
   const { session } = useSession()
   return session?.mode === 'demo' ? demoRunbooks : session?.mode === 'server' ? runbooks : null
 }
+
+/** Webhooks that start runbooks: the server's or the demo's (admins only). */
+export function useRunbookHooksApi() {
+  const { session } = useSession()
+  return session?.mode === 'demo' ? demoRunbookHooks : session?.mode === 'server' ? runbookHooks : null
+}
+
+/** Where other tools send their calls. */
+export const hookUrl = (id: number) => `${window.location.origin}/api/hooks/runbooks/${id}`
 
 /** How a run's status reads, and its colour. */
 export const RUN_STATUS = {

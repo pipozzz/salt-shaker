@@ -426,6 +426,28 @@ test('a schedule runs a runbook, and its runbook stays while it does', async ({ 
   await expect(page.getByText('The schedule "Web highstate" runs it')).toBeVisible()
 })
 
+test('a webhook starts a runbook with the values a call may set', async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  await expect(page.getByRole('listitem', { name: 'Alertmanager: nginx down' })).toContainText('the call sets host')
+  await page.getByRole('button', { name: 'New webhook' }).click()
+  await page.getByLabel('Webhook name').fill('CI deploy')
+  await page.getByLabel('Runbook it starts').selectOption({ label: 'Sync and apply the highstate' })
+  // the runbook's default (web-*) unless the call says otherwise
+  await page.getByLabel('The call may set Minions').check()
+  await page.getByRole('button', { name: 'Create webhook' }).click()
+  await expect(page.getByLabel('Webhook secret')).toHaveValue(/^whk_/)
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  const hook = page.getByRole('listitem', { name: 'CI deploy' })
+  await expect(hook).toContainText('/api/hooks/runbooks/')
+  await hook.getByRole('button', { name: 'Test call…' }).click()
+  await page.getByLabel('Request body').fill('{"target": "web-01", "ref": "main"}')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page).toHaveURL(/\/runbooks\/runs\/\d+$/)
+  await expect(page.getByText(/Started by hook:CI deploy/)).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Steps' }).getByRole('listitem', { name: 'Sync modules: done' })).toBeVisible()
+})
+
 test('a compliance schedule fixes the drift it finds with a change', async ({ page }) => {
   await openDemo(page, '/schedules')
   const nightly = page.getByRole('listitem').filter({ hasText: 'Nightly compliance' })

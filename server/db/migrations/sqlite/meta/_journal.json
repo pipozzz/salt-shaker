@@ -155,6 +155,13 @@
       "when": 1794474058311,
       "tag": "0021_runbooks",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1794484372746,
+      "tag": "0022_runbook_hooks",
+      "breakpoints": true
     }
   ]
 }

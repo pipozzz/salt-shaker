@@ -361,3 +361,21 @@ export const runbookRun = sqliteTable('runbook_run', {
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
   error: text('error'),
 })
+
+/** A webhook that starts a runbook: other tools call it with a secret instead of signing in. */
+export const runbookHook = sqliteTable('runbook_hook', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  runbookId: integer('runbook_id').notNull(),
+  // checks the caller: the HMAC signature's key, or the bearer token itself
+  secret: text('secret').notNull(),
+  // JSON: values set here, and the names of the values a call may set
+  params: text('params').notNull(),
+  fromRequest: text('from_request').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  lastCalledAt: integer('last_called_at', { mode: 'timestamp_ms' }),
+  lastRunId: integer('last_run_id'),
+  lastError: text('last_error'),
+})

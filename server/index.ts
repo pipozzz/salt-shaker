@@ -32,6 +32,7 @@ import { recordSeen, seenRoutes } from './seen'
 import { reportRoutes, WeeklyReport } from './report'
 import { slackRoutes } from './slack'
 import { windowRoutes } from './windows'
+import { hookRoutes, hookUser } from './runbook-hooks'
 import { runbookRoutes, RunbookRunner, runbookScheduler, scheduleUser } from './runbooks'
 import { smtpMailer } from './mail'
 import { peerRoutes, summarize } from './peers'
@@ -174,6 +175,13 @@ app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
 })
 
 app.use('/api/*', async (c, next) => {
+  // runbook webhooks check their own secret; their bearer token isn't an API token
+  if (c.req.path.startsWith('/api/hooks/')) {
+    c.set('user', null)
+    c.set('expiresAt', null)
+    c.set('via', 'session')
+    return next()
+  }
   // scripts and CI use a personal API token; the web UI, its session cookie
   const bearer = /^Bearer (\S+)$/.exec(c.req.header('authorization') ?? '')?.[1]
   if (bearer) {
@@ -451,6 +459,8 @@ changeRunner.start()
 async function activeUser(id: string): Promise<SessionUser | null> {
   // a scheduled run acts as its schedule
   if (id.startsWith('schedule:')) return scheduleUser(db, schema, id)
+  // and a webhook's, as the webhook
+  if (id.startsWith('hook:')) return hookUser(db, schema, id)
   const u = schema.user
   const [row] = await db.select({ id: u.id, name: u.name, username: u.username, role: u.role, banned: u.banned }).from(u).where(eq(u.id, id)).limit(1)
   if (!row || row.banned || !row.role || row.role === 'none' || row.role === 'viewer') return null
@@ -464,6 +474,7 @@ scheduler.runbooks = runbookScheduler({ db, schema, runner: runbookRunner, notif
 app.route('/api', slackRoutes({ db, schema, secret: config.slackSigningSecret, publicUrl: config.publicUrl, saltAs, audit }))
 app.route('/api', windowRoutes({ db, schema, audit }))
 app.route('/api', runbookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
+app.route('/api', hookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks from a webhook**
+
+- Monitoring, CI or a ticket system can start a runbook: admins add a webhook under **Runbooks → Webhooks**, choose which values it sets and which a call may set, and get a secret shown once. A call sends it as a bearer token or signs its body like Salt Shaker's own webhooks. The run acts as the webhook with an operator's rights, so approvals apply; one runs at a time, and **Test call…** tries it from the page. See [From a webhook](https://pipozzz.github.io/salt-shaker/guide/runbooks/#from-a-webhook).
+
 ## 1.25.0
 
 **Runbooks on a schedule**

@@ -1,7 +1,8 @@
 import { readRunbook, resolveRunbook, type RunbookInput } from '../lib/runbook'
+import { readCallValues, readHookSettings } from '../lib/runbook-hook'
 import { recordDemoAudit } from './demo-audit'
 import { demoJob, demoJobProgress } from './mock'
-import type { Runbook, RunbookRun, RunbookStepState, runbooks } from './server'
+import type { HookCall, Runbook, RunbookHook, RunbookRun, RunbookStepState, runbookHooks, runbooks } from './server'
 
 /*
  * Runbooks in the demo: two to try, kept in the browser. A run works through its steps on the
@@ -156,6 +157,8 @@ export const demoRunbooks: typeof runbooks = {
   remove: (id) => {
     const schedule = usedBy(id)
     if (schedule) return fail(`The schedule "${schedule}" runs it; delete that schedule or pick another runbook for it first`)
+    const hook = hooks.find((h) => h.runbookId === id)
+    if (hook) return fail(`The webhook "${hook.name}" runs it; delete that webhook first`)
     const i = list.findIndex((x) => x.id === id)
     if (i >= 0) {
       recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.delete', target: list[i].name, outcome: 'ok' })
@@ -184,5 +187,92 @@ export const demoRunbooks: typeof runbooks = {
     end(r, 'stopped', 'Stopped by demo')
     recordDemoAudit({ username: 'demo', client: 'console', fun: 'runbook.stop', target: `#${r.id} ${r.name}`, outcome: 'ok' })
     return delay({ run: copy(r) })
+  },
+}
+
+// ---- webhooks that start a runbook: one to try; the demo can't be called from outside ----
+
+const demoHookSecret = () => `whk_${Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('')}`
+
+let nextHook = 1
+const hooks: RunbookHook[] = [
+  {
+    id: nextHook++,
+    name: 'Alertmanager: nginx down',
+    runbookId: 1,
+    params: { service: 'nginx' },
+    fromRequest: ['host'],
+    enabled: true,
+    createdBy: 'pam',
+    createdAt: new Date(Date.now() - 4 * 86400_000).toISOString(),
+    lastCalledAt: null,
+    lastRunId: null,
+    lastError: null,
+  },
+]
+
+function readHook(input: Partial<RunbookHook>, id?: number) {
+  const name = input.name?.trim() ?? ''
+  if (!name || name.length > 80) return { error: 'Name is required (max 80 characters)' }
+  if (hooks.some((h) => h.name === name && h.id !== id)) return { error: 'A webhook with this name already exists' }
+  const rb = list.find((x) => x.id === input.runbookId)
+  if (!rb) return { error: 'Choose a runbook' }
+  const settings = readHookSettings(rb.params, input.params, input.fromRequest)
+  return 'error' in settings ? settings : { name, runbookId: rb.id, ...settings }
+}
+
+export const demoRunbookHooks: typeof runbookHooks = {
+  list: () => delay({ hooks: hooks.map((h) => ({ ...h })) }),
+  create: (input) => {
+    const h = readHook(input)
+    if ('error' in h) return fail(h.error)
+    const row: RunbookHook = { ...h, id: nextHook++, enabled: true, createdBy: 'demo', createdAt: new Date().toISOString(), lastCalledAt: null, lastRunId: null, lastError: null }
+    hooks.push(row)
+    hooks.sort((a, b) => a.name.localeCompare(b.name))
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook_hook.create', target: row.name, outcome: 'ok' })
+    return delay({ hook: { ...row }, secret: demoHookSecret() })
+  },
+  update: (id, changes) => {
+    const h = hooks.find((x) => x.id === id)
+    if (!h) return fail('Not found')
+    if (!(Object.keys(changes).length === 1 && 'enabled' in changes)) {
+      const read = readHook({ ...h, ...changes }, id)
+      if ('error' in read) return fail(read.error)
+      Object.assign(h, read)
+    }
+    if (typeof changes.enabled === 'boolean') h.enabled = changes.enabled
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook_hook.update', target: h.name, args: JSON.stringify(changes), outcome: 'ok' })
+    return delay({ hook: { ...h } })
+  },
+  remove: (id) => {
+    const i = hooks.findIndex((x) => x.id === id)
+    if (i >= 0) {
+      recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook_hook.delete', target: hooks[i].name, outcome: 'ok' })
+      hooks.splice(i, 1)
+    }
+    return delay(undefined)
+  },
+  rotate: (id) => (hooks.some((x) => x.id === id) ? delay({ secret: demoHookSecret() }) : fail('Not found')),
+  // as the server's endpoint answers a call, without checking a secret
+  test: (id, body) => {
+    const h = hooks.find((x) => x.id === id)
+    if (!h) return fail('Not found')
+    if (!h.enabled) return fail('This webhook is turned off')
+    const read = readCallValues(body, h.fromRequest)
+    if ('error' in read) return fail(read.error)
+    const by = `hook:${h.name}`
+    const done = (error: string) => {
+      Object.assign(h, { lastCalledAt: new Date().toISOString(), lastError: error })
+      return fail(error)
+    }
+    const rb = list.find((x) => x.id === h.runbookId)
+    if (!rb) return done('Its runbook no longer exists')
+    const going = runs.find((r) => r.startedBy === by && live(r))
+    if (going) return done(`Its last run, #${going.id}, hasn't finished`)
+    const r = start(rb, { ...h.params, ...read.values }, by)
+    if ('error' in r) return done(r.error)
+    Object.assign(h, { lastCalledAt: new Date().toISOString(), lastRunId: r.run.id, lastError: null })
+    recordDemoAudit({ username: by, client: 'console', fun: 'runbook.run', target: `#${r.run.id} ${rb.name}`, args: JSON.stringify(r.run.params), outcome: 'ok' })
+    return delay<HookCall>({ run: r.run.id, status: r.run.status, path: `/runbooks/runs/${r.run.id}` })
   },
 }

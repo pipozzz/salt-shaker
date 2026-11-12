@@ -7,6 +7,7 @@ import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { TARGET_TYPES, type RunbookInput, type RunbookParam, type RunbookStep } from '../lib/runbook'
 import { RUN_STATUS, useRunbookRole, useRunbooksApi } from '../lib/runbooks'
+import { RunbookHooksCard } from './RunbookHooks'
 
 const stepText = (s: RunbookStep) => `${s.fun}${s.args ? ` ${s.args}` : ''} → ${s.targetType === 'glob' ? '' : `${s.targetType}:`}${s.target}`
 
@@ -84,6 +85,8 @@ export function RunbooksPage() {
           </Card>
         ))}
       </div>
+
+      {canWrite && list.data && <RunbookHooksCard runbooks={list.data.runbooks} />}
 
       <Card className="mt-6">
         <CardHeader title="Recent runs" />

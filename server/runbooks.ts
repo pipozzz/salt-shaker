@@ -166,7 +166,7 @@ export class RunbookRunner {
 const view = (r: Schema['runbook']['$inferSelect']) => ({ ...r, params: JSON.parse(r.params) as RunbookParam[], steps: JSON.parse(r.steps) as RunbookStep[] })
 const runView = (r: RunRow) => ({ ...r, params: JSON.parse(r.params) as Record<string, string>, steps: JSON.parse(r.steps) as StepState[] })
 
-interface RouteDeps {
+export interface RouteDeps {
   db: Db
   schema: Schema
   runner: Pick<RunbookRunner, 'tick'>
@@ -292,6 +292,8 @@ export function runbookRoutes(d: RouteDeps) {
     if (!row) return c.json({ error: 'Not found' }, 404)
     const user = (await scheduledRunbooks(d.db, d.schema)).find((x) => x.runbookId === row.id)
     if (user) return c.json({ error: `The schedule "${user.name}" runs it; delete that schedule or pick another runbook for it first` }, 400)
+    const [hook] = await d.db.select({ name: d.schema.runbookHook.name }).from(d.schema.runbookHook).where(eq(d.schema.runbookHook.runbookId, row.id))
+    if (hook) return c.json({ error: `The webhook "${hook.name}" runs it; delete that webhook first` }, 400)
     await d.db.delete(t).where(eq(t.id, row.id))
     await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.delete', target: row.name, outcome: 'ok' })
     return c.json({ ok: true })

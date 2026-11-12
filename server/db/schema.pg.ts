@@ -359,3 +359,21 @@ export const runbookRun = pgTable('runbook_run', {
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   error: text('error'),
 })
+
+/** A webhook that starts a runbook: other tools call it with a secret instead of signing in. */
+export const runbookHook = pgTable('runbook_hook', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  runbookId: integer('runbook_id').notNull(),
+  // checks the caller: the HMAC signature's key, or the bearer token itself
+  secret: text('secret').notNull(),
+  // JSON: values set here, and the names of the values a call may set
+  params: text('params').notNull(),
+  fromRequest: text('from_request').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  lastCalledAt: timestamp('last_called_at', { withTimezone: true }),
+  lastRunId: integer('last_run_id'),
+  lastError: text('last_error'),
+})

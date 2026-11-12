@@ -1,6 +1,6 @@
 ---
 title: Runbooks
-description: Save a procedure of a few steps once, and let anyone who may run it with their own values.
+description: Save a procedure of a few steps once, and let anyone who may run it with their own values, on a schedule or from a webhook.
 sidebar: { order: 6 }
 ---
 
@@ -45,6 +45,38 @@ A [schedule](/salt-shaker/guide/schedules/) can run a runbook: on **Schedules �
 - The schedule's summary links to its last run, and its bars to the last ten. How each ended goes to the **Runbook runs** notification.
 - With a window, the run *starts* inside it; its steps go on until they're done.
 - A runbook a schedule runs can't be deleted until the schedule is deleted or runs another one. Changes to the runbook apply from its next run.
+
+## From a webhook
+
+A **webhook** lets another tool start a runbook: Alertmanager restarting a service that went down, CI applying the highstate after a merge, a ticket system running a fix. Admins add one under **Runbooks → Webhooks → New webhook**:
+
+- the runbook it starts;
+- for each of its values, one set here, **The call may set it**, or both (the call's wins, yours is the default). A call can't set anything you didn't allow, and every required value has to be covered one way or the other.
+
+The secret is shown once, when it's made or replaced with **New secret**; the old one stops working right away. A call is a `POST` to the URL shown, with a JSON body:
+
+```sh
+curl -X POST https://salt.example.com/api/hooks/runbooks/3 \
+  -H "Authorization: Bearer whk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"host": "web-02"}'
+```
+
+The values are read from the top level of the body or from `"params"`, and the rest of the body is ignored, so a tool's own payload can carry them. A call proves it knows the secret either way:
+
+- `Authorization: Bearer <secret>`, for tools that can only add a header;
+- or signed like Salt Shaker's own [webhooks](/salt-shaker/guide/schedules/#signed-webhooks): `X-Salt-Shaker-Timestamp` and `X-Salt-Shaker-Signature` (`sha256=` and the HMAC-SHA256 of `<timestamp>.<raw body>`), no more than five minutes old.
+
+It answers `202` with the run (`{"run": 12, "status": "running", "path": "/runbooks/runs/12"}`), `401` for an unknown webhook or a wrong secret, `403` when it's turned off, `409` while its last run is still going, and `400` when a value is missing.
+
+- A webhook's run acts as `hook:<name>` with an **operator's** rights: with `APPROVAL_REQUIRED=risky`, a run with a risky step waits for an admin.
+- **Test call…** sends a body from the page, as a tool would, and opens the run it starts.
+- Each webhook shows when it was last called and its last run, or why the call failed.
+- A runbook a webhook starts can't be deleted until the webhook is.
+
+:::caution
+A value the call sets is used as sent, in targets too. Let a call set only what the runbook can take safely from whoever has the secret, and keep the server behind HTTPS so the secret isn't sent in the clear.
+:::
 
 :::note
 Runs are kept in the database and worked through by whichever server instance gets to them first, so a run carries on when the instance that started it restarts. A step that was being started at that very moment is marked failed rather than run twice.

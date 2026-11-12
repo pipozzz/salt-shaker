@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.23.0
 
 **Fixing drift**
 
 - A compliance schedule can fix the drift it finds: with **Fix the drift it finds** ticked, a check that finds drifted minions starts a change that applies the highstate to just those, in batches and stopped by failures. Minions with errors are left for a person, one fix runs at a time, and with a maintenance window both the check and the fix stay inside it. See [Fixing drift](https://pipozzz.github.io/salt-shaker/guide/schedules/#fixing-drift).
+
+**Upgrading**
+
+- Schedules gain a column for their fix when the server starts; nothing to do. Existing compliance schedules don't fix anything until you tick **Fix the drift it finds**.
 
 ## 1.22.0
 

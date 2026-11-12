@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.27.0
 
 **Runbooks**
 
 - A run's page shows what each minion returned under each step, failures first, without opening the job; a step that failed shows it right away, and a running one fills in as minions return.
+
+**Upgrading**
+
+- Nothing to do: the step output comes from the job history the server already keeps.
 
 ## 1.26.0
 

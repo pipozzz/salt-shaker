@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // Better Auth core tables + the username and admin plugins (see getAuthTables()).
 export const user = sqliteTable('user', {
@@ -338,14 +338,38 @@ export const runbook = sqliteTable('runbook', {
   steps: text('steps').notNull(),
   // JSON string[]: the operators who may run it; empty for every operator (admins always may)
   runners: text('runners').notNull().default('[]'),
+  // the number of its latest version in runbook_version
+  version: integer('version').notNull().default(1),
   createdBy: text('created_by'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/** Each saved version of a runbook, oldest first: what it was, who saved it and how. */
+export const runbookVersion = sqliteTable(
+  'runbook_version',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runbookId: integer('runbook_id').notNull(),
+    version: integer('version').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    params: text('params').notNull(),
+    steps: text('steps').notNull(),
+    runners: text('runners').notNull().default('[]'),
+    // create, update, import or restore
+    how: text('how').notNull(),
+    savedBy: text('saved_by'),
+    savedAt: integer('saved_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [uniqueIndex('runbook_version_idx').on(t.runbookId, t.version)],
+)
 
 /** One run of a runbook: its values and how each step went, worked through by the runner. */
 export const runbookRun = sqliteTable('runbook_run', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   runbookId: integer('runbook_id'),
+  // the runbook's version it ran with
+  runbookVersion: integer('runbook_version'),
   name: text('name').notNull(),
   params: text('params').notNull(),
   // JSON: the resolved steps with their progress

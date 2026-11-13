@@ -2,7 +2,7 @@ import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type Runbook
 import { readCallValues, readHookSettings } from '../lib/runbook-hook'
 import { recordDemoAudit } from './demo-audit'
 import { demoJob, demoJobProgress } from './mock'
-import type { HookCall, Runbook, RunbookHook, RunbookRun, RunbookStepState, runbookHooks, runbooks } from './server'
+import type { HookCall, Runbook, RunbookHook, RunbookRun, RunbookStepState, RunbookVersion, runbookHooks, runbooks } from './server'
 
 /*
  * Runbooks in the demo: two to try, kept in the browser. A run works through its steps on the
@@ -44,7 +44,34 @@ const SEED: RunbookInput[] = [
 ]
 
 let nextId = 1
-const list: Runbook[] = SEED.map((rb) => ({ ...rb, id: nextId++, createdBy: 'pam', updatedAt: new Date(Date.now() - 6 * 86400_000).toISOString() }))
+const list: Runbook[] = SEED.map((rb) => ({ ...rb, id: nextId++, version: 1, createdBy: 'pam', updatedAt: new Date(Date.now() - 6 * 86400_000).toISOString() }))
+
+// every saved version, like the server's runbook_version
+let nextVersionId = 1
+const versions: RunbookVersion[] = list.map((rb) => ({ ...content(rb), id: nextVersionId++, runbookId: rb.id, version: 1, how: 'create', savedBy: 'pam', savedAt: rb.updatedAt }))
+// the restart was written without its step for a failure, which pam added later and gave to olga
+{
+  const first = versions[0]
+  Object.assign(first, { steps: first.steps.filter((x) => !x.onFailure), runners: [], savedAt: new Date(Date.now() - 9 * 86400_000).toISOString() })
+  versions.push({ ...content(list[0]), id: nextVersionId++, runbookId: list[0].id, version: 2, how: 'update', savedBy: 'pam', savedAt: list[0].updatedAt })
+  list[0].version = 2
+}
+
+function content(rb: RunbookInput): RunbookInput {
+  return { name: rb.name, description: rb.description, params: rb.params.map((p) => ({ ...p })), steps: rb.steps.map((s) => ({ ...s })), runners: [...(rb.runners ?? [])] }
+}
+const sameContent = (a: RunbookInput, b: RunbookInput) => JSON.stringify(content(a)) === JSON.stringify(content(b))
+
+/** Saves a runbook as its next version (or its first), unless nothing changed, like the server. */
+function saveVersion(existing: Runbook | undefined, rb: RunbookInput, how: RunbookVersion['how']): { row: Runbook; changed: boolean } {
+  if (existing && sameContent(existing, rb)) return { row: existing, changed: false }
+  const now = new Date().toISOString()
+  let row: Runbook
+  if (existing) row = Object.assign(existing, content(rb), { version: existing.version + 1, updatedAt: now })
+  else list.push((row = { ...content(rb), id: nextId++, version: 1, createdBy: 'demo', updatedAt: now }))
+  versions.push({ ...content(rb), id: nextVersionId++, runbookId: row.id, version: row.version, how, savedBy: 'demo', savedAt: now })
+  return { row, changed: true }
+}
 let nextRun = 1
 const runs: RunbookRun[] = []
 const copy = (r: RunbookRun): RunbookRun => ({ ...r, steps: r.steps.map((s) => ({ ...s })) })
@@ -123,6 +150,7 @@ function start(rb: Runbook, params: Record<string, string>, by = 'demo') {
   const run: RunbookRun = {
     id: nextRun++,
     runbookId: rb.id,
+    runbookVersion: rb.version,
     name: rb.name,
     params: r.values,
     steps: r.steps.map((s): RunbookStepState => ({ ...s, status: 'waiting' })),
@@ -180,10 +208,20 @@ export const demoRunbooks: typeof runbooks = {
     if (list.some((x) => x.name === rb.name && x.id !== id)) return fail('A runbook with this name already exists')
     const existing = id ? list.find((x) => x.id === id) : undefined
     if (id && !existing) return fail('Not found')
-    const row: Runbook = { ...rb, id: existing?.id ?? nextId++, createdBy: existing?.createdBy ?? 'demo', updatedAt: new Date().toISOString() }
-    if (existing) Object.assign(existing, row)
-    else list.push(row)
-    recordDemoAudit({ username: 'demo', client: 'admin', fun: existing ? 'runbook.update' : 'runbook.create', target: rb.name, outcome: 'ok' })
+    const { row, changed } = saveVersion(existing, rb, existing ? 'update' : 'create')
+    if (changed) recordDemoAudit({ username: 'demo', client: 'admin', fun: existing ? 'runbook.update' : 'runbook.create', target: rb.name, outcome: 'ok' })
+    return delay({ runbook: { ...row } })
+  },
+  versions: (id) => (list.some((x) => x.id === id) ? delay({ versions: versions.filter((v) => v.runbookId === id).sort((a, b) => b.version - a.version).map((v) => ({ ...v, ...content(v) })) }) : fail('Not found')),
+  restore: (id, version) => {
+    const rb = list.find((x) => x.id === id)
+    const v = versions.find((x) => x.runbookId === id && x.version === version)
+    if (!rb) return fail('Not found')
+    if (!v) return fail('There is no such version')
+    if (list.some((x) => x.name === v.name && x.id !== id)) return fail(`Another runbook is called "${v.name}" now; rename it first`)
+    const { row, changed } = saveVersion(rb, v, 'restore')
+    if (!changed) return fail('It is already like that version')
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.restore', target: rb.name, args: JSON.stringify({ from: version, version: row.version }), outcome: 'ok' })
     return delay({ runbook: { ...row } })
   },
   import: (input, replace) => {
@@ -199,11 +237,8 @@ export const demoRunbooks: typeof runbooks = {
     let created = 0
     for (const rb of read) {
       const existing = list.find((x) => x.name === rb.name)
-      if (existing) Object.assign(existing, rb, { updatedAt: new Date().toISOString() })
-      else {
-        list.push({ ...rb, id: nextId++, createdBy: 'demo', updatedAt: new Date().toISOString() })
-        created++
-      }
+      if (!existing) created++
+      if (!saveVersion(existing, rb, 'import').changed) continue
       recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.import', target: rb.name, outcome: 'ok' })
     }
     return delay({ created, replaced: read.length - created })
@@ -216,6 +251,7 @@ export const demoRunbooks: typeof runbooks = {
     const i = list.findIndex((x) => x.id === id)
     if (i >= 0) {
       recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.delete', target: list[i].name, outcome: 'ok' })
+      for (let j = versions.length - 1; j >= 0; j--) if (versions[j].runbookId === id) versions.splice(j, 1)
       list.splice(i, 1)
     }
     return delay({})

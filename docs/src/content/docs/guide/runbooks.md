@@ -21,6 +21,12 @@ Admins write runbooks on **Runbooks → New runbook**:
 
 A value is put *into* an argument, after the arguments are split: a value of `nginx test=True` stays one argument and can't add `test=True` of its own. In a target it's used as typed, and the target is checked against the person's scope like any other.
 
+## History
+
+Every save of a runbook is a **version**: writing it, editing it, importing it, restoring one. **History** on its card lists them, newest first, with who saved each and when; open one to see what it changed from the one before, line by line. A run's page says which version it ran with, so a run from last week can be read against the runbook as it was then.
+
+Admins can **Restore** an earlier version: it's saved again as the newest, so the versions in between stay. Saving without changing anything makes no version. Deleting a runbook deletes its history too. Runbooks written before 1.31 start their history with the version they had when you upgraded.
+
 ## In a file
 
 **Export** on a runbook, or **Export all**, saves them as YAML, to keep in git or carry to another Salt Shaker. Anyone who can see runbooks can export them. The file holds what an admin wrote, no ids, authors or dates:

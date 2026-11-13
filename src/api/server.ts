@@ -601,8 +601,20 @@ export const peers = {
 
 export interface Runbook extends RunbookInput {
   id: number
+  /** its latest version's number */
+  version: number
   createdBy: string | null
   updatedAt: string
+}
+
+/** One saved version of a runbook: what it was, who saved it and how. */
+export interface RunbookVersion extends RunbookInput {
+  id: number
+  runbookId: number
+  version: number
+  how: 'create' | 'update' | 'import' | 'restore' | 'upgrade'
+  savedBy: string | null
+  savedAt: string
 }
 
 export type RunbookRunStatus = 'pending' | 'running' | 'done' | 'stopped' | 'failed' | 'rejected'
@@ -627,6 +639,8 @@ export interface RunbookStepState extends ResolvedStep {
 export interface RunbookRun {
   id: number
   runbookId: number | null
+  /** the runbook's version it ran with */
+  runbookVersion?: number | null
   name: string
   params: Record<string, string>
   steps: RunbookStepState[]
@@ -683,6 +697,9 @@ export const runbooks = {
   remove: (id: number) => send('DELETE', `/api/runbooks/${id}`),
   /** runbooks read from a file; all or none, replacing ones with the same name only when asked */
   import: (rbs: RunbookInput[], replace: boolean) => send<{ created: number; replaced: number }>('POST', '/api/runbooks/import', { runbooks: rbs, replace }),
+  versions: (id: number) => request<{ versions: RunbookVersion[] }>(`/api/runbooks/${id}/versions`),
+  /** an earlier version saved again as the newest */
+  restore: (id: number, version: number) => send<{ runbook: Runbook }>('POST', `/api/runbooks/${id}/versions/${version}/restore`, {}),
   run: (id: number, params: Record<string, string>) => send<{ run: RunbookRun }>('POST', `/api/runbooks/${id}/run`, { params }),
   runs: (runbookId?: number) => request<{ runs: RunbookRun[] }>(`/api/runbook-runs${runbookId ? `?runbook=${runbookId}` : ''}`),
   getRun: (id: number) => request<{ run: RunbookRun }>(`/api/runbook-runs/${id}`),

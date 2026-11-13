@@ -462,6 +462,26 @@ test('runbooks export as YAML and import back, replacing only when asked', async
   await expect(page.getByRole('button', { name: /^Import/ }).last()).toBeDisabled()
 })
 
+test("a runbook's history shows what each version changed, and an earlier one can be restored", async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  await page.getByRole('button', { name: 'History of Restart a service safely' }).click()
+  const versions = page.getByRole('list', { name: 'Versions' })
+  await expect(versions.getByRole('listitem', { name: 'Version 2' })).toContainText('current')
+  await versions.getByRole('button', { name: 'Version 2' }).click()
+  const changed = page.getByLabel('What version 2 changed')
+  await expect(changed).toContainText('+       - name: Start it again')
+  await expect(changed).toContainText('+     runners:')
+  await versions.getByRole('button', { name: 'Restore version 1' }).click()
+  await expect(versions.getByRole('listitem', { name: 'Version 3' })).toContainText('an earlier version restored by demo')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.getByText('Run by olga and admins')).toHaveCount(0)
+
+  // a run says which version it ran
+  await page.getByRole('button', { name: 'Run…' }).first().click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByText(/Started by demo .*, with version 3\./)).toBeVisible()
+})
+
 test('a schedule runs a runbook, and its runbook stays while it does', async ({ page }) => {
   await openDemo(page, '/schedules')
   const web = page.getByRole('listitem').filter({ hasText: 'Web highstate' })

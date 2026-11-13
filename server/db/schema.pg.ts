@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, primaryKey, serial, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // Postgres twin of schema.sqlite.ts — keep the two in sync.
 // Better Auth core tables + the username and admin plugins (see getAuthTables()).
@@ -336,14 +336,38 @@ export const runbook = pgTable('runbook', {
   steps: text('steps').notNull(),
   // JSON string[]: the operators who may run it; empty for every operator (admins always may)
   runners: text('runners').notNull().default('[]'),
+  // the number of its latest version in runbook_version
+  version: integer('version').notNull().default(1),
   createdBy: text('created_by'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 })
+
+/** Each saved version of a runbook, oldest first: what it was, who saved it and how. */
+export const runbookVersion = pgTable(
+  'runbook_version',
+  {
+    id: serial('id').primaryKey(),
+    runbookId: integer('runbook_id').notNull(),
+    version: integer('version').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    params: text('params').notNull(),
+    steps: text('steps').notNull(),
+    runners: text('runners').notNull().default('[]'),
+    // create, update, import or restore
+    how: text('how').notNull(),
+    savedBy: text('saved_by'),
+    savedAt: timestamp('saved_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex('runbook_version_idx').on(t.runbookId, t.version)],
+)
 
 /** One run of a runbook: its values and how each step went, worked through by the runner. */
 export const runbookRun = pgTable('runbook_run', {
   id: serial('id').primaryKey(),
   runbookId: integer('runbook_id'),
+  // the runbook's version it ran with
+  runbookVersion: integer('runbook_version'),
   name: text('name').notNull(),
   params: text('params').notNull(),
   // JSON: the resolved steps with their progress

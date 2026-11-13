@@ -266,6 +266,35 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     expect(audited.slice(-2)).toEqual(['ada runbook.import Ping', 'ada runbook.import Restart a service'])
   })
 
+  it('keeps every saved version, runs record theirs, and admins restore an earlier one', async () => {
+    const { call, audited } = await setup()
+    const id = ((await call(ada, 'POST', '/runbooks', restart)).body.runbook as { id: number; version: number }).id
+    await call(ada, 'PUT', `/runbooks/${id}`, { ...restart, description: 'Second' })
+    // saving it unchanged makes no version
+    await call(ada, 'PUT', `/runbooks/${id}`, { ...restart, description: 'Second' })
+    const run = (await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { runbookVersion: number }
+    expect(run.runbookVersion).toBe(2)
+    await call(ada, 'POST', '/runbooks/import', { runbooks: [{ ...restart, description: 'From git' }], replace: true })
+    const listed = (await call(vic, 'GET', `/runbooks/${id}/versions`)).body.versions as Array<{ version: number; how: string; savedBy: string; description: string }>
+    expect(listed.map((v) => [v.version, v.how, v.savedBy, v.description])).toEqual([
+      [3, 'import', 'ada', 'From git'],
+      [2, 'update', 'ada', 'Second'],
+      [1, 'create', 'ada', 'Checks the config first'],
+    ])
+
+    expect((await call(olga, 'POST', `/runbooks/${id}/versions/1/restore`)).status).toBe(403)
+    expect((await call(ada, 'POST', `/runbooks/${id}/versions/9/restore`)).status).toBe(404)
+    const restored = await call(ada, 'POST', `/runbooks/${id}/versions/1/restore`)
+    expect(restored.body.runbook).toMatchObject({ version: 4, description: 'Checks the config first' })
+    expect(audited.at(-1)).toBe('ada runbook.restore Restart a service')
+    expect(await call(ada, 'POST', `/runbooks/${id}/versions/4/restore`)).toEqual({ status: 400, body: { error: 'It is already like that version' } })
+    expect(((await call(ada, 'GET', `/runbooks/${id}/versions`)).body.versions as Array<{ how: string }>)[0].how).toBe('restore')
+
+    // its versions go with it
+    await call(ada, 'DELETE', `/runbooks/${id}`)
+    expect((await call(ada, 'GET', `/runbooks/${id}/versions`)).status).toBe(404)
+  })
+
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {
     const { call, returns, run, runner, advance } = await setup()
     const lenient = { ...restart, name: 'Lenient', steps: restart.steps.map((s, i) => ({ ...s, continueOnFailure: i === 0 })) }

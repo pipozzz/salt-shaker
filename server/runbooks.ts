@@ -225,6 +225,32 @@ export interface RouteDeps {
 
 type RunbookRow = Schema['runbook']['$inferSelect']
 type ScheduleRow = Schema['schedule']['$inferSelect']
+export type VersionHow = 'create' | 'update' | 'import' | 'restore' | 'upgrade'
+
+/** Someone saved the runbook between reading it and writing it. */
+export class SavedMeanwhile extends Error {}
+
+/**
+ * Saves a runbook as a new version of itself (or its first), unless nothing changed: the runbook
+ * row holds the latest, runbook_version every one. A save that raced another is refused.
+ */
+export async function saveRunbook(d: Pick<RouteDeps, 'db' | 'schema'>, existing: RunbookRow | null, rb: RunbookInput, how: VersionHow, by: string): Promise<{ row: RunbookRow; changed: boolean }> {
+  const t = d.schema.runbook
+  const content = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), runners: JSON.stringify(rb.runners ?? []) }
+  if (existing && (Object.keys(content) as Array<keyof typeof content>).every((k) => existing[k] === content[k])) return { row: existing, changed: false }
+  const now = new Date()
+  let row: RunbookRow | undefined
+  if (existing) {
+    ;[row] = await d.db
+      .update(t)
+      .set({ ...content, version: existing.version + 1, updatedAt: now })
+      .where(and(eq(t.id, existing.id), eq(t.version, existing.version)))
+      .returning()
+    if (!row) throw new SavedMeanwhile('Someone else saved this runbook meanwhile; open it again')
+  } else [row] = await d.db.insert(t).values({ ...content, version: 1, createdBy: by, updatedAt: now }).returning()
+  await d.db.insert(d.schema.runbookVersion).values({ ...content, runbookId: row.id, version: row.version, how, savedBy: by, savedAt: now })
+  return { row, changed: true }
+}
 
 /** Starts a run as `starter`: waiting for an admin when it needs approval, running otherwise. */
 export async function startRun(d: Pick<RouteDeps, 'db' | 'schema' | 'runner' | 'notifier' | 'audit' | 'approval'>, rb: RunbookRow, given: Record<string, unknown>, starter: { userId: string; username: string; role: string | null }): Promise<{ run: RunRow } | { error: string }> {
@@ -235,7 +261,7 @@ export async function startRun(d: Pick<RouteDeps, 'db' | 'schema' | 'runner' | '
   const steps: StepState[] = resolved.steps.map((s) => ({ ...s, status: 'waiting' }))
   const [run] = await d.db
     .insert(d.schema.runbookRun)
-    .values({ runbookId: rb.id, name: rb.name, params: JSON.stringify(resolved.values), steps: JSON.stringify(steps), status: pending ? 'pending' : 'running', startedBy: starter.username, startedById: starter.userId, startedAt: new Date() })
+    .values({ runbookId: rb.id, runbookVersion: rb.version, name: rb.name, params: JSON.stringify(resolved.values), steps: JSON.stringify(steps), status: pending ? 'pending' : 'running', startedBy: starter.username, startedById: starter.userId, startedAt: new Date() })
     .returning()
   await d.audit({ userId: starter.userId, username: starter.username, role: starter.role, client: 'console', fun: 'runbook.run', target: `#${run.id} ${rb.name}`, args: JSON.stringify(resolved.values), outcome: 'ok' })
   if (pending) await d.notifier.emit('approval', runMessage(run, 'pending'))
@@ -320,14 +346,13 @@ export function runbookRoutes(d: RouteDeps) {
     if ('error' in rb) return c.json({ error: rb.error }, 400)
     const [same] = await d.db.select({ id: t.id }).from(t).where(eq(t.name, rb.name))
     if (same && same.id !== id) return c.json({ error: 'A runbook with this name already exists' }, 400)
-    const values = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), runners: JSON.stringify(rb.runners ?? []), updatedAt: new Date() }
-    let row
-    if (id === null) [row] = await d.db.insert(t).values({ ...values, createdBy: m.username }).returning()
-    else {
-      ;[row] = await d.db.update(t).set(values).where(eq(t.id, id)).returning()
-      if (!row) return c.json({ error: 'Not found' }, 404)
-    }
-    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: id === null ? 'runbook.create' : 'runbook.update', target: rb.name, args: JSON.stringify({ params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
+    const [existing] = id === null ? [] : await d.db.select().from(t).where(eq(t.id, id))
+    if (id !== null && !existing) return c.json({ error: 'Not found' }, 404)
+    const saved = await saveRunbook(d, existing ?? null, rb, id === null ? 'create' : 'update', m.username).catch((e) => e as Error)
+    if (saved instanceof SavedMeanwhile) return c.json({ error: saved.message }, 409)
+    if (saved instanceof Error) throw saved
+    const { row, changed } = saved
+    if (changed) await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: id === null ? 'runbook.create' : 'runbook.update', target: rb.name, args: JSON.stringify({ version: row.version, params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
     return c.json({ runbook: view(row) })
   }
   r.post('/runbooks', (c) => write(c, null))
@@ -351,18 +376,15 @@ export function runbookRoutes(d: RouteDeps) {
       if (read.some((x) => x.name === rb.name)) return c.json({ error: `"${rb.name}" is there twice` }, 400)
       read.push(rb)
     }
-    const existing = new Map((await d.db.select({ id: t.id, name: t.name }).from(t)).map((x) => [x.name, x.id]))
+    const existing = new Map((await d.db.select().from(t)).map((x) => [x.name, x]))
     const taken = read.filter((rb) => existing.has(rb.name)).map((rb) => rb.name)
     if (taken.length && body.replace !== true) return c.json({ error: `These already exist: ${taken.join(', ')}. Replace them, or rename them in the file`, taken }, 409)
     let created = 0
     for (const rb of read) {
-      const values = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), runners: JSON.stringify(rb.runners ?? []), updatedAt: new Date() }
-      const id = existing.get(rb.name)
-      if (id === undefined) {
-        await d.db.insert(t).values({ ...values, createdBy: m.username })
-        created++
-      } else await d.db.update(t).set(values).where(eq(t.id, id))
-      await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.import', target: rb.name, args: JSON.stringify({ replaced: id !== undefined, params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
+      const before = existing.get(rb.name) ?? null
+      const { row, changed } = await saveRunbook(d, before, rb, 'import', m.username)
+      if (!before) created++
+      if (changed) await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.import', target: rb.name, args: JSON.stringify({ replaced: !!before, version: row.version, params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
     }
     return c.json({ created, replaced: read.length - created })
   })
@@ -377,8 +399,39 @@ export function runbookRoutes(d: RouteDeps) {
     const [hook] = await d.db.select({ name: d.schema.runbookHook.name }).from(d.schema.runbookHook).where(eq(d.schema.runbookHook.runbookId, row.id))
     if (hook) return c.json({ error: `The webhook "${hook.name}" runs it; delete that webhook first` }, 400)
     await d.db.delete(t).where(eq(t.id, row.id))
+    await d.db.delete(d.schema.runbookVersion).where(eq(d.schema.runbookVersion.runbookId, row.id))
     await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.delete', target: row.name, outcome: 'ok' })
     return c.json({ ok: true })
+  })
+
+  const versions = d.schema.runbookVersion
+  const versionView = (v: Schema['runbookVersion']['$inferSelect']) => ({ ...v, params: JSON.parse(v.params) as RunbookParam[], steps: JSON.parse(v.steps) as RunbookStep[], runners: JSON.parse(v.runners || '[]') as string[] })
+
+  /** Every saved version of a runbook, newest first. */
+  r.get('/runbooks/:id/versions', async (c) => {
+    const id = Number(c.req.param('id'))
+    const [rb] = await d.db.select({ id: t.id }).from(t).where(eq(t.id, id))
+    if (!rb) return c.json({ error: 'Not found' }, 404)
+    const rows = await d.db.select().from(versions).where(eq(versions.runbookId, id)).orderBy(desc(versions.version)).limit(200)
+    return c.json({ versions: rows.map(versionView) })
+  })
+
+  /** An earlier version, saved again as the newest: nothing in between is lost. */
+  r.post('/runbooks/:id/versions/:version/restore', async (c) => {
+    const m = me(c)
+    if (m.role !== 'admin') return c.json({ error: 'Only admins write runbooks' }, 403)
+    const [rb] = await d.db.select().from(t).where(eq(t.id, Number(c.req.param('id'))))
+    if (!rb) return c.json({ error: 'Not found' }, 404)
+    const [v] = await d.db.select().from(versions).where(and(eq(versions.runbookId, rb.id), eq(versions.version, Number(c.req.param('version')))))
+    if (!v) return c.json({ error: 'There is no such version' }, 404)
+    const [same] = await d.db.select({ id: t.id }).from(t).where(eq(t.name, v.name))
+    if (same && same.id !== rb.id) return c.json({ error: `Another runbook is called "${v.name}" now; rename it first` }, 400)
+    const saved = await saveRunbook(d, rb, versionView(v), 'restore', m.username).catch((e) => e as Error)
+    if (saved instanceof SavedMeanwhile) return c.json({ error: saved.message }, 409)
+    if (saved instanceof Error) throw saved
+    if (!saved.changed) return c.json({ error: 'It is already like that version' }, 400)
+    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.restore', target: rb.name, args: JSON.stringify({ from: v.version, version: saved.row.version }), outcome: 'ok' })
+    return c.json({ runbook: view(saved.row) })
   })
 
   r.post('/runbooks/:id/run', async (c) => {
@@ -420,7 +473,7 @@ export function runbookRoutes(d: RouteDeps) {
     const pending = steps.slice(at).some((s) => needsApproval(d.approval, m.role, s.fun, s.kwarg))
     const [run] = await d.db
       .insert(runs)
-      .values({ runbookId: row.runbookId, name: row.name, params: row.params, steps: JSON.stringify(steps), cursor: at, status: pending ? 'pending' : 'running', startedBy: m.username, startedById: m.userId, startedAt: new Date() })
+      .values({ runbookId: row.runbookId, runbookVersion: row.runbookVersion, name: row.name, params: row.params, steps: JSON.stringify(steps), cursor: at, status: pending ? 'pending' : 'running', startedBy: m.username, startedById: m.userId, startedAt: new Date() })
       .returning()
     await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'console', fun: 'runbook.continue', target: `#${run.id} ${row.name}`, args: JSON.stringify({ from: row.id, step: at + 1 }), outcome: 'ok' })
     if (pending) await d.notifier.emit('approval', runMessage(run, 'pending'))

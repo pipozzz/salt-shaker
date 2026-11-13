@@ -1,11 +1,13 @@
-import { ArrowDown, ArrowUp, BookOpen, Download, Pencil, Play, Plus, Trash2, Upload, X } from 'lucide-react'
+import clsx from 'clsx'
+import { ArrowDown, ArrowUp, BookOpen, ChevronRight, Download, History, Pencil, Play, Plus, RotateCcw, Trash2, Upload, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { Runbook } from '../api/server'
+import type { Runbook, RunbookVersion } from '../api/server'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner } from '../components/ui'
 import { download } from '../lib/export'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
+import { aroundChanges, lineDiff } from '../lib/line-diff'
 import { fileName, readRunbookFile, runbooksToYaml } from '../lib/runbook-file'
 import { TARGET_TYPES, type RunbookInput, type RunbookParam, type RunbookStep } from '../lib/runbook'
 import { RUN_STATUS, runnersText, useRunbookRole, useRunbooksApi, useUsersForRunbooks } from '../lib/runbooks'
@@ -24,6 +26,7 @@ export function RunbooksPage() {
   const [running, setRunning] = useState<Runbook | null>(null)
   const [removing, setRemoving] = useState<Runbook | null>(null)
   const [importing, setImporting] = useState(false)
+  const [history, setHistory] = useState<Runbook | null>(null)
   const exportFile = (rbs: Runbook[]) => download(fileName(rbs), 'application/yaml', runbooksToYaml(rbs))
   const [removeError, setRemoveError] = useState<Error | null>(null)
   if (!api) return null
@@ -71,6 +74,7 @@ export function RunbooksPage() {
               subtitle={rb.description || undefined}
               actions={
                 <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" icon={<History className="size-3.5" />} aria-label={`History of ${rb.name}`} title={`Version ${rb.version}: its history`} onClick={() => setHistory(rb)} />
                   <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />} aria-label={`Export ${rb.name}`} title="Export as YAML" onClick={() => exportFile([rb])} />
                   {canWrite && <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} aria-label={`Edit ${rb.name}`} onClick={() => setEditing(rb)} />}
                   {canWrite && <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label={`Delete ${rb.name}`} onClick={() => setRemoving(rb)} />}
@@ -133,6 +137,7 @@ export function RunbooksPage() {
         )}
       </Card>
 
+      {history && <HistoryModal runbook={history} onClose={() => setHistory(null)} onRestored={() => setReloads((n) => n + 1)} />}
       {importing && list.data && <ImportModal existing={list.data.runbooks.map((rb) => rb.name)} onClose={() => setImporting(false)} onDone={() => setReloads((n) => n + 1)} />}
       {editing && <RunbookEditor runbook={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => setReloads((n) => n + 1)} />}
       {running && <RunModal runbook={running} onClose={() => setRunning(null)} />}
@@ -454,6 +459,96 @@ function ImportModal({ existing, onClose, onDone }: { existing: string[]; onClos
           </Button>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+const HOW: Record<RunbookVersion['how'], string> = {
+  create: 'written',
+  update: 'edited',
+  import: 'imported from a file',
+  restore: 'an earlier version restored',
+  upgrade: 'as it was when its history began',
+}
+
+/** A version as YAML without the file's header, to compare with the one before it. */
+const versionText = (v: RunbookVersion) => runbooksToYaml([v]).split('\n').slice(2).join('\n')
+
+/** Every saved version of a runbook, newest first, each with what it changed; admins restore one. */
+function HistoryModal({ runbook, onClose, onRestored }: { runbook: Runbook; onClose: () => void; onRestored: () => void }) {
+  const api = useRunbooksApi()!
+  const { canWrite } = useRunbookRole()
+  const [reloads, setReloads] = useState(0)
+  const list = useAsync(() => api.versions(runbook.id), [api, runbook.id, reloads])
+  const [open, setOpen] = useState<number | null>(null)
+  const [busy, setBusy] = useState<number | null>(null)
+  const [error, setError] = useState<Error | null>(null)
+  const versions = list.data?.versions ?? []
+  const restore = async (v: number) => {
+    setBusy(v)
+    setError(null)
+    try {
+      await api.restore(runbook.id, v)
+      setReloads((n) => n + 1)
+      setOpen(null)
+      onRestored()
+    } catch (e) {
+      setError(e as Error)
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={`History of ${runbook.name}`} wide>
+      <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">Each save is a version; a run says which one it ran. Restoring one saves it again as the newest, so nothing in between is lost.</p>
+      {list.error && <ErrorBox error={list.error} onRetry={list.reload} />}
+      {!list.data && list.loading && <Spinner />}
+      {error && <ErrorBox error={error} />}
+      <ol className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-label="Versions">
+        {versions.map((v, i) => {
+          const before = versions[i + 1]
+          const shown = open === v.version
+          const diff = shown ? aroundChanges(lineDiff(before ? versionText(before) : '', versionText(v)), 3) : []
+          return (
+            <li key={v.id} className="px-3 py-2 text-sm" aria-label={`Version ${v.version}`}>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <button type="button" onClick={() => setOpen(shown ? null : v.version)} aria-expanded={shown} className="inline-flex items-center gap-1 font-medium hover:underline">
+                  <ChevronRight className={clsx('size-3.5 transition-transform', shown && 'rotate-90')} aria-hidden />
+                  Version {v.version}
+                </button>
+                {i === 0 && <Badge tone="green">current</Badge>}
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {HOW[v.how]}
+                  {v.savedBy ? ` by ${v.savedBy}` : ''} {relTime(new Date(v.savedAt))}
+                </span>
+                {canWrite && i > 0 && (
+                  <Button size="sm" className="ml-auto" icon={<RotateCcw className="size-3.5" />} loading={busy === v.version} onClick={() => void restore(v.version)}>
+                    Restore version {v.version}
+                  </Button>
+                )}
+              </div>
+              {shown && (
+                <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-zinc-50 py-1 font-mono text-xs dark:bg-zinc-950" aria-label={`What version ${v.version} changed`}>
+                  {!before && <div className="px-2 pb-1 text-zinc-500 dark:text-zinc-400"># the first version</div>}
+                  {diff.map((l, k) =>
+                    l === null ? (
+                      <div key={k} className="px-2 text-zinc-400">
+                        ⋯
+                      </div>
+                    ) : (
+                      <div key={k} className={clsx('px-2', l.kind === 'add' && 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300', l.kind === 'del' && 'bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300')}>
+                        {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '− ' : '  '}
+                        {l.text}
+                      </div>
+                    ),
+                  )}
+                  {before && diff.length === 0 && <div className="px-2 text-zinc-500 dark:text-zinc-400">Nothing changed.</div>}
+                </pre>
+              )}
+            </li>
+          )
+        })}
+      </ol>
     </Modal>
   )
 }

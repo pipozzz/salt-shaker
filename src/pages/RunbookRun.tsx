@@ -99,7 +99,7 @@ export function RunbookRunPage() {
         <>
           <PageHeader
             title={`${run.name} #${run.id}`}
-            description={`Started by ${run.startedBy} ${relTime(new Date(run.startedAt))}${run.decidedBy ? `, ${run.status === 'rejected' ? 'rejected' : 'approved'} by ${run.decidedBy}` : ''}.`}
+            description={`Started by ${run.startedBy} ${relTime(new Date(run.startedAt))}${run.runbookVersion ? `, with version ${run.runbookVersion}` : ''}${run.decidedBy ? `, ${run.status === 'rejected' ? 'rejected' : 'approved'} by ${run.decidedBy}` : ''}.`}
             actions={
               <div className="flex items-center gap-2">
                 <Badge tone={RUN_STATUS[run.status].tone}>{RUN_STATUS[run.status].label}</Badge>

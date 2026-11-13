@@ -22,7 +22,7 @@ import type { AuditRow, Env, SessionUser } from './types'
  */
 
 export type RunStatus = 'pending' | 'running' | 'done' | 'stopped' | 'failed' | 'rejected'
-export type StepStatus = 'waiting' | 'starting' | 'running' | 'done' | 'failed' | 'skipped'
+export type StepStatus = 'waiting' | 'paused' | 'starting' | 'running' | 'done' | 'failed' | 'skipped'
 
 export interface StepState extends ResolvedStep {
   status: StepStatus
@@ -36,6 +36,9 @@ export interface StepState extends ResolvedStep {
   error?: string
   /** a step carried over from the run this one continues: it ran there */
   fromRun?: number
+  /** a step that waits to go on: who let it, and when it started waiting */
+  confirmedBy?: string
+  pausedAt?: string
 }
 
 type RunRow = Schema['runbookRun']['$inferSelect']
@@ -45,9 +48,9 @@ type SaltAs = (user: SessionUser, input: unknown, ip: string | null, opts?: { ap
 export const STEP_DEADLINE_MS = 15 * 60_000
 const START_STUCK_MS = 2 * 60_000
 
-export function runMessage(r: Pick<RunRow, 'id' | 'name' | 'startedBy'>, what: 'pending' | 'done' | 'stopped' | 'failed', detail?: string | null): Message {
-  const title = { pending: `Runbook "${r.name}" waits for approval`, done: `Runbook "${r.name}" finished`, stopped: `Runbook "${r.name}" stopped`, failed: `Runbook "${r.name}" failed` }[what]
-  return { title, lines: [`Started by ${r.startedBy}`, ...(detail ? [detail] : [])], severity: what === 'done' ? 'info' : what === 'pending' ? 'warning' : 'error', path: `/runbooks/runs/${r.id}` }
+export function runMessage(r: Pick<RunRow, 'id' | 'name' | 'startedBy'>, what: 'pending' | 'paused' | 'done' | 'stopped' | 'failed', detail?: string | null): Message {
+  const title = { pending: `Runbook "${r.name}" waits for approval`, paused: `Runbook "${r.name}" waits for you to go on`, done: `Runbook "${r.name}" finished`, stopped: `Runbook "${r.name}" stopped`, failed: `Runbook "${r.name}" failed` }[what]
+  return { title, lines: [`Started by ${r.startedBy}`, ...(detail ? [detail] : [])], severity: what === 'done' ? 'info' : what === 'pending' || what === 'paused' ? 'warning' : 'error', path: `/runbooks/runs/${r.id}` }
 }
 
 interface RunnerDeps {
@@ -107,7 +110,7 @@ export class RunbookRunner {
   }
 
   private async end(r: RunRow, steps: StepState[], status: 'done' | 'stopped' | 'failed', error: string | null) {
-    const rest = steps.map((s) => (s.status === 'waiting' ? { ...s, status: 'skipped' as const } : s))
+    const rest = steps.map((s) => (s.status === 'waiting' || s.status === 'paused' ? { ...s, status: 'skipped' as const } : s))
     if (await this.save(r, { status, steps: JSON.stringify(rest), error, finishedAt: new Date(this.now()) })) await this.d.notifier.emit('runbook', runMessage(r, status, error))
   }
 
@@ -146,6 +149,14 @@ export class RunbookRunner {
     const at = () => new Date(this.now()).toISOString()
     // nothing stopped the run: its steps for a failure don't run
     if (step.onFailure && !r.error && step.status === 'waiting') return this.finish(r, steps, null)
+
+    // a step that asks first waits, for as long as it takes, until someone lets it go on
+    if (step.status === 'paused') return
+    if (step.status === 'waiting' && step.confirm && !step.confirmedBy) {
+      steps[i] = { ...step, status: 'paused', pausedAt: at() }
+      if (await this.save(r, { steps: JSON.stringify(steps) })) await this.d.notifier.emit('runbook', runMessage(r, 'paused', `Step ${i + 1}: ${step.name}`))
+      return
+    }
 
     if (step.status === 'waiting') {
       steps[i] = { ...step, status: 'starting', startedAt: at() }
@@ -379,6 +390,28 @@ export function runbookRoutes(d: RouteDeps) {
     return c.json({ run: runView(run) }, 201)
   })
 
+  /** Lets a run that waits before a step go on: whoever started it, or an admin. */
+  r.post('/runbook-runs/:id/proceed', async (c) => {
+    const m = me(c)
+    const [row] = await d.db.select().from(runs).where(eq(runs.id, Number(c.req.param('id'))))
+    if (!row) return c.json({ error: 'Not found' }, 404)
+    if (m.role !== 'admin' && !(m.userId === row.startedById && m.role === 'operator')) return c.json({ error: 'Only whoever started it, or an admin, lets it go on' }, 403)
+    const steps = JSON.parse(row.steps) as StepState[]
+    const step = steps[row.cursor]
+    if (row.status !== 'running' || step?.status !== 'paused') return c.json({ error: "It isn't waiting to go on" }, 400)
+    steps[row.cursor] = { ...step, status: 'waiting', confirmedBy: m.username }
+    const done = await d.db
+      .update(runs)
+      .set({ steps: JSON.stringify(steps), version: row.version + 1 })
+      .where(and(eq(runs.id, row.id), eq(runs.version, row.version)))
+      .returning()
+    if (!done.length) return c.json({ error: 'It changed meanwhile; try again' }, 409)
+    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'console', fun: 'runbook.proceed', target: `#${row.id} ${row.name}`, args: JSON.stringify({ step: row.cursor + 1, name: step.name }), outcome: 'ok' })
+    await d.runner.tick()
+    const [now] = await d.db.select().from(runs).where(eq(runs.id, row.id))
+    return c.json({ run: runView(now) })
+  })
+
   const act = (verb: 'stop' | 'approve' | 'reject') =>
     r.post(`/runbook-runs/:id/${verb}`, async (c) => {
       const m = me(c)
@@ -392,7 +425,7 @@ export function runbookRoutes(d: RouteDeps) {
         if (m.userId === row.startedById) return c.json({ error: 'Someone else has to approve your run' }, 403)
         if (row.status !== 'pending') return c.json({ error: "It isn't waiting for approval" }, 400)
       }
-      const steps = (JSON.parse(row.steps) as StepState[]).map((s) => (verb !== 'approve' && s.status === 'waiting' ? { ...s, status: 'skipped' as const } : s))
+      const steps = (JSON.parse(row.steps) as StepState[]).map((s) => (verb !== 'approve' && (s.status === 'waiting' || s.status === 'paused') ? { ...s, status: 'skipped' as const } : s))
       const patch =
         verb === 'approve'
           ? { status: 'running', decidedBy: m.username }

@@ -27,6 +27,9 @@ describe('runbooks', () => {
     expect(readRunbook({ ...restart, steps: [...restart.steps, undo] })).toMatchObject({ steps: [{}, {}, { name: 'Undo', onFailure: true }] })
     expect(readRunbook({ ...restart, steps: [undo, ...restart.steps] })).toEqual({ error: 'Step 2 runs every time, so it comes before the steps for a failure' })
     expect(readRunbook({ ...restart, steps: [undo] })).toEqual({ error: 'Add a step that runs every time, not only on a failure' })
+    // a step may ask before it runs
+    expect(readRunbook({ ...restart, steps: [restart.steps[0], { ...restart.steps[1], confirm: true }] })).toMatchObject({ steps: [{}, { name: 'Restart', confirm: true }] })
+    expect(resolveRunbook({ ...restart, steps: [{ ...restart.steps[1], confirm: true }] }, { host: 'a' })).toMatchObject({ steps: [{ confirm: true }] })
     // a step without a name is numbered
     expect(readRunbook({ ...restart, steps: [{ ...restart.steps[0], name: '' }] })).toMatchObject({ steps: [{ name: 'Step 1' }] })
   })

@@ -608,7 +608,7 @@ export interface Runbook extends RunbookInput {
 export type RunbookRunStatus = 'pending' | 'running' | 'done' | 'stopped' | 'failed' | 'rejected'
 
 export interface RunbookStepState extends ResolvedStep {
-  status: 'waiting' | 'starting' | 'running' | 'done' | 'failed' | 'skipped'
+  status: 'waiting' | 'paused' | 'starting' | 'running' | 'done' | 'failed' | 'skipped'
   jid?: string | null
   minions?: string[]
   ok?: number
@@ -619,6 +619,9 @@ export interface RunbookStepState extends ResolvedStep {
   error?: string
   /** a step carried over from the run this one continues: it ran there */
   fromRun?: number
+  /** a step that waits to go on: who let it, and when it started waiting */
+  confirmedBy?: string
+  pausedAt?: string
 }
 
 export interface RunbookRun {
@@ -682,6 +685,8 @@ export const runbooks = {
   runs: (runbookId?: number) => request<{ runs: RunbookRun[] }>(`/api/runbook-runs${runbookId ? `?runbook=${runbookId}` : ''}`),
   getRun: (id: number) => request<{ run: RunbookRun }>(`/api/runbook-runs/${id}`),
   act: (id: number, verb: 'stop' | 'approve' | 'reject') => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/${verb}`, {}),
+  /** lets a run that waits before a step go on */
+  proceed: (id: number) => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/proceed`, {}),
   /** a new run from the step that stopped this one */
   continue: (id: number) => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/continue`, {}),
 }

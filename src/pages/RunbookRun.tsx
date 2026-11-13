@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArrowLeft, Check, ChevronRight, CircleDashed, CircleX, Loader2, Minus, RotateCcw, SkipForward, Square } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, CircleDashed, CircleX, Hand, Loader2, Minus, Play, RotateCcw, SkipForward, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { RunbookStepState } from '../api/server'
@@ -16,6 +16,7 @@ import { RunModal } from './Runbooks'
 
 const STEP_ICON: Record<RunbookStepState['status'], { icon: typeof Check; cls: string; label: string }> = {
   waiting: { icon: CircleDashed, cls: 'text-zinc-400', label: 'waiting' },
+  paused: { icon: Hand, cls: 'text-amber-600 dark:text-amber-400', label: 'waiting to go on' },
   starting: { icon: Loader2, cls: 'animate-spin text-sky-600 dark:text-sky-400', label: 'starting' },
   running: { icon: Loader2, cls: 'animate-spin text-sky-600 dark:text-sky-400', label: 'running' },
   done: { icon: Check, cls: 'text-emerald-600 dark:text-emerald-400', label: 'done' },
@@ -52,6 +53,20 @@ export function RunbookRunPage() {
     try {
       const { run: next } = await api!.continue(Number(id))
       navigate(`/runbooks/runs/${next.id}`)
+    } catch (e) {
+      setError(e as Error)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const paused = run?.status === 'running' && run.steps[run.cursor]?.status === 'paused' ? run.steps[run.cursor] : null
+  const mayGoOn = canWrite || run?.startedBy === me
+  const proceed = async () => {
+    setBusy('proceed')
+    setError(null)
+    try {
+      await api!.proceed(Number(id))
+      setTick((n) => n + 1)
     } catch (e) {
       setError(e as Error)
     } finally {
@@ -116,6 +131,18 @@ export function RunbookRunPage() {
           />
           {error && <ErrorBox error={error} />}
           {again && runbook && <RunModal runbook={runbook} initial={run.params} onClose={() => setAgain(false)} />}
+          {paused && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <span>
+                Step {run.cursor + 1}, {paused.name}, waits for {mayGoOn ? 'you' : `${run.startedBy} or an admin`} to go on. Look at the output of the steps before it first; nothing runs until then.
+              </span>
+              {mayGoOn && (
+                <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} loading={busy === 'proceed'} onClick={proceed}>
+                  Go on with step {run.cursor + 1}
+                </Button>
+              )}
+            </div>
+          )}
           {run.status === 'pending' && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">It changes minions, so an admin other than {run.startedBy} approves it first. Nothing runs until then.</p>}
           {run.error && (
             <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -154,6 +181,7 @@ export function RunbookRunPage() {
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">{st.label}</span>
                         {s.continueOnFailure && <span className="text-xs text-zinc-500 dark:text-zinc-400">· may fail</span>}
                         {s.onFailure && <span className="text-xs text-amber-700 dark:text-amber-400">· if it fails</span>}
+                        {s.confirm && <span className="text-xs text-zinc-500 dark:text-zinc-400">· {s.confirmedBy ? `let go on by ${s.confirmedBy}` : 'asks first'}</span>}
                         {s.fromRun && (
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">
                             · in{' '}

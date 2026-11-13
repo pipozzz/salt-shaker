@@ -68,6 +68,7 @@ export function RunbooksPage() {
                     <span className="font-medium">{s.name}</span>
                     {s.continueOnFailure && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(may fail)</span>}
                     {s.onFailure && <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400">(if it fails)</span>}
+                    {s.confirm && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(asks first)</span>}
                     <span className="block truncate font-mono text-xs text-zinc-500 dark:text-zinc-400" title={stepText(s)}>
                       {stepText(s)}
                     </span>
@@ -301,6 +302,10 @@ function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null;
                     <input type="checkbox" checked={s.continueOnFailure} onChange={(e) => setStep(i, { continueOnFailure: e.target.checked })} className="accent-accent-600" /> go on to the next step even if this one fails
                   </label>
                 )}
+                <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                  <input type="checkbox" checked={!!s.confirm} onChange={(e) => setStep(i, { confirm: e.target.checked })} className="accent-accent-600" aria-label={`Step ${i + 1} asks first`} /> wait
+                  for someone to go on before this step
+                </label>
                 <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
                   <input type="checkbox" checked={!!s.onFailure} onChange={(e) => setStep(i, { onFailure: e.target.checked, ...(e.target.checked ? { continueOnFailure: false } : {}) })} className="accent-accent-600" aria-label={`Step ${i + 1} runs only if the run fails`} /> run only
                   if a step before stops the run, to put things back (these come last)

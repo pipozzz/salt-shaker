@@ -193,6 +193,45 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     expect(emitted.at(-1)).toBe('runbook: Runbook "Restart a service" stopped')
   })
 
+  it('waits before a step that asks first until whoever started it, or an admin, lets it go on', async () => {
+    const { call, calls, returns, run, runner, emitted, audited } = await setup()
+    const rb = { ...restart, steps: [restart.steps[0], { ...restart.steps[1], confirm: true }, restart.steps[2]] }
+    const id = ((await call(ada, 'POST', '/runbooks', rb)).body.runbook as { id: number }).id
+    const runId = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
+    await returns('j1', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    // it waits, as long as it takes, and says so
+    await runner.tick()
+    expect((await run(runId)).steps.map((s) => s.status)).toEqual(['done', 'paused', 'waiting'])
+    expect(calls).toHaveLength(1)
+    expect(emitted).toEqual(['runbook: Runbook "Restart a service" waits for you to go on'])
+
+    const bob: SessionUser = { id: 'b', name: 'Bob', username: 'bob', role: 'operator' }
+    expect(await call(bob, 'POST', `/runbook-runs/${runId}/proceed`)).toEqual({ status: 403, body: { error: 'Only whoever started it, or an admin, lets it go on' } })
+    const res = await call(olga, 'POST', `/runbook-runs/${runId}/proceed`)
+    expect(res.status).toBe(200)
+    expect((res.body.run as { steps: StepState[] }).steps[1]).toMatchObject({ status: 'running', confirmedBy: 'olga', jid: 'j2' })
+    expect(calls.at(-1)).toMatchObject({ user: 'olga', low: { fun: 'service.restart' } })
+    expect(audited.at(-1)).toBe(`olga runbook.proceed #${runId} Restart a service`)
+    expect((await call(olga, 'POST', `/runbook-runs/${runId}/proceed`)).body).toEqual({ error: "It isn't waiting to go on" })
+    await returns('j2', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j3', [['web-01', true]])
+    await runner.tick()
+    expect((await run(runId)).status).toBe('done')
+
+    // stopped while it waits: the step is skipped
+    const second = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
+    await returns('j4', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await runner.tick()
+    await call(ada, 'POST', `/runbook-runs/${second}/stop`)
+    expect((await run(second)).steps.map((s) => s.status)).toEqual(['done', 'skipped', 'skipped'])
+  })
+
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {
     const { call, returns, run, runner, advance } = await setup()
     const lenient = { ...restart, name: 'Lenient', steps: restart.steps.map((s, i) => ({ ...s, continueOnFailure: i === 0 })) }

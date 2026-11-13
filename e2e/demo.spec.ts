@@ -420,6 +420,18 @@ test('a runbook runs step by step and stops at the step that fails', async ({ pa
   await expect(page.getByText('Reboot', { exact: true })).toBeVisible()
 })
 
+test('a runbook waits before a step that asks first, until someone lets it go on', async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  await page.getByRole('button', { name: 'Run…' }).nth(1).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page).toHaveURL(/\/runbooks\/runs\/\d+$/)
+  const steps = page.getByRole('list', { name: 'Steps' })
+  await expect(steps.getByRole('listitem', { name: 'Apply: waiting to go on' })).toContainText('asks first')
+  await expect(page.getByText('Step 3, Apply, waits for you to go on.', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Go on with step 3' }).click()
+  await expect(steps.getByRole('listitem', { name: /^Apply: (running|done|failed)$/ })).toContainText('let go on by demo')
+})
+
 test('a schedule runs a runbook, and its runbook stays while it does', async ({ page }) => {
   await openDemo(page, '/schedules')
   const web = page.getByRole('listitem').filter({ hasText: 'Web highstate' })

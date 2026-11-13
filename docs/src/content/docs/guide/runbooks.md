@@ -15,6 +15,7 @@ Admins write runbooks on **Runbooks → New runbook**:
 - **Values to ask for**, each with a name, how it's asked, a default and whether it's required. Use them in a step as `{{name}}`.
 - **Steps, in order**: a name, the target and how it matches (glob, list, grain, …), the function and its arguments as on the [Run](/salt-shaker/guide/run/) page, for example `service.restart` with `{{service}}`, or `state.apply` with `test=True`. Up to 20 steps.
 - **Go on even if this one fails**, for a step whose failure shouldn't stop the rest, like a dry run.
+- **Wait for someone to go on before this step**, for a step you want a person to look before, like **Apply** after a dry run. The run stops there, sends a *Runbook runs* notification and waits for as long as it takes; **Go on with step N** on the run's page lets it go on. Whoever started it, or an admin, can; for a run a schedule or a webhook started, an admin. Who did it shows on the step and in the audit log. **Stop** ends a run that waits, too. A run that continues another asks again.
 - **Run only if a step before stops the run**, for steps that put things back: start the service again, roll back a release, send an event. They come after the others and are skipped when everything goes well. When a step stops the run, the steps after it are skipped and these run instead, one after another, each even if the one before failed; the run then ends as *stopped* (or *failed*) with that step's error. Stopping a run by hand doesn't run them.
 
 A value is put *into* an argument, after the arguments are split: a value of `nginx test=True` stays one argument and can't add `test=True` of its own. In a target it's used as typed, and the target is checked against the person's scope like any other.
@@ -37,7 +38,7 @@ Viewers read runbooks and their runs but don't run them.
 
 With `APPROVAL_REQUIRED=risky`, an operator's run with a step that changes minions waits for an admin other than them to **Approve** it, like a [change](/salt-shaker/guide/changes/#approvals). Once approved, its steps run without asking again. An admin's own runs start right away.
 
-Notifications have a **Runbook runs** event for runs that finished, stopped or failed, and runs waiting for approval go to **Changes waiting for approval**.
+Notifications have a **Runbook runs** event for runs that finished, stopped or failed, or wait for someone to go on, and runs waiting for approval go to **Changes waiting for approval**.
 
 ## On a schedule
 

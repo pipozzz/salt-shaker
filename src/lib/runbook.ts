@@ -28,6 +28,8 @@ export interface RunbookStep {
   continueOnFailure: boolean
   /** runs only when an earlier step stopped the run, to put things back; these come last */
   onFailure?: boolean
+  /** the run waits before this step until whoever started it, or an admin, lets it go on */
+  confirm?: boolean
 }
 
 export interface RunbookInput {
@@ -47,6 +49,7 @@ export interface ResolvedStep {
   kwarg: Record<string, unknown>
   continueOnFailure: boolean
   onFailure?: boolean
+  confirm?: boolean
 }
 
 const PARAM = /^[a-z_][a-z0-9_]{0,30}$/
@@ -85,6 +88,7 @@ export function readRunbook(body: Record<string, unknown>): RunbookInput | { err
       args: typeof s?.args === 'string' ? s.args.trim() : '',
       continueOnFailure: s?.continueOnFailure === true,
       ...(s?.onFailure === true ? { onFailure: true } : {}),
+      ...(s?.confirm === true ? { confirm: true } : {}),
     }
     if (!step.onFailure && steps.some((x) => x.onFailure)) return { error: `Step ${n} runs every time, so it comes before the steps for a failure` }
     if (!FUN.test(step.fun)) return { error: `Step ${n}: the function is a name like state.apply` }
@@ -130,6 +134,7 @@ export function resolveRunbook(rb: Pick<RunbookInput, 'params' | 'steps'>, given
       kwarg: fillValue(kwarg, values) as Record<string, unknown>,
       continueOnFailure: s.continueOnFailure,
       ...(s.onFailure ? { onFailure: true } : {}),
+      ...(s.confirm ? { confirm: true } : {}),
     }
   })
   const empty = steps.find((s) => !s.target.trim())
@@ -162,7 +167,7 @@ export function continueFrom(run: { status: string; steps: StepLike[] }): number
 export function continuedSteps<S extends StepLike>(steps: S[], at: number, fromRun: number): S[] {
   return steps.map((s, i) => {
     if (i < at) return { ...s, fromRun: s.fromRun ?? fromRun }
-    const { name, fun, target, targetType, arg, kwarg, continueOnFailure, onFailure } = s
-    return { name, fun, target, targetType, arg, kwarg, continueOnFailure, ...(onFailure ? { onFailure } : {}), status: 'waiting' } as S
+    const { name, fun, target, targetType, arg, kwarg, continueOnFailure, onFailure, confirm } = s
+    return { name, fun, target, targetType, arg, kwarg, continueOnFailure, ...(onFailure ? { onFailure } : {}), ...(confirm ? { confirm } : {}), status: 'waiting' } as S
   })
 }

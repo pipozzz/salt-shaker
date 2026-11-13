@@ -31,12 +31,12 @@ const SEED: RunbookInput[] = [
   },
   {
     name: 'Sync and apply the highstate',
-    description: 'Syncs custom modules, shows what the highstate would change, then applies it.',
+    description: 'Syncs custom modules, shows what the highstate would change, and applies it once you have looked.',
     params: [{ name: 'target', label: 'Minions', default: 'web-*', required: true }],
     steps: [
       { name: 'Sync modules', fun: 'saltutil.sync_all', target: '{{target}}', targetType: 'glob', args: '', continueOnFailure: false },
       { name: 'Dry run', fun: 'state.apply', target: '{{target}}', targetType: 'glob', args: 'test=True', continueOnFailure: true },
-      { name: 'Apply', fun: 'state.apply', target: '{{target}}', targetType: 'glob', args: '', continueOnFailure: false },
+      { name: 'Apply', fun: 'state.apply', target: '{{target}}', targetType: 'glob', args: '', continueOnFailure: false, confirm: true },
     ],
   },
 ]
@@ -56,6 +56,14 @@ async function work(run: RunbookRun) {
     // nothing stopped the run: its steps for a failure don't run
     if (step.onFailure && !run.error) break
     run.cursor = i
+    // a step that asks first waits until someone lets it go on
+    if (step.confirm && !step.confirmedBy) {
+      Object.assign(step, { status: 'paused', pausedAt: new Date().toISOString() })
+      while (!step.confirmedBy) {
+        await sleep(400)
+        if (run.status !== 'running') return
+      }
+    }
     step.status = 'running'
     step.startedAt = new Date().toISOString()
     const job = demoJob(step.target, step.targetType, step.fun, step.arg, step.kwarg, run.startedBy)
@@ -103,7 +111,7 @@ function toFailureSteps(run: RunbookRun, error: string) {
 }
 
 function end(run: RunbookRun, status: 'done' | 'stopped' | 'failed', error: string | null) {
-  for (const s of run.steps) if (s.status === 'waiting') s.status = 'skipped'
+  for (const s of run.steps) if (s.status === 'waiting' || s.status === 'paused') s.status = 'skipped'
   Object.assign(run, { status, error, finishedAt: new Date().toISOString() })
 }
 
@@ -208,6 +216,15 @@ export const demoRunbooks: typeof runbooks = {
     if (r.status !== 'running' && r.status !== 'pending') return fail('It has already finished')
     end(r, 'stopped', 'Stopped by demo')
     recordDemoAudit({ username: 'demo', client: 'console', fun: 'runbook.stop', target: `#${r.id} ${r.name}`, outcome: 'ok' })
+    return delay({ run: copy(r) })
+  },
+  proceed: (id) => {
+    const r = runs.find((x) => x.id === id)
+    if (!r) return fail('Not found')
+    const step = r.steps[r.cursor]
+    if (r.status !== 'running' || step?.status !== 'paused') return fail("It isn't waiting to go on")
+    Object.assign(step, { status: 'waiting', confirmedBy: 'demo' })
+    recordDemoAudit({ username: 'demo', client: 'console', fun: 'runbook.proceed', target: `#${r.id} ${r.name}`, args: JSON.stringify({ step: r.cursor + 1, name: step.name }), outcome: 'ok' })
     return delay({ run: copy(r) })
   },
   continue: (id) => {

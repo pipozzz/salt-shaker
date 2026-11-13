@@ -6,6 +6,7 @@
 
 - **Run again** on a finished run opens the form with its values. A run that stopped or failed can **Continue from step N**: a new run, as you, from the step that stopped it, with the same values; the steps before it stay as they ran, linked to their run. See [Running one](https://pipozzz.github.io/salt-shaker/guide/runbooks/#running-one).
 - A runbook can end with **steps for a failure**: they run only when a step stops the run, to put things back (start the service again, roll back), and are skipped when all goes well. The run then ends with the error of the step that stopped it. See [Writing one](https://pipozzz.github.io/salt-shaker/guide/runbooks/#writing-one).
+- A step can **wait for someone to go on** before it runs, for example **Apply** after a dry run: the run stops there and sends a notification, and whoever started it, or an admin, lets it go on with **Go on with step N**. Who did shows on the step and in the audit log. See [Writing one](https://pipozzz.github.io/salt-shaker/guide/runbooks/#writing-one).
 
 ## 1.27.0
 

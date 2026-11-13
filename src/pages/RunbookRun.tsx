@@ -9,6 +9,7 @@ import { formatArgs } from '../api/salt'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { jobResults, loadJobDetail } from '../lib/job-detail'
+import { batchCount } from '../lib/batch'
 import { continueFrom } from '../lib/runbook'
 import { RUN_STATUS, useRunbookRole, useRunbooksApi } from '../lib/runbooks'
 import { useSalt, useSession } from '../lib/session'
@@ -183,6 +184,12 @@ export function RunbookRunPage() {
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">{st.label}</span>
                         {s.continueOnFailure && <span className="text-xs text-zinc-500 dark:text-zinc-400">· may fail</span>}
                         {s.onFailure && <span className="text-xs text-amber-700 dark:text-amber-400">· if it fails</span>}
+                        {s.batchSize && (
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                            · in batches of {s.batchSize}
+                            {s.status === 'running' && s.batches && s.minions?.length ? `, batch ${Math.max(1, s.batches.length)} of ${Math.ceil(s.minions.length / batchCount(s.batchSize, s.minions.length))}` : ''}
+                          </span>
+                        )}
                         {s.confirm && <span className="text-xs text-zinc-500 dark:text-zinc-400">· {s.confirmedBy ? `let go on by ${s.confirmedBy}` : 'asks first'}</span>}
                         {s.fromRun && (
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -202,7 +209,8 @@ export function RunbookRunPage() {
                           {s.status === 'running' ? `${s.minions.length} ${s.minions.length === 1 ? 'minion' : 'minions'}, waiting for their returns` : `${s.ok ?? 0} ok`}
                           {!!s.failed?.length && <span className="text-red-700 dark:text-red-400"> · failed: {s.failed.join(', ')}</span>}
                           {!!s.missing?.length && <span className="text-amber-700 dark:text-amber-400"> · no return: {s.missing.join(', ')}</span>}
-                          {s.jid && (
+                          {!!s.notStarted?.length && <span className="text-zinc-500 dark:text-zinc-400"> · not started: {s.notStarted.join(', ')}</span>}
+                          {s.jid && !s.batches && (
                             <>
                               {' · '}
                               <Link to={`/jobs/${s.jid}`} className="text-accent-700 hover:underline dark:text-accent-400">
@@ -213,7 +221,20 @@ export function RunbookRunPage() {
                         </p>
                       )}
                       {s.error && <p className="mt-1 text-xs text-red-700 dark:text-red-400">{s.error}</p>}
-                      {s.jid && <StepOutput key={s.jid} name={s.name} jid={s.jid} minions={s.minions ?? []} open={s.status === 'failed'} refresh={s.status === 'running' ? tick : 0} />}
+                      {s.jid && !s.batches && <StepOutput key={s.jid} name={s.name} jid={s.jid} minions={s.minions ?? []} open={s.status === 'failed'} refresh={s.status === 'running' ? tick : 0} />}
+                      {s.batches?.map((b, k) =>
+                        b.jid ? (
+                          <div key={b.jid} className="mt-1">
+                            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                              Batch {k + 1}: {b.minions.join(', ')} ·{' '}
+                              <Link to={`/jobs/${b.jid}`} className="text-accent-700 hover:underline dark:text-accent-400">
+                                job {b.jid}
+                              </Link>
+                            </p>
+                            <StepOutput name={`${s.name}, batch ${k + 1}`} jid={b.jid} minions={b.minions} open={s.status === 'failed' && k === s.batches!.length - 1} refresh={s.status === 'running' && k === s.batches!.length - 1 ? tick : 0} />
+                          </div>
+                        ) : null,
+                      )}
                     </div>
                   </li>
                 )

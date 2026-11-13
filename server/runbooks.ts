@@ -1,9 +1,11 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
 import { continuedSteps, continueFrom, MAX_IMPORT, mayRun, readRunbook, resolveRunbook, type ResolvedStep, type RunbookInput, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
+import { batchCount } from '../src/lib/batch'
 import { needsApproval } from './changes'
 import type { Db, Schema } from './db'
 import type { Notifier } from './notify'
+import type { Expand } from './scope'
 import type { Message } from './summaries'
 import type { AuditRow, Env, SessionUser } from './types'
 
@@ -36,6 +38,10 @@ export interface StepState extends ResolvedStep {
   error?: string
   /** a step carried over from the run this one continues: it ran there */
   fromRun?: number
+  /** a step run in batches: each batch's job, oldest first; jid is the latest one's */
+  batches?: Array<{ jid: string | null; minions: string[]; startedAt: string }>
+  /** minions a batched step never got to, because a batch before failed */
+  notStarted?: string[]
   /** a step that waits to go on: who let it, and when it started waiting */
   confirmedBy?: string
   pausedAt?: string
@@ -60,6 +66,8 @@ interface RunnerDeps {
   /** the user a run acts as, if they still may run commands */
   loadUser: (id: string) => Promise<SessionUser | null>
   notifier: Pick<Notifier, 'emit'>
+  /** which minions a target matches, for a step run in batches */
+  expand?: Expand
   now?: () => number
 }
 
@@ -141,6 +149,62 @@ export class RunbookRunner {
     await this.save(r, { steps: JSON.stringify(steps), cursor: i + 1 })
   }
 
+  /** A step in batches: waits for the last one, then stops at a failure, finishes, or starts the next. */
+  private async batch(r: RunRow, steps: StepState[], i: number) {
+    const step = steps[i]
+    const at = () => new Date(this.now()).toISOString()
+    const batches = step.batches ?? []
+    const minions = step.minions ?? []
+    const last = batches.at(-1)
+    const failStep = (run: RunRow, error: string) => {
+      steps[i] = { ...steps[i], status: 'failed', error, finishedAt: at() }
+      if (step.onFailure) return this.next(run, steps, i, null)
+      return this.stopAt(run, steps, 'failed', `${step.name}: ${error}`)
+    }
+    if (last && !last.jid) {
+      // an instance that died while starting it
+      if (this.now() - Date.parse(last.startedAt) > START_STUCK_MS) return failStep(r, `Batch ${batches.length} didn't start: the server was interrupted`)
+      return
+    }
+    const jr = this.d.schema.jobReturn
+    const jids = batches.map((b) => b.jid!)
+    const rows = jids.length ? await this.d.db.select({ jid: jr.jid, minion: jr.minion, retcode: jr.retcode, success: jr.success }).from(jr).where(inArray(jr.jid, jids)) : []
+    if (last) {
+      const back = rows.filter((x) => x.jid === last.jid).length
+      if (back < last.minions.length && this.now() - Date.parse(last.startedAt) <= STEP_DEADLINE_MS) return
+    }
+    const ran = batches.flatMap((b) => b.minions)
+    const returned = new Set(rows.map((x) => `${x.jid}\0${x.minion}`))
+    const failed = rows.filter((x) => (x.retcode ?? 0) !== 0 || x.success === false).map((x) => x.minion).sort()
+    const missing = batches.flatMap((b) => b.minions.filter((m) => !returned.has(`${b.jid}\0${m}`))).sort()
+    const rest = minions.filter((m) => !ran.includes(m))
+    const bad = failed.length + missing.length
+    if (bad || !rest.length) {
+      steps[i] = { ...step, status: bad ? 'failed' : 'done', ok: rows.length - failed.length, failed, missing, ...(bad && rest.length ? { notStarted: rest } : {}), finishedAt: at() }
+      if (bad && !step.continueOnFailure && !step.onFailure) {
+        const who = [...failed, ...missing]
+        const skipped = rest.length ? `; ${rest.length} not started` : ''
+        return this.stopAt(r, steps, 'stopped', `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'} in batch ${batches.length}: ${who.slice(0, 10).join(', ')}${who.length > 10 ? ', …' : ''}${skipped}`)
+      }
+      return this.next(r, steps, i, bad ? `${step.name} failed on some minions` : null)
+    }
+
+    // claim the next batch before starting it, so only one instance does
+    const next = rest.slice(0, batchCount(step.batchSize, minions.length))
+    steps[i] = { ...step, batches: [...batches, { jid: null, minions: next, startedAt: at() }] }
+    if (!(await this.save(r, { steps: JSON.stringify(steps) }))) return
+    const claimed = { ...r, version: r.version + 1 }
+    const user = await this.d.loadUser(r.startedById)
+    if (!user) return failStep(claimed, `${r.startedBy} can no longer run commands`)
+    const res = await this.d.saltAs(user, { client: 'local_async', tgt: next.join(','), tgt_type: 'list', fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy })
+    if (res.status !== 200) return failStep(claimed, `Batch ${batches.length + 1}: ${res.body.error ?? 'salt-api refused it'}`)
+    const started = res.body.return as { jid?: string } | null
+    if (!started?.jid) return failStep(claimed, `None of batch ${batches.length + 1} answered (${next.join(', ')})`)
+    const done = steps[i].batches!.map((b, k) => (k === batches.length ? { ...b, jid: started.jid! } : b))
+    steps[i] = { ...steps[i], jid: started.jid, batches: done }
+    await this.save(claimed, { steps: JSON.stringify(steps) })
+  }
+
   private async advance(r: RunRow) {
     const steps = JSON.parse(r.steps) as StepState[]
     const i = r.cursor
@@ -170,6 +234,16 @@ export class RunbookRunner {
         return this.stopAt(claimed, steps, 'failed', `${step.name}: ${error}`)
       }
       if (!user) return fail(`${r.startedBy} can no longer run commands`)
+      if (step.batchSize) {
+        // the minions first, then a batch at a time; each batch goes through the same checks
+        if (!this.d.expand) return fail("Steps in batches need the master's grains cache")
+        const minions = await this.d.expand(step.target, step.targetType).catch((e: Error) => e)
+        if (minions instanceof Error) return fail(`Couldn't work out the minions: ${minions.message}`)
+        if (!minions.length) return fail('No minion matched the target')
+        steps[i] = { ...steps[i], status: 'running', minions: [...minions].sort(), batches: [] }
+        await this.save(claimed, { steps: JSON.stringify(steps) })
+        return
+      }
       const res = await this.d.saltAs(user, { client: 'local_async', tgt: step.target, tgt_type: step.targetType, fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy })
       if (res.status !== 200) return fail(res.body.error ?? 'salt-api refused it')
       // salt.call hands back the first return: {jid, minions} for local_async
@@ -189,6 +263,8 @@ export class RunbookRunner {
       }
       return
     }
+
+    if (step.status === 'running' && step.batches) return this.batch(r, steps, i)
 
     if (step.status === 'running' && step.jid) {
       const jr = this.d.schema.jobReturn

@@ -482,6 +482,26 @@ test("a runbook's history shows what each version changed, and an earlier one ca
   await expect(page.getByText(/Started by demo .*, with version 3\./)).toBeVisible()
 })
 
+test('a runbook step runs on its minions a batch at a time', async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  await page.getByRole('button', { name: 'New runbook' }).click()
+  await page.getByLabel('Runbook name').fill('Ping in batches')
+  await page.getByLabel('Step 1 target').fill('web-*')
+  await page.getByLabel('Step 1 function').fill('test.ping')
+  await page.getByLabel('Step 1 batch size').fill('one')
+  await page.getByRole('button', { name: 'Create runbook' }).click()
+  await expect(page.getByText('Step 1: batches are a number of minions or a percentage, like 5 or 25%')).toBeVisible()
+  await page.getByLabel('Step 1 batch size').fill('1')
+  await page.getByRole('button', { name: 'Create runbook' }).click()
+  await expect(page.getByText('(in batches of 1)')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Run…' }).first().click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  const steps = page.getByRole('list', { name: 'Steps' })
+  await expect(steps.getByRole('listitem', { name: 'Step 1: done' })).toContainText('Batch 2: ')
+  await expect(steps.getByRole('listitem', { name: 'Step 1: done' })).toContainText('in batches of 1')
+})
+
 test('a schedule runs a runbook, and its runbook stays while it does', async ({ page }) => {
   await openDemo(page, '/schedules')
   const web = page.getByRole('listitem').filter({ hasText: 'Web highstate' })

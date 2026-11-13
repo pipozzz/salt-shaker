@@ -1,4 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm'
+import { batchCount, validBatchSize } from '../src/lib/batch'
 import { isRisky } from '../src/lib/risk'
 import type { Db, Schema } from './db'
 import { isDryRun } from './history'
@@ -31,16 +32,7 @@ type ChangeRow = Schema['change']['$inferSelect']
 /** A batch has had this long to return; minions that didn't count as failed. */
 export const BATCH_DEADLINE_MS = 15 * 60_000
 
-/** How many minions go in a batch: "25%" of them, a number, or all at once. */
-export function batchCount(size: string | null | undefined, total: number) {
-  const s = (size ?? '').trim()
-  if (!s || total === 0) return Math.max(1, total)
-  const pct = /^(\d+(?:\.\d+)?)%$/.exec(s)
-  const n = pct ? Math.ceil((total * Number(pct[1])) / 100) : Number(s)
-  return Number.isFinite(n) && n >= 1 ? Math.min(total, Math.floor(n)) : total
-}
-
-export const validBatchSize = (s: string) => !s.trim() || /^(\d+|\d+(\.\d+)?%)$/.test(s.trim())
+export { batchCount, validBatchSize }
 
 /** Whether the policy wants an admin to approve this call before it runs. */
 export function needsApproval(policy: 'off' | 'risky', role: string | null | undefined, fun: string, kwarg: Record<string, unknown>) {

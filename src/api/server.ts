@@ -634,6 +634,10 @@ export interface RunbookStepState extends ResolvedStep {
   /** a step that waits to go on: who let it, and when it started waiting */
   confirmedBy?: string
   pausedAt?: string
+  /** a step run in batches: each batch's job, oldest first; jid is the latest one's */
+  batches?: Array<{ jid: string | null; minions: string[]; startedAt: string }>
+  /** minions a batched step never got to, because a batch before failed */
+  notStarted?: string[]
 }
 
 export interface RunbookRun {

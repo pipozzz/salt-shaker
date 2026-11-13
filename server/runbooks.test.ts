@@ -52,7 +52,7 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     const notifier = { emit: async (event: string, msg: { title: string }) => void emitted.push(`${event}: ${msg.title}`) }
     const users: Record<string, SessionUser> = { a: ada, o: olga }
     let now = Date.parse('2026-11-12T10:00:00Z')
-    const runner = new RunbookRunner({ db, schema, saltAs, loadUser: async (id) => (id.startsWith('schedule:') ? scheduleUser(db, schema, id) : (users[id] ?? null)), notifier, now: () => now })
+    const runner = new RunbookRunner({ db, schema, saltAs, loadUser: async (id) => (id.startsWith('schedule:') ? scheduleUser(db, schema, id) : (users[id] ?? null)), notifier, now: () => now, expand: async (tgt) => (tgt === 'web-*' ? ['web-03', 'web-01', 'web-02'] : tgt === 'nowhere' ? [] : [tgt]) })
     const audited: string[] = []
     let user: SessionUser | null = null
     const app = new Hono<Env>()
@@ -293,6 +293,43 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     // its versions go with it
     await call(ada, 'DELETE', `/runbooks/${id}`)
     expect((await call(ada, 'GET', `/runbooks/${id}/versions`)).status).toBe(404)
+  })
+
+  it('runs a step in batches, each as the operator, and stops at the first batch with a failure', async () => {
+    const { call, calls, returns, run, runner } = await setup()
+    const rb = { ...restart, steps: [{ ...restart.steps[1], batchSize: '2' }, restart.steps[2]] }
+    const id = ((await call(ada, 'POST', '/runbooks', rb)).body.runbook as { id: number }).id
+    expect((await call(ada, 'POST', '/runbooks', { ...rb, name: 'x', steps: [{ ...rb.steps[0], batchSize: 'half' }] })).body).toEqual({ error: 'Step 1: batches are a number of minions or a percentage, like 5 or 25%' })
+
+    // all well: two batches, then the next step
+    const ok = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-*' } })).body.run as { id: number }).id
+    await runner.tick()
+    expect((await run(ok)).steps[0]).toMatchObject({ status: 'running', minions: ['web-01', 'web-02', 'web-03'], batches: [{ jid: 'j1', minions: ['web-01', 'web-02'] }] })
+    expect(calls.at(-1)).toMatchObject({ user: 'olga', low: { tgt: 'web-01,web-02', tgt_type: 'list', fun: 'service.restart' } })
+    await returns('j1', [['web-01', true]])
+    await runner.tick()
+    expect((await run(ok)).steps[0].batches).toHaveLength(1)
+    await returns('j1', [['web-02', true]])
+    await runner.tick()
+    expect(calls.at(-1)).toMatchObject({ low: { tgt: 'web-03', tgt_type: 'list' } })
+    await returns('j2', [['web-03', true]])
+    await runner.tick()
+    expect((await run(ok)).steps[0]).toMatchObject({ status: 'done', ok: 3, failed: [], missing: [] })
+
+    // a failure in the first batch: the rest never start
+    const bad = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-*' } })).body.run as { id: number }).id
+    await runner.tick()
+    const jid = (await run(bad)).steps[0].jid!
+    await returns(jid, [['web-01', true], ['web-02', false]])
+    await runner.tick()
+    const stopped = await run(bad)
+    expect(stopped).toMatchObject({ status: 'stopped', error: 'Restart failed on 1 minion in batch 1: web-02; 1 not started' })
+    expect(stopped.steps[0]).toMatchObject({ status: 'failed', ok: 1, failed: ['web-02'], notStarted: ['web-03'] })
+    expect(stopped.steps.map((s) => s.status)).toEqual(['failed', 'skipped'])
+
+    // nothing matches
+    const none = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'nowhere' } })).body.run as { id: number }).id
+    expect(await run(none)).toMatchObject({ status: 'failed', error: 'Restart: No minion matched the target' })
   })
 
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {

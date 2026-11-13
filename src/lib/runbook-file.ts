@@ -22,6 +22,7 @@ function fileShape(rb: RunbookInput) {
       ...(s.continueOnFailure ? { continueOnFailure: true } : {}),
       ...(s.confirm ? { confirm: true } : {}),
       ...(s.onFailure ? { onFailure: true } : {}),
+      ...(s.batchSize ? { batchSize: s.batchSize } : {}),
     })),
     ...(rb.runners?.length ? { runners: rb.runners } : {}),
   }
@@ -47,7 +48,7 @@ function textFields(raw: Record<string, unknown>) {
   return {
     ...raw,
     ...(Array.isArray(raw.params) ? { params: raw.params.map((p) => asText(p, ['name', 'label', 'default'])) } : {}),
-    ...(Array.isArray(raw.steps) ? { steps: raw.steps.map((s) => asText(s, ['name', 'target', 'fun', 'args'])) } : {}),
+    ...(Array.isArray(raw.steps) ? { steps: raw.steps.map((s) => asText(s, ['name', 'target', 'fun', 'args', 'batchSize'])) } : {}),
   }
 }
 

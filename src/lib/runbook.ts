@@ -1,4 +1,5 @@
 import { parseArgs } from './args'
+import { validBatchSize } from './batch'
 
 /*
  * Runbooks: a saved procedure of a few steps, each one function on a target, with parameters an
@@ -30,6 +31,8 @@ export interface RunbookStep {
   onFailure?: boolean
   /** the run waits before this step until whoever started it, or an admin, lets it go on */
   confirm?: boolean
+  /** run on the minions a few at a time ("25%" or "5"), stopping at the first batch with a failure */
+  batchSize?: string
 }
 
 export interface RunbookInput {
@@ -65,6 +68,7 @@ export interface ResolvedStep {
   continueOnFailure: boolean
   onFailure?: boolean
   confirm?: boolean
+  batchSize?: string
 }
 
 const PARAM = /^[a-z_][a-z0-9_]{0,30}$/
@@ -104,7 +108,9 @@ export function readRunbook(body: Record<string, unknown>): RunbookInput | { err
       continueOnFailure: s?.continueOnFailure === true,
       ...(s?.onFailure === true ? { onFailure: true } : {}),
       ...(s?.confirm === true ? { confirm: true } : {}),
+      ...(str(s?.batchSize) ? { batchSize: str(s?.batchSize) } : {}),
     }
+    if (step.batchSize && !validBatchSize(step.batchSize)) return { error: `Step ${n}: batches are a number of minions or a percentage, like 5 or 25%` }
     if (!step.onFailure && steps.some((x) => x.onFailure)) return { error: `Step ${n} runs every time, so it comes before the steps for a failure` }
     if (!FUN.test(step.fun)) return { error: `Step ${n}: the function is a name like state.apply` }
     if (!step.target) return { error: `Step ${n}: the target is required` }
@@ -155,6 +161,7 @@ export function resolveRunbook(rb: Pick<RunbookInput, 'params' | 'steps'>, given
       continueOnFailure: s.continueOnFailure,
       ...(s.onFailure ? { onFailure: true } : {}),
       ...(s.confirm ? { confirm: true } : {}),
+      ...(s.batchSize ? { batchSize: s.batchSize } : {}),
     }
   })
   const empty = steps.find((s) => !s.target.trim())
@@ -187,7 +194,7 @@ export function continueFrom(run: { status: string; steps: StepLike[] }): number
 export function continuedSteps<S extends StepLike>(steps: S[], at: number, fromRun: number): S[] {
   return steps.map((s, i) => {
     if (i < at) return { ...s, fromRun: s.fromRun ?? fromRun }
-    const { name, fun, target, targetType, arg, kwarg, continueOnFailure, onFailure, confirm } = s
-    return { name, fun, target, targetType, arg, kwarg, continueOnFailure, ...(onFailure ? { onFailure } : {}), ...(confirm ? { confirm } : {}), status: 'waiting' } as S
+    const { name, fun, target, targetType, arg, kwarg, continueOnFailure, onFailure, confirm, batchSize } = s
+    return { name, fun, target, targetType, arg, kwarg, continueOnFailure, ...(onFailure ? { onFailure } : {}), ...(confirm ? { confirm } : {}), ...(batchSize ? { batchSize } : {}), status: 'waiting' } as S
   })
 }

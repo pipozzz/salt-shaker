@@ -1,7 +1,8 @@
+import { batchCount } from '../lib/batch'
 import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type RunbookInput } from '../lib/runbook'
 import { readCallValues, readHookSettings } from '../lib/runbook-hook'
 import { recordDemoAudit } from './demo-audit'
-import { demoJob, demoJobProgress } from './mock'
+import { demoJob, demoJobProgress, demoMatch } from './mock'
 import type { HookCall, Runbook, RunbookHook, RunbookRun, RunbookStepState, RunbookVersion, runbookHooks, runbooks } from './server'
 
 /*
@@ -77,6 +78,22 @@ const runs: RunbookRun[] = []
 const copy = (r: RunbookRun): RunbookRun => ({ ...r, steps: r.steps.map((s) => ({ ...s })) })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Starts a job and waits for its minions, for up to the step's wait; null when nothing matched. */
+async function runJob(run: RunbookRun, tgt: string, tgtType: string, step: RunbookStepState) {
+  const job = demoJob(tgt, tgtType, step.fun, step.arg, step.kwarg, run.startedBy)
+  if (!job) return null
+  step.jid = job.jid
+  if (!step.batchSize) step.minions = job.minions
+  const until = Date.now() + STEP_WAIT_MS
+  let p = demoJobProgress(job.jid)
+  while (p.returned.length < job.minions.length && Date.now() < until) {
+    await sleep(400)
+    if (run.status !== 'running') return 'stopped' as const
+    p = demoJobProgress(job.jid)
+  }
+  return { jid: job.jid, minions: job.minions, returned: p.returned, failed: [...p.failed].sort(), missing: job.minions.filter((m) => !p.returned.includes(m)) }
+}
+
 /** Works through a run's steps on the simulated master, like the server's runner. */
 async function work(run: RunbookRun) {
   for (let i = run.cursor; i < run.steps.length; i++) {
@@ -95,32 +112,68 @@ async function work(run: RunbookRun) {
     }
     step.status = 'running'
     step.startedAt = new Date().toISOString()
-    const job = demoJob(step.target, step.targetType, step.fun, step.arg, step.kwarg, run.startedBy)
-    if (!job) {
-      Object.assign(step, { status: 'failed', error: 'No minion matched the target', finishedAt: new Date().toISOString() })
-      if (step.onFailure) continue
-      const error = `${step.name}: No minion matched the target`
-      if (toFailureSteps(run, error)) i = run.cursor - 1
-      else return end(run, 'failed', error)
-      continue
+    /** The step failed: on to the steps for a failure, or the run ends; false to go on. */
+    const stop = (status: 'stopped' | 'failed', error: string) => {
+      if (step.onFailure) return false
+      if (toFailureSteps(run, error)) {
+        i = run.cursor - 1
+        return false
+      }
+      end(run, status, error)
+      return true
     }
-    Object.assign(step, { jid: job.jid, minions: job.minions })
-    const until = Date.now() + STEP_WAIT_MS
-    let p = demoJobProgress(job.jid)
-    while (p.returned.length < job.minions.length && Date.now() < until) {
-      await sleep(400)
-      if (run.status !== 'running') return
-      p = demoJobProgress(job.jid)
+
+    let ok = 0
+    const failed: string[] = []
+    const missing: string[] = []
+    let notStarted: string[] = []
+    let batchNote = ''
+    if (step.batchSize) {
+      // the minions first, then a batch at a time, stopping at the first batch with a failure
+      const all = [...demoMatch(step.target, step.targetType)].sort()
+      if (!all.length) {
+        Object.assign(step, { status: 'failed', error: 'No minion matched the target', finishedAt: new Date().toISOString() })
+        if (stop('failed', `${step.name}: No minion matched the target`)) return
+        continue
+      }
+      Object.assign(step, { minions: all, batches: [] })
+      let rest = all
+      while (rest.length) {
+        const next = rest.slice(0, batchCount(step.batchSize, all.length))
+        rest = rest.slice(next.length)
+        step.batches!.push({ jid: null, minions: next, startedAt: new Date().toISOString() })
+        const r = await runJob(run, next.join(','), 'list', step)
+        if (r === 'stopped') return
+        if (r) step.batches!.at(-1)!.jid = r.jid
+        const got = r ?? { returned: [], failed: [], missing: next }
+        ok += got.returned.length - got.failed.length
+        failed.push(...got.failed)
+        missing.push(...got.missing)
+        if (got.failed.length + got.missing.length) {
+          notStarted = rest
+          batchNote = ` in batch ${step.batches!.length}`
+          break
+        }
+      }
+    } else {
+      const r = await runJob(run, step.target, step.targetType, step)
+      if (r === 'stopped') return
+      if (!r) {
+        Object.assign(step, { status: 'failed', error: 'No minion matched the target', finishedAt: new Date().toISOString() })
+        if (stop('failed', `${step.name}: No minion matched the target`)) return
+        continue
+      }
+      step.minions = r.minions
+      ok = r.returned.length - r.failed.length
+      failed.push(...r.failed)
+      missing.push(...r.missing)
     }
-    const missing = job.minions.filter((m) => !p.returned.includes(m))
-    const failed = [...p.failed].sort()
     const bad = failed.length + missing.length
-    Object.assign(step, { status: bad ? 'failed' : 'done', ok: p.returned.length - failed.length, failed, missing, finishedAt: new Date().toISOString() })
+    Object.assign(step, { status: bad ? 'failed' : 'done', ok, failed: failed.sort(), missing: missing.sort(), ...(notStarted.length ? { notStarted } : {}), finishedAt: new Date().toISOString() })
     if (bad && !step.continueOnFailure && !step.onFailure) {
       const who = [...failed, ...missing]
-      const error = `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}: ${who.join(', ')}`
-      if (toFailureSteps(run, error)) i = run.cursor - 1
-      else return end(run, 'stopped', error)
+      const skipped = notStarted.length ? `; ${notStarted.length} not started` : ''
+      if (stop('stopped', `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}${batchNote}: ${who.join(', ')}${skipped}`)) return
     }
   }
   if (run.status !== 'running') return

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks**
+
+- A step can run **in batches**, a number of minions or a share like `25%` at a time: it starts the next batch only when the last went well, and when a minion fails it stops there and leaves the rest alone, as a rollout on Run does. Each batch is its own job, listed under the step with its output. See [Writing one](https://pipozzz.github.io/salt-shaker/guide/runbooks/#writing-one).
+
 ## 1.31.0
 
 **Runbooks**

@@ -90,6 +90,7 @@ export function RunbooksPage() {
                     {s.continueOnFailure && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(may fail)</span>}
                     {s.onFailure && <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400">(if it fails)</span>}
                     {s.confirm && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(asks first)</span>}
+                    {s.batchSize && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(in batches of {s.batchSize})</span>}
                     <span className="block truncate font-mono text-xs text-zinc-500 dark:text-zinc-400" title={stepText(s)}>
                       {stepText(s)}
                     </span>
@@ -322,7 +323,11 @@ function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null;
                 <Input value={s.fun} onChange={(e) => setStep(i, { fun: e.target.value })} placeholder="service.restart" className="font-mono" aria-label={`Step ${i + 1} function`} />
                 <Input value={s.args} onChange={(e) => setStep(i, { args: e.target.value })} placeholder="{{service}}" className="font-mono" aria-label={`Step ${i + 1} arguments`} />
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                  in batches of
+                  <Input value={s.batchSize ?? ''} onChange={(e) => setStep(i, { batchSize: e.target.value })} placeholder="all" className="!w-20 !py-0.5 font-mono text-xs" aria-label={`Step ${i + 1} batch size`} title="A number of minions, or a percentage like 25%; empty for all at once" />
+                </label>
                 {!s.onFailure && (
                   <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
                     <input type="checkbox" checked={s.continueOnFailure} onChange={(e) => setStep(i, { continueOnFailure: e.target.checked })} className="accent-accent-600" /> go on to the next step even if this one fails

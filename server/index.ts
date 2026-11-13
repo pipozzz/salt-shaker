@@ -466,7 +466,7 @@ async function activeUser(id: string): Promise<SessionUser | null> {
   if (!row || row.banned || !row.role || row.role === 'none' || row.role === 'viewer') return null
   return { id: row.id, name: row.name, username: row.username, role: row.role }
 }
-const runbookRunner = new RunbookRunner({ db, schema, saltAs, loadUser: activeUser, notifier })
+const runbookRunner = new RunbookRunner({ db, schema, saltAs, loadUser: activeUser, notifier, expand: expandTarget })
 runbookRunner.start()
 scheduler.runbooks = runbookScheduler({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval })
 // before automation: its admin-only middleware covers /api/* from where it's mounted

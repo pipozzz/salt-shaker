@@ -15,6 +15,7 @@ Admins write runbooks on **Runbooks → New runbook**:
 - **Values to ask for**, each with a name, how it's asked, a default and whether it's required. Use them in a step as `{{name}}`.
 - **Steps, in order**: a name, the target and how it matches (glob, list, grain, …), the function and its arguments as on the [Run](/salt-shaker/guide/run/) page, for example `service.restart` with `{{service}}`, or `state.apply` with `test=True`. Up to 20 steps.
 - **Go on even if this one fails**, for a step whose failure shouldn't stop the rest, like a dry run.
+- **Run only if a step before stops the run**, for steps that put things back: start the service again, roll back a release, send an event. They come after the others and are skipped when everything goes well. When a step stops the run, the steps after it are skipped and these run instead, one after another, each even if the one before failed; the run then ends as *stopped* (or *failed*) with that step's error. Stopping a run by hand doesn't run them.
 
 A value is put *into* an argument, after the arguments are split: a value of `nginx test=True` stays one argument and can't add `test=True` of its own. In a target it's used as typed, and the target is checked against the person's scope like any other.
 
@@ -27,6 +28,8 @@ A value is put *into* an argument, after the arguments are split: a value of `ng
 3. stops the run when it fails on any minion, unless it may fail. The steps after it are skipped.
 
 The run's page shows each step with its minions, which failed and a link to its job, and refreshes while it runs. **Output** under a step shows what each minion returned, failures first, as on the job's page; a step that failed shows it right away. Whoever started it, or an admin, can **Stop** it: the step that's running finishes, and nothing after it starts. **Recent runs** lists them all; operators and viewers see them too.
+
+Once a run has ended, **Run again** opens the form with its values, to change what you need. A run that stopped or failed can also **Continue from step N**: a new run, as you, that starts at the step that stopped it and runs it and the rest again, with the same values. The steps before it aren't run again; they show as they ended, with a link to the run they ran in. Its steps for a failure run again only if it fails again. With approval on, it waits for an admin if a step it runs is risky.
 
 Viewers read runbooks and their runs but don't run them.
 

@@ -617,6 +617,8 @@ export interface RunbookStepState extends ResolvedStep {
   startedAt?: string
   finishedAt?: string
   error?: string
+  /** a step carried over from the run this one continues: it ran there */
+  fromRun?: number
 }
 
 export interface RunbookRun {
@@ -680,6 +682,8 @@ export const runbooks = {
   runs: (runbookId?: number) => request<{ runs: RunbookRun[] }>(`/api/runbook-runs${runbookId ? `?runbook=${runbookId}` : ''}`),
   getRun: (id: number) => request<{ run: RunbookRun }>(`/api/runbook-runs/${id}`),
   act: (id: number, verb: 'stop' | 'approve' | 'reject') => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/${verb}`, {}),
+  /** a new run from the step that stopped this one */
+  continue: (id: number) => send<{ run: RunbookRun }>('POST', `/api/runbook-runs/${id}/continue`, {}),
 }
 
 export interface WindowsState {

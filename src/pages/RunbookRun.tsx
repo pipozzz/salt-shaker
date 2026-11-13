@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { ArrowLeft, Check, ChevronRight, CircleDashed, CircleX, Loader2, Minus, Square } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, CircleDashed, CircleX, Loader2, Minus, RotateCcw, SkipForward, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { RunbookStepState } from '../api/server'
 import { ResultView } from '../components/ResultView'
 import { Badge, Button, Card, CardHeader, ErrorBox, PageHeader, Spinner } from '../components/ui'
@@ -9,8 +9,10 @@ import { formatArgs } from '../api/salt'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { jobResults, loadJobDetail } from '../lib/job-detail'
+import { continueFrom } from '../lib/runbook'
 import { RUN_STATUS, useRunbookRole, useRunbooksApi } from '../lib/runbooks'
 import { useSalt, useSession } from '../lib/session'
+import { RunModal } from './Runbooks'
 
 const STEP_ICON: Record<RunbookStepState['status'], { icon: typeof Check; cls: string; label: string }> = {
   waiting: { icon: CircleDashed, cls: 'text-zinc-400', label: 'waiting' },
@@ -27,7 +29,8 @@ const call = (s: RunbookStepState) => `${s.fun} ${formatArgs([...s.arg, ...(Obje
 export function RunbookRunPage() {
   const { id } = useParams()
   const api = useRunbooksApi()
-  const { canWrite, me } = useRunbookRole()
+  const { canWrite, canRun, me } = useRunbookRole()
+  const navigate = useNavigate()
   const [tick, setTick] = useState(0)
   const res = useAsync(() => (api ? api.getRun(Number(id)) : Promise.resolve(null)), [api, id, tick])
   const run = res.data?.run
@@ -39,6 +42,22 @@ export function RunbookRunPage() {
   }, [live])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  // the runbook, to run it again with this run's values; gone if it was deleted
+  const runbook = useAsync(() => (api && canRun ? api.list() : Promise.resolve(null)), [api, canRun]).data?.runbooks.find((rb) => rb.id === run?.runbookId) ?? null
+  const [again, setAgain] = useState(false)
+  const from = run ? continueFrom(run) : null
+  const resume = async () => {
+    setBusy('continue')
+    setError(null)
+    try {
+      const { run: next } = await api!.continue(Number(id))
+      navigate(`/runbooks/runs/${next.id}`)
+    } catch (e) {
+      setError(e as Error)
+    } finally {
+      setBusy(null)
+    }
+  }
   const act = async (verb: 'stop' | 'approve' | 'reject') => {
     setBusy(verb)
     setError(null)
@@ -82,12 +101,28 @@ export function RunbookRunPage() {
                     Stop
                   </Button>
                 )}
+                {canRun && from !== null && (
+                  <Button size="sm" variant="primary" icon={<SkipForward className="size-3.5" />} loading={busy === 'continue'} onClick={resume} title={`A new run from step ${from + 1}, ${run.steps[from].name}; the steps before stay as they ran here`}>
+                    Continue from step {from + 1}
+                  </Button>
+                )}
+                {canRun && !live && runbook && (
+                  <Button size="sm" icon={<RotateCcw className="size-3.5" />} onClick={() => setAgain(true)}>
+                    Run again
+                  </Button>
+                )}
               </div>
             }
           />
           {error && <ErrorBox error={error} />}
+          {again && runbook && <RunModal runbook={runbook} initial={run.params} onClose={() => setAgain(false)} />}
           {run.status === 'pending' && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">It changes minions, so an admin other than {run.startedBy} approves it first. Nothing runs until then.</p>}
-          {run.error && <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{run.error}</p>}
+          {run.error && (
+            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+              {run.error}
+              {run.status === 'running' && '. Running the steps for a failure.'}
+            </p>
+          )}
 
           <Card className="mb-4">
             <CardHeader title="Values" />
@@ -118,6 +153,15 @@ export function RunbookRunPage() {
                         </span>
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">{st.label}</span>
                         {s.continueOnFailure && <span className="text-xs text-zinc-500 dark:text-zinc-400">· may fail</span>}
+                        {s.onFailure && <span className="text-xs text-amber-700 dark:text-amber-400">· if it fails</span>}
+                        {s.fromRun && (
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                            · in{' '}
+                            <Link to={`/runbooks/runs/${s.fromRun}`} className="text-accent-700 hover:underline dark:text-accent-400">
+                              run #{s.fromRun}
+                            </Link>
+                          </span>
+                        )}
                       </p>
                       <p className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-400">
                         {call(s)} → {s.targetType === 'glob' ? '' : `${s.targetType}:`}
@@ -158,6 +202,12 @@ export function RunbookRunPage() {
  */
 function StepOutput({ name, jid, minions, open: startOpen, refresh }: { name: string; jid: string; minions: string[]; open: boolean; refresh: number }) {
   const [open, setOpen] = useState(startOpen)
+  // a step that fails while the page is open opens too
+  const [failed, setFailed] = useState(startOpen)
+  if (failed !== startOpen) {
+    setFailed(startOpen)
+    if (startOpen) setOpen(true)
+  }
   const salt = useSalt()
   const { session } = useSession()
   const fromServer = session?.mode === 'server'

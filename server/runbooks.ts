@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
-import { readRunbook, resolveRunbook, type ResolvedStep, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
+import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type ResolvedStep, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
 import { needsApproval } from './changes'
 import type { Db, Schema } from './db'
 import type { Notifier } from './notify'
@@ -16,6 +16,9 @@ import type { AuditRow, Env, SessionUser } from './types'
  *   pending ──approve──▶ running ──▶ done
  *      └──reject──▶ rejected  └──▶ stopped (a step failed, or someone stopped it)
  *                             └──▶ failed (a step couldn't start)
+ *
+ * Steps marked onFailure come last and run only when a step stopped the run (not when someone
+ * stopped it): the run keeps running with its error set while they do, then ends as that step said.
  */
 
 export type RunStatus = 'pending' | 'running' | 'done' | 'stopped' | 'failed' | 'rejected'
@@ -31,6 +34,8 @@ export interface StepState extends ResolvedStep {
   startedAt?: string
   finishedAt?: string
   error?: string
+  /** a step carried over from the run this one continues: it ran there */
+  fromRun?: number
 }
 
 type RunRow = Schema['runbookRun']['$inferSelect']
@@ -106,12 +111,41 @@ export class RunbookRunner {
     if (await this.save(r, { status, steps: JSON.stringify(rest), error, finishedAt: new Date(this.now()) })) await this.d.notifier.emit('runbook', runMessage(r, status, error))
   }
 
+  /**
+   * A step stopped the run: its steps for a failure run next, if it has any, and the run ends
+   * after them with this error; otherwise it ends now. While they run, the run holds the error.
+   */
+  private async stopAt(r: RunRow, steps: StepState[], status: 'stopped' | 'failed', error: string) {
+    const at = steps.findIndex((s) => s.onFailure && s.status === 'waiting')
+    if (at < 0) return this.end(r, steps, status, error)
+    const rest = steps.map((s) => (!s.onFailure && s.status === 'waiting' ? { ...s, status: 'skipped' as const } : s))
+    await this.save(r, { steps: JSON.stringify(rest), error, cursor: at })
+  }
+
+  /** How the run ends once nothing is left: as the step that stopped it said, or done. */
+  private finish(r: RunRow, steps: StepState[], note: string | null) {
+    if (r.error) {
+      // its steps for a failure have run; it ends as the step that stopped it
+      const first = steps.find((s) => !s.onFailure && s.status === 'failed' && (!s.continueOnFailure || !s.jid))
+      return this.end(r, steps, first && !first.jid ? 'failed' : 'stopped', r.error)
+    }
+    return this.end(r, steps, note ? 'stopped' : 'done', note)
+  }
+
+  /** On to the step after `i`; the steps for a failure only when a step stopped the run. */
+  private async next(r: RunRow, steps: StepState[], i: number, note: string | null) {
+    if (i + 1 >= steps.length || (steps[i + 1].onFailure && !r.error)) return this.finish(r, steps, note)
+    await this.save(r, { steps: JSON.stringify(steps), cursor: i + 1 })
+  }
+
   private async advance(r: RunRow) {
     const steps = JSON.parse(r.steps) as StepState[]
     const i = r.cursor
-    if (i >= steps.length) return this.end(r, steps, 'done', null)
+    if (i >= steps.length) return this.finish(r, steps, null)
     const step = steps[i]
     const at = () => new Date(this.now()).toISOString()
+    // nothing stopped the run: its steps for a failure don't run
+    if (step.onFailure && !r.error && step.status === 'waiting') return this.finish(r, steps, null)
 
     if (step.status === 'waiting') {
       steps[i] = { ...step, status: 'starting', startedAt: at() }
@@ -120,7 +154,9 @@ export class RunbookRunner {
       const user = await this.d.loadUser(r.startedById)
       const fail = (error: string) => {
         steps[i] = { ...steps[i], status: 'failed', error, finishedAt: at() }
-        return this.end(claimed, steps, 'failed', `${step.name}: ${error}`)
+        // one step for a failure that can't start doesn't keep the others from running
+        if (step.onFailure) return this.next(claimed, steps, i, null)
+        return this.stopAt(claimed, steps, 'failed', `${step.name}: ${error}`)
       }
       if (!user) return fail(`${r.startedBy} can no longer run commands`)
       const res = await this.d.saltAs(user, { client: 'local_async', tgt: step.target, tgt_type: step.targetType, fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy })
@@ -137,7 +173,8 @@ export class RunbookRunner {
       // an instance that died while starting it: say so rather than run it twice
       if (this.now() - Date.parse(step.startedAt ?? '') > START_STUCK_MS) {
         steps[i] = { ...step, status: 'failed', error: "It didn't start: the server was interrupted", finishedAt: at() }
-        return this.end(r, steps, 'failed', `${step.name}: it didn't start`)
+        if (step.onFailure) return this.next(r, steps, i, null)
+        return this.stopAt(r, steps, 'failed', `${step.name}: it didn't start`)
       }
       return
     }
@@ -153,12 +190,11 @@ export class RunbookRunner {
       const missing = minions.filter((m) => !returned.has(m)).sort()
       const bad = failed.length + missing.length
       steps[i] = { ...step, status: bad ? 'failed' : 'done', ok: rows.length - failed.length, failed, missing, finishedAt: at() }
-      if (bad && !step.continueOnFailure) {
+      if (bad && !step.continueOnFailure && !step.onFailure) {
         const who = [...failed, ...missing]
-        return this.end(r, steps, 'stopped', `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}: ${who.slice(0, 10).join(', ')}${who.length > 10 ? ', …' : ''}`)
+        return this.stopAt(r, steps, 'stopped', `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}: ${who.slice(0, 10).join(', ')}${who.length > 10 ? ', …' : ''}`)
       }
-      if (i + 1 >= steps.length) return this.end({ ...r }, steps, bad ? 'stopped' : 'done', bad ? `${step.name} failed on some minions` : null)
-      await this.save(r, { steps: JSON.stringify(steps), cursor: i + 1 })
+      return this.next(r, steps, i, bad ? `${step.name} failed on some minions` : null)
     }
   }
 }
@@ -320,6 +356,27 @@ export function runbookRoutes(d: RouteDeps) {
   r.get('/runbook-runs/:id', async (c) => {
     const [row] = await d.db.select().from(runs).where(eq(runs.id, Number(c.req.param('id'))))
     return row ? c.json({ run: runView(row) }) : c.json({ error: 'Not found' }, 404)
+  })
+
+  /** A new run, as whoever asks, from the step that stopped this one; the steps before stay as they ran. */
+  r.post('/runbook-runs/:id/continue', async (c) => {
+    const m = me(c)
+    if (m.role !== 'admin' && m.role !== 'operator') return c.json({ error: 'Viewers can read runbooks, not run them' }, 403)
+    const [row] = await d.db.select().from(runs).where(eq(runs.id, Number(c.req.param('id'))))
+    if (!row) return c.json({ error: 'Not found' }, 404)
+    const prev = runView(row)
+    const at = continueFrom(prev)
+    if (at === null) return c.json({ error: prev.status === 'stopped' || prev.status === 'failed' ? 'Every step has run; run it again instead' : 'Only a stopped or failed run can be continued' }, 400)
+    const steps = continuedSteps(prev.steps, at, row.id)
+    const pending = steps.slice(at).some((s) => needsApproval(d.approval, m.role, s.fun, s.kwarg))
+    const [run] = await d.db
+      .insert(runs)
+      .values({ runbookId: row.runbookId, name: row.name, params: row.params, steps: JSON.stringify(steps), cursor: at, status: pending ? 'pending' : 'running', startedBy: m.username, startedById: m.userId, startedAt: new Date() })
+      .returning()
+    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'console', fun: 'runbook.continue', target: `#${run.id} ${row.name}`, args: JSON.stringify({ from: row.id, step: at + 1 }), outcome: 'ok' })
+    if (pending) await d.notifier.emit('approval', runMessage(run, 'pending'))
+    else await d.runner.tick()
+    return c.json({ run: runView(run) }, 201)
   })
 
   const act = (verb: 'stop' | 'approve' | 'reject') =>

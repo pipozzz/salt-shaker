@@ -1,4 +1,4 @@
-import { readRunbook, resolveRunbook, type RunbookInput } from '../lib/runbook'
+import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type RunbookInput } from '../lib/runbook'
 import { readCallValues, readHookSettings } from '../lib/runbook-hook'
 import { recordDemoAudit } from './demo-audit'
 import { demoJob, demoJobProgress } from './mock'
@@ -17,7 +17,7 @@ const STEP_WAIT_MS = 20_000
 const SEED: RunbookInput[] = [
   {
     name: 'Restart a service safely',
-    description: 'Checks the configuration first, restarts the service only if it is valid, then makes sure it runs.',
+    description: 'Checks the configuration first, restarts the service only if it is valid, then makes sure it runs; if the restart fails, starts it again.',
     params: [
       { name: 'host', label: 'Minions', default: 'web-01', required: true },
       { name: 'service', label: 'Service', default: 'nginx', required: true },
@@ -26,6 +26,7 @@ const SEED: RunbookInput[] = [
       { name: 'Check the configuration', fun: 'cmd.run', target: '{{host}}', targetType: 'glob', args: "'{{service}} -t'", continueOnFailure: false },
       { name: 'Restart', fun: 'service.restart', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false },
       { name: 'Make sure it runs', fun: 'service.status', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false },
+      { name: 'Start it again', fun: 'service.start', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false, onFailure: true },
     ],
   },
   {
@@ -49,16 +50,22 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Works through a run's steps on the simulated master, like the server's runner. */
 async function work(run: RunbookRun) {
-  for (let i = 0; i < run.steps.length; i++) {
+  for (let i = run.cursor; i < run.steps.length; i++) {
     if (run.status !== 'running') return
-    run.cursor = i
     const step = run.steps[i]
+    // nothing stopped the run: its steps for a failure don't run
+    if (step.onFailure && !run.error) break
+    run.cursor = i
     step.status = 'running'
     step.startedAt = new Date().toISOString()
     const job = demoJob(step.target, step.targetType, step.fun, step.arg, step.kwarg, run.startedBy)
     if (!job) {
       Object.assign(step, { status: 'failed', error: 'No minion matched the target', finishedAt: new Date().toISOString() })
-      return end(run, 'failed', `${step.name}: No minion matched the target`)
+      if (step.onFailure) continue
+      const error = `${step.name}: No minion matched the target`
+      if (toFailureSteps(run, error)) i = run.cursor - 1
+      else return end(run, 'failed', error)
+      continue
     }
     Object.assign(step, { jid: job.jid, minions: job.minions })
     const until = Date.now() + STEP_WAIT_MS
@@ -72,12 +79,27 @@ async function work(run: RunbookRun) {
     const failed = [...p.failed].sort()
     const bad = failed.length + missing.length
     Object.assign(step, { status: bad ? 'failed' : 'done', ok: p.returned.length - failed.length, failed, missing, finishedAt: new Date().toISOString() })
-    if (bad && !step.continueOnFailure) {
+    if (bad && !step.continueOnFailure && !step.onFailure) {
       const who = [...failed, ...missing]
-      return end(run, 'stopped', `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}: ${who.join(', ')}`)
+      const error = `${step.name} failed on ${who.length} ${who.length === 1 ? 'minion' : 'minions'}: ${who.join(', ')}`
+      if (toFailureSteps(run, error)) i = run.cursor - 1
+      else return end(run, 'stopped', error)
     }
   }
-  end(run, 'done', null)
+  if (run.status !== 'running') return
+  if (!run.error) return end(run, 'done', null)
+  // its steps for a failure have run; it ends as the step that stopped it
+  const first = run.steps.find((s) => !s.onFailure && s.status === 'failed' && (!s.continueOnFailure || !s.jid))
+  end(run, first && !first.jid ? 'failed' : 'stopped', run.error)
+}
+
+/** A step stopped the run: on to its steps for a failure, holding the error, if it has any. */
+function toFailureSteps(run: RunbookRun, error: string) {
+  const at = run.steps.findIndex((s) => s.onFailure && s.status === 'waiting')
+  if (at < 0) return false
+  for (const s of run.steps) if (!s.onFailure && s.status === 'waiting') s.status = 'skipped'
+  Object.assign(run, { error, cursor: at })
+  return true
 }
 
 function end(run: RunbookRun, status: 'done' | 'stopped' | 'failed', error: string | null) {
@@ -187,6 +209,17 @@ export const demoRunbooks: typeof runbooks = {
     end(r, 'stopped', 'Stopped by demo')
     recordDemoAudit({ username: 'demo', client: 'console', fun: 'runbook.stop', target: `#${r.id} ${r.name}`, outcome: 'ok' })
     return delay({ run: copy(r) })
+  },
+  continue: (id) => {
+    const prev = runs.find((x) => x.id === id)
+    if (!prev) return fail('Not found')
+    const at = continueFrom(prev)
+    if (at === null) return fail(prev.status === 'stopped' || prev.status === 'failed' ? 'Every step has run; run it again instead' : 'Only a stopped or failed run can be continued')
+    const run: RunbookRun = { ...prev, id: nextRun++, steps: continuedSteps(prev.steps, at, prev.id), cursor: at, status: 'running', startedBy: 'demo', startedById: 'demo', decidedBy: null, startedAt: new Date().toISOString(), finishedAt: null, error: null }
+    runs.unshift(run)
+    void work(run)
+    recordDemoAudit({ username: 'demo', client: 'console', fun: 'runbook.continue', target: `#${run.id} ${run.name}`, args: JSON.stringify({ from: prev.id, step: at + 1 }), outcome: 'ok' })
+    return delay({ run: copy(run) })
   },
 }
 

@@ -385,12 +385,26 @@ test('a runbook runs step by step and stops at the step that fails', async ({ pa
   // nginx won't restart on web-02 in the demo: the run stops there and skips the rest
   await expect(steps.getByRole('listitem', { name: 'Restart: failed' })).toContainText('failed: web-02')
   await expect(steps.getByRole('listitem', { name: 'Make sure it runs: skipped' })).toBeVisible()
-  await expect(page.getByText('Restart failed on 1 minion: web-02')).toBeVisible()
+  // then its step for a failure runs, and the run ends as the restart said
+  await expect(steps.getByRole('listitem', { name: /^Start it again: / })).toContainText('if it fails')
+  await expect(page.getByText('stopped', { exact: true })).toBeVisible()
+  await expect(page.getByText('Restart failed on 1 minion: web-02', { exact: true })).toBeVisible()
   // the failed step shows what each minion returned; the others open on request
   await expect(steps.getByRole('listitem', { name: 'Restart: failed' })).toContainText('Job for nginx.service failed: the unit is not available.')
   const check = steps.getByRole('listitem', { name: 'Check the configuration: done' })
   await check.getByRole('button', { name: 'Show the output of Check the configuration' }).click()
   await expect(check).toContainText('nginx -t: executed on web-01')
+
+  // run it again with the same values, or continue from the step that stopped it
+  await page.getByRole('button', { name: 'Run again' }).click()
+  await expect(page.getByRole('textbox', { name: 'Minions' })).toHaveValue('web-*')
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  const stoppedUrl = page.url()
+  const stoppedId = stoppedUrl.split('/').pop()
+  await page.getByRole('button', { name: 'Continue from step 2' }).click()
+  await expect(page).not.toHaveURL(stoppedUrl)
+  await expect(steps.getByRole('listitem', { name: 'Check the configuration: done' })).toContainText(`in run #${stoppedId}`)
+  await expect(steps.getByRole('listitem', { name: /^Restart: (running|failed|done)$/ })).toBeVisible()
 
   // admins write them; a step can only use the values it asks for
   await page.getByRole('link', { name: 'Runbooks', exact: true }).first().click()

@@ -67,6 +67,7 @@ export function RunbooksPage() {
                   <span className="min-w-0">
                     <span className="font-medium">{s.name}</span>
                     {s.continueOnFailure && <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">(may fail)</span>}
+                    {s.onFailure && <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400">(if it fails)</span>}
                     <span className="block truncate font-mono text-xs text-zinc-500 dark:text-zinc-400" title={stepText(s)}>
                       {stepText(s)}
                     </span>
@@ -157,11 +158,11 @@ export function RunbooksPage() {
   )
 }
 
-/** Asks for the runbook's values, starts it, and opens the run. */
-function RunModal({ runbook, onClose }: { runbook: Runbook; onClose: () => void }) {
+/** Asks for the runbook's values (its defaults, or a past run's), starts it, and opens the run. */
+export function RunModal({ runbook, initial, onClose }: { runbook: Runbook; initial?: Record<string, string>; onClose: () => void }) {
   const api = useRunbooksApi()!
   const navigate = useNavigate()
-  const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(runbook.params.map((p) => [p.name, p.default])))
+  const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(runbook.params.map((p) => [p.name, initial?.[p.name] ?? p.default])))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const submit = async (e: FormEvent) => {
@@ -185,7 +186,8 @@ function RunModal({ runbook, onClose }: { runbook: Runbook; onClose: () => void 
           </Field>
         ))}
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {runbook.steps.length} {runbook.steps.length === 1 ? 'step runs' : 'steps run'} one after another, as you. A step that fails stops the run, unless it may fail.
+          {runbook.steps.filter((s) => !s.onFailure).length} {runbook.steps.filter((s) => !s.onFailure).length === 1 ? 'step runs' : 'steps run'} one after another, as you. A step that fails stops the run, unless it may fail
+          {runbook.steps.some((s) => s.onFailure) ? '; then the steps for a failure run.' : '.'}
         </p>
         {error && <ErrorBox error={error} />}
         <div className="flex justify-end gap-2">
@@ -293,9 +295,17 @@ function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null;
                 <Input value={s.fun} onChange={(e) => setStep(i, { fun: e.target.value })} placeholder="service.restart" className="font-mono" aria-label={`Step ${i + 1} function`} />
                 <Input value={s.args} onChange={(e) => setStep(i, { args: e.target.value })} placeholder="{{service}}" className="font-mono" aria-label={`Step ${i + 1} arguments`} />
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
-                <input type="checkbox" checked={s.continueOnFailure} onChange={(e) => setStep(i, { continueOnFailure: e.target.checked })} className="accent-accent-600" /> go on to the next step even if this one fails
-              </label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {!s.onFailure && (
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                    <input type="checkbox" checked={s.continueOnFailure} onChange={(e) => setStep(i, { continueOnFailure: e.target.checked })} className="accent-accent-600" /> go on to the next step even if this one fails
+                  </label>
+                )}
+                <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                  <input type="checkbox" checked={!!s.onFailure} onChange={(e) => setStep(i, { onFailure: e.target.checked, ...(e.target.checked ? { continueOnFailure: false } : {}) })} className="accent-accent-600" aria-label={`Step ${i + 1} runs only if the run fails`} /> run only
+                  if a step before stops the run, to put things back (these come last)
+                </label>
+              </div>
             </div>
           ))}
           <Button type="button" size="sm" icon={<Plus className="size-3.5" />} onClick={() => setRb({ ...rb, steps: [...rb.steps, emptyStep()] })}>

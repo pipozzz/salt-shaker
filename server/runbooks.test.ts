@@ -121,6 +121,78 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     expect(emitted).toEqual(['runbook: Runbook "Restart a service" stopped'])
   })
 
+  it('continues a stopped run from the step that stopped it, as whoever asks, keeping what ran before', async () => {
+    const { call, calls, returns, run, runner, audited } = await setup()
+    const id = ((await call(ada, 'POST', '/runbooks', restart)).body.runbook as { id: number }).id
+    const first = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
+    await call(olga, 'POST', `/runbook-runs/${first}/continue`).then((r) => expect(r).toEqual({ status: 400, body: { error: 'Only a stopped or failed run can be continued' } }))
+    await runner.tick()
+    await returns('j1', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j2', [['web-01', false]])
+    await runner.tick()
+    expect((await run(first)).status).toBe('stopped')
+
+    expect((await call(vic, 'POST', `/runbook-runs/${first}/continue`)).status).toBe(403)
+    const res = await call(ada, 'POST', `/runbook-runs/${first}/continue`)
+    expect(res.status).toBe(201)
+    const next = res.body.run as { id: number; cursor: number; startedBy: string; params: Record<string, string>; steps: StepState[] }
+    expect(next).toMatchObject({ cursor: 1, startedBy: 'ada', params: { host: 'web-01', service: 'nginx' } })
+    expect(next.steps[0]).toMatchObject({ status: 'done', jid: 'j1', fromRun: first })
+    expect(next.steps[1]).toEqual(expect.objectContaining({ status: 'waiting' }))
+    expect(next.steps[1]).not.toHaveProperty('jid')
+    // the stopped step runs again, as ada; the first doesn't
+    expect(calls.map((c) => `${c.user} ${c.low.fun}`)).toEqual(['olga cmd.run', 'olga service.restart', 'ada service.restart'])
+    await returns('j3', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j4', [['web-01', true]])
+    await runner.tick()
+    expect((await run(next.id)).steps.map((s) => s.status)).toEqual(['done', 'done', 'done'])
+    expect((await run(next.id)).status).toBe('done')
+    expect(audited.at(-1)).toBe(`ada runbook.continue #${next.id} Restart a service`)
+    // the stopped run itself is as it was
+    expect((await run(first)).steps.map((s) => s.status)).toEqual(['done', 'failed', 'skipped'])
+  })
+
+  it('runs the steps for a failure only when a step stopped the run, then ends as that step said', async () => {
+    const { call, calls, returns, run, runner, emitted } = await setup()
+    const rb = { ...restart, steps: [...restart.steps.slice(0, 2), { name: 'Start it', fun: 'service.start', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false, onFailure: true }, { name: 'Tell', fun: 'event.send', target: '{{host}}', targetType: 'glob', args: 'restart/failed', continueOnFailure: false, onFailure: true }] }
+    const id = ((await call(ada, 'POST', '/runbooks', rb)).body.runbook as { id: number }).id
+    expect((await call(ada, 'POST', '/runbooks', { ...rb, name: 'x', steps: [rb.steps[2], rb.steps[0]] })).body).toEqual({ error: 'Step 2 runs every time, so it comes before the steps for a failure' })
+
+    // all well: they're skipped
+    const ok = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
+    await returns('j1', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j2', [['web-01', true]])
+    await runner.tick()
+    expect(await run(ok)).toMatchObject({ status: 'done', error: null })
+    expect((await run(ok)).steps.map((s) => s.status)).toEqual(['done', 'done', 'skipped', 'skipped'])
+
+    // the restart fails: the run holds the error while they run, one failing doesn't stop the other
+    const bad = ((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).body.run as { id: number }).id
+    await returns('j3', [['web-01', true]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j4', [['web-01', false]])
+    await runner.tick()
+    expect(await run(bad)).toMatchObject({ status: 'running', cursor: 2, error: 'Restart failed on 1 minion: web-01' })
+    await runner.tick()
+    expect(calls.at(-1)).toMatchObject({ user: 'olga', low: { fun: 'service.start', arg: ['nginx'] } })
+    await returns('j5', [['web-01', false]])
+    await runner.tick()
+    await runner.tick()
+    await returns('j6', [['web-01', true]])
+    await runner.tick()
+    const ended = await run(bad)
+    expect(ended).toMatchObject({ status: 'stopped', error: 'Restart failed on 1 minion: web-01' })
+    expect(ended.steps.map((s) => s.status)).toEqual(['done', 'failed', 'failed', 'done'])
+    expect(emitted.at(-1)).toBe('runbook: Runbook "Restart a service" stopped')
+  })
+
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {
     const { call, returns, run, runner, advance } = await setup()
     const lenient = { ...restart, name: 'Lenient', steps: restart.steps.map((s, i) => ({ ...s, continueOnFailure: i === 0 })) }

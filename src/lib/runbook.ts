@@ -26,6 +26,8 @@ export interface RunbookStep {
   args: string
   /** go on to the next step even when this one fails on some minions */
   continueOnFailure: boolean
+  /** runs only when an earlier step stopped the run, to put things back; these come last */
+  onFailure?: boolean
 }
 
 export interface RunbookInput {
@@ -44,6 +46,7 @@ export interface ResolvedStep {
   arg: unknown[]
   kwarg: Record<string, unknown>
   continueOnFailure: boolean
+  onFailure?: boolean
 }
 
 const PARAM = /^[a-z_][a-z0-9_]{0,30}$/
@@ -81,7 +84,9 @@ export function readRunbook(body: Record<string, unknown>): RunbookInput | { err
       targetType: str(s?.targetType) || 'glob',
       args: typeof s?.args === 'string' ? s.args.trim() : '',
       continueOnFailure: s?.continueOnFailure === true,
+      ...(s?.onFailure === true ? { onFailure: true } : {}),
     }
+    if (!step.onFailure && steps.some((x) => x.onFailure)) return { error: `Step ${n} runs every time, so it comes before the steps for a failure` }
     if (!FUN.test(step.fun)) return { error: `Step ${n}: the function is a name like state.apply` }
     if (!step.target) return { error: `Step ${n}: the target is required` }
     if (!(TARGET_TYPES as readonly string[]).includes(step.targetType)) return { error: `Step ${n}: unknown target type` }
@@ -89,6 +94,7 @@ export function readRunbook(body: Record<string, unknown>): RunbookInput | { err
     if (unknown) return { error: `Step ${n} uses {{${unknown}}}, which isn't a parameter` }
     steps.push(step)
   }
+  if (steps.every((x) => x.onFailure)) return { error: 'Add a step that runs every time, not only on a failure' }
   return { name, description, params, steps }
 }
 
@@ -123,9 +129,40 @@ export function resolveRunbook(rb: Pick<RunbookInput, 'params' | 'steps'>, given
       arg: arg.map((a) => fillValue(a, values)),
       kwarg: fillValue(kwarg, values) as Record<string, unknown>,
       continueOnFailure: s.continueOnFailure,
+      ...(s.onFailure ? { onFailure: true } : {}),
     }
   })
   const empty = steps.find((s) => !s.target.trim())
   if (empty) return { error: `${empty.name}: the target is empty with these values` }
   return { values, steps }
+}
+
+interface StepLike extends ResolvedStep {
+  status: string
+  jid?: string | null
+  fromRun?: number
+}
+
+/**
+ * Where a finished run can be continued from: its first step that neither finished nor was
+ * allowed to fail (a step that couldn't start at all stopped it, even if it may fail). Steps for a
+ * failure don't count: they run again if the run fails again. Null when there's nothing left to
+ * run, or it never started (rejected).
+ */
+export function continueFrom(run: { status: string; steps: StepLike[] }): number | null {
+  if (run.status !== 'stopped' && run.status !== 'failed') return null
+  const i = run.steps.findIndex((s) => !s.onFailure && !(s.status === 'done' || (s.status === 'failed' && s.continueOnFailure && !!s.jid)))
+  return i < 0 ? null : i
+}
+
+/**
+ * The steps of a run that continues `fromRun` at step `at`: the ones before it as they ended there
+ * (with their jobs, marked with the run they ran in), the rest to run again, as they were resolved.
+ */
+export function continuedSteps<S extends StepLike>(steps: S[], at: number, fromRun: number): S[] {
+  return steps.map((s, i) => {
+    if (i < at) return { ...s, fromRun: s.fromRun ?? fromRun }
+    const { name, fun, target, targetType, arg, kwarg, continueOnFailure, onFailure } = s
+    return { name, fun, target, targetType, arg, kwarg, continueOnFailure, ...(onFailure ? { onFailure } : {}), status: 'waiting' } as S
+  })
 }

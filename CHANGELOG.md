@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.34.0
 
 **Jobs**
 
@@ -9,6 +9,10 @@
 **Fixes**
 
 - A job page for a jid the master no longer keeps says so instead of showing an empty page.
+
+**Upgrading**
+
+- Nothing to do: comparing reads the jobs already kept.
 
 ## 1.33.0
 

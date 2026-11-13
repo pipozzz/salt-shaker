@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Minions**
+
+- **Save as target…** names what the Minions list shows: a role, OS or Salt version from the fleet breakdown saves as those grains, so minions that match later count too, or just the minions shown as a list. It's a saved target like the ones on Run, so Run, schedules and the other pages that take a target list it. A **saved target** picker filters the list to the minions one matches, and **Run on it** opens Run with it. See [Minions](https://pipozzz.github.io/salt-shaker/guide/minions/).
+
 ## 1.32.0
 
 **Runbooks**

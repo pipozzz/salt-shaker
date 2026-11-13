@@ -108,6 +108,45 @@ test('minions picked on the list open Run with them as a list target', async ({ 
   await expect(page.getByText('3 minions:')).toBeVisible()
 })
 
+test('the filtered minions list saves as a target, filters by it and opens Run with it', async ({ page }) => {
+  await openDemo(page, '/minions?facet=role:web')
+  await page.getByRole('button', { name: 'Save as target…' }).click()
+  await expect(page.getByText('grain: roles:web')).toBeVisible()
+  await page.getByLabel('Name').fill('Web tier')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+
+  // the list is now the saved target, which matches the same minions
+  await expect(page).toHaveURL(/\/minions\?(demo=&)?target=Web\+tier$/)
+  await expect(page.getByLabel('Saved target')).toHaveValue('Web tier')
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-02', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeHidden()
+
+  // a pick on top of it joins them
+  await page.getByRole('button', { name: /^Ubuntu 24\.04/ }).click()
+  await page.getByRole('button', { name: 'Save as target…' }).click()
+  await expect(page.getByText('compound: G@roles:web and G@os:Ubuntu and G@osrelease:24.04')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  // the search isn't a target, so what it shows saves as a list
+  await openDemo(page)
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('debian')
+  await page.getByRole('button', { name: 'Save as target…' }).click()
+  await expect(page.getByText(/The search isn’t a target Salt can read, so this saves the 2 minions/)).toBeVisible()
+  await page.getByLabel('Name').fill('Debian now')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page).toHaveURL(/target=Debian\+now$/)
+  await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('')
+  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'cache-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
+
+  await page.getByRole('link', { name: 'Run on it' }).click()
+  await expect(page).toHaveURL(/\/run\?/)
+  await expect(page.getByLabel('Target')).toHaveValue('cache-01,db-01')
+  await expect(page.getByText('2 minions:')).toBeVisible()
+})
+
 test('the filtered minions list downloads as CSV', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')

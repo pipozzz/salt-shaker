@@ -14,6 +14,10 @@ The search, the status filter and the fleet breakdown pick are kept in the page'
 
 To run something on a handful of minions, tick them in the first column (the header box picks every minion the filter shows) and click **Run on selected**. The selection stays while you change the search, so you can pick from several, and Run opens with them as a list target. The bar at the bottom says how many are picked and how many the current filter hides.
 
+**Save as target…** names what the list shows, so Run, schedules and the other pages that take a target can use it (it's added to the saved targets there, shared with the team when there's a server). A pick from the fleet breakdown saves as the grains it stands for, `roles:web` or `G@os:Ubuntu and G@osrelease:24.04`, so minions that match later count too; you can also save just the minions shown, as a list. The search and Up / Down / Drifted change from moment to moment and aren't a target Salt can read, so a list filtered by them saves as the minions it shows. A grain with a space in it can't be part of a target either, and a list longer than 2000 characters can't be saved; narrow it down.
+
+The **saved target** picker next to the search shows only the minions a saved target matches, worked out from the master's cache like the Run page's preview, so nothing runs. It's kept in the address as `?target=<name>`, and works with the other filters: picking a role on top of it and saving again joins them, `web-* and G@roles:web`. **Run on it** opens Run with that target.
+
 **Export CSV** downloads the minions the search and filters match, all of them, not just the 100 on screen, as an inventory spreadsheet: status, OS and release, kernel, IPs, CPUs, memory, virtualization, roles and Salt version. With the server it also has each minion's latest compliance result, pending package upgrades and known [vulnerabilities](/salt-shaker/guide/vulnerabilities/), with when they were checked. Minions whose grains aren't cached yet have empty columns.
 
 ## Large fleets

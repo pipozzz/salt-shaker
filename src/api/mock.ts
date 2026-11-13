@@ -183,16 +183,57 @@ function matchTarget(tgt: string, tgtType: string): string[] {
       return []
     }
   }
-  if (tgtType === 'compound') {
-    // Good enough for the demo: handle "G@k:v", "L@a,b" and globs joined by "or".
-    return [...new Set(tgt.split(/\s+or\s+/).flatMap((part) => {
-      if (part.startsWith('G@')) return matchTarget(part.slice(2), 'grain')
-      if (part.startsWith('L@')) return matchTarget(part.slice(2), 'list')
-      return matchTarget(part, 'glob')
-    }))]
-  }
+  if (tgtType === 'compound') return matchCompound(tgt)
   const re = new RegExp(`^${tgt.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`)
   return ids.filter((id) => re.test(id))
+}
+
+/**
+ * Good enough for the demo: `G@`, `L@`, `E@`, `I@` and globs, joined with `and`, `or` and `not`,
+ * in parentheses, with `and` binding tighter than `or`, as Salt reads them.
+ */
+function matchCompound(tgt: string): string[] {
+  const tokens = tgt.replace(/\(/g, ' ( ').replace(/\)/g, ' ) ').trim().split(/\s+/).filter(Boolean)
+  let i = 0
+  const all = new Set(keys.minions)
+  const atom = (t: string): Set<string> => {
+    if (t.startsWith('G@')) return new Set(matchTarget(t.slice(2), 'grain'))
+    if (t.startsWith('L@')) return new Set(matchTarget(t.slice(2), 'list'))
+    if (t.startsWith('E@')) return new Set(matchTarget(t.slice(2), 'pcre'))
+    if (t.startsWith('I@')) {
+      const [k, v] = t.slice(2).split(':')
+      return new Set(keys.minions.filter((id) => String(pillarFor(id)[k] ?? '') === v))
+    }
+    return new Set(matchTarget(t, 'glob'))
+  }
+  const term = (): Set<string> => {
+    const t = tokens[i++]
+    if (t === 'not') return new Set([...all].filter((id) => !term().has(id)))
+    if (t === '(') {
+      const r = or()
+      i++ // the ")"
+      return r
+    }
+    return t ? atom(t) : new Set()
+  }
+  const and = () => {
+    let r = term()
+    while (tokens[i] === 'and') {
+      i++
+      const next = term()
+      r = new Set([...r].filter((id) => next.has(id)))
+    }
+    return r
+  }
+  const or = (): Set<string> => {
+    let r = and()
+    while (tokens[i] === 'or') {
+      i++
+      r = new Set([...r, ...and()])
+    }
+    return r
+  }
+  return [...or()]
 }
 
 function stateResults(id: string, sls: string[], test: boolean, saltenv?: string) {

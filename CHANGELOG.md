@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.29.0
 
 **Runbooks**
 
 - **Who may run it**: a runbook can name the operators who may run it, for example only the DBAs for a database restart. Others see it but can't run it, continue its runs or run them again; admins always may. Name no one, as before, and every operator may. See [Writing one](https://pipozzz.github.io/salt-shaker/guide/runbooks/#writing-one).
+
+**Upgrading**
+
+- The database gains a column for whom a runbook names when the server starts; nothing to do. Existing runbooks name no one, so every operator may still run them.
 
 ## 1.28.0
 

@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.31.0
 
 **Runbooks**
 
 - **History**: every save of a runbook is a version, with who saved it and when. Open one to see what it changed, line by line, and admins can restore an earlier one (it's saved as the newest, so nothing is lost). A run says which version it ran with. See [History](https://pipozzz.github.io/salt-shaker/guide/runbooks/#history).
+
+**Upgrading**
+
+- The database gains a table for runbook versions when the server starts; nothing to do. Each existing runbook starts its history with the version it has when you upgrade, and runs from before don't say which version they ran.
 
 ## 1.30.0
 

@@ -1,10 +1,12 @@
-import { ArrowDown, ArrowUp, BookOpen, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, Download, Pencil, Play, Plus, Trash2, Upload, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Runbook } from '../api/server'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner } from '../components/ui'
+import { download } from '../lib/export'
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
+import { fileName, readRunbookFile, runbooksToYaml } from '../lib/runbook-file'
 import { TARGET_TYPES, type RunbookInput, type RunbookParam, type RunbookStep } from '../lib/runbook'
 import { RUN_STATUS, runnersText, useRunbookRole, useRunbooksApi, useUsersForRunbooks } from '../lib/runbooks'
 import { RunbookHooksCard } from './RunbookHooks'
@@ -21,6 +23,8 @@ export function RunbooksPage() {
   const [editing, setEditing] = useState<Runbook | 'new' | null>(null)
   const [running, setRunning] = useState<Runbook | null>(null)
   const [removing, setRemoving] = useState<Runbook | null>(null)
+  const [importing, setImporting] = useState(false)
+  const exportFile = (rbs: Runbook[]) => download(fileName(rbs), 'application/yaml', runbooksToYaml(rbs))
   const [removeError, setRemoveError] = useState<Error | null>(null)
   if (!api) return null
 
@@ -30,11 +34,23 @@ export function RunbooksPage() {
         title="Runbooks"
         description="Procedures of a few steps, saved once and run by anyone who may: each step runs as you, waits for its minions, and stops the run when it fails."
         actions={
-          canWrite && (
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
-              New runbook
-            </Button>
-          )
+          <div className="flex flex-wrap gap-2">
+            {!!list.data?.runbooks.length && (
+              <Button icon={<Download className="size-4" />} onClick={() => exportFile(list.data!.runbooks)}>
+                Export all
+              </Button>
+            )}
+            {canWrite && (
+              <Button icon={<Upload className="size-4" />} onClick={() => setImporting(true)}>
+                Import…
+              </Button>
+            )}
+            {canWrite && (
+              <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
+                New runbook
+              </Button>
+            )}
+          </div>
         }
       />
       {list.error && <ErrorBox error={list.error} onRetry={list.reload} />}
@@ -55,6 +71,7 @@ export function RunbooksPage() {
               subtitle={rb.description || undefined}
               actions={
                 <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />} aria-label={`Export ${rb.name}`} title="Export as YAML" onClick={() => exportFile([rb])} />
                   {canWrite && <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} aria-label={`Edit ${rb.name}`} onClick={() => setEditing(rb)} />}
                   {canWrite && <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label={`Delete ${rb.name}`} onClick={() => setRemoving(rb)} />}
                 </div>
@@ -116,6 +133,7 @@ export function RunbooksPage() {
         )}
       </Card>
 
+      {importing && list.data && <ImportModal existing={list.data.runbooks.map((rb) => rb.name)} onClose={() => setImporting(false)} onDone={() => setReloads((n) => n + 1)} />}
       {editing && <RunbookEditor runbook={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => setReloads((n) => n + 1)} />}
       {running && <RunModal runbook={running} onClose={() => setRunning(null)} />}
       <Modal
@@ -362,5 +380,80 @@ function RunnersField({ runners, onChange }: { runners: string[]; onChange: (run
         ))}
       </div>
     </fieldset>
+  )
+}
+
+/** Runbooks from a YAML file, shown before they're imported: what's new, what it replaces, what's wrong. */
+function ImportModal({ existing, onClose, onDone }: { existing: string[]; onClose: () => void; onDone: () => void }) {
+  const api = useRunbooksApi()!
+  const [text, setText] = useState('')
+  const [replace, setReplace] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const read = text.trim() ? readRunbookFile(text) : null
+  const entries = read && 'entries' in read ? read.entries : []
+  const bad = entries.filter((e) => 'error' in e).length
+  const taken = entries.filter((e) => !('error' in e) && existing.includes(e.name)).length
+  const ready = entries.length > 0 && !bad && (!taken || replace)
+  const pick = async (file: File | undefined) => {
+    if (file) setText(await file.text())
+  }
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.import(entries.flatMap((x) => ('runbook' in x ? [x.runbook] : [])), replace)
+      onDone()
+      onClose()
+    } catch (err) {
+      setError(err as Error)
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title="Import runbooks" wide>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">A YAML file as <strong>Export</strong> writes it: <code className="font-mono text-xs">runbooks:</code> with a list, or one runbook. Each is checked like the editor checks it, and they're imported together or not at all.</p>
+        <Field label="File">
+          <input type="file" accept=".yaml,.yml,.json,application/yaml,text/yaml" onChange={(e) => void pick(e.target.files?.[0])} aria-label="Runbook file" className="block text-sm" />
+        </Field>
+        <Field label="Or paste it">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} spellCheck={false} aria-label="Runbook YAML" placeholder={'runbooks:\n  - name: Restart a service\n    steps:\n      - fun: service.restart\n        target: web-01\n        args: nginx'} className="w-full rounded-lg border border-zinc-200 bg-white p-2 font-mono text-xs focus:border-accent-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900" />
+        </Field>
+        {read && 'error' in read && <p className="text-sm text-red-700 dark:text-red-400">{read.error}</p>}
+        {entries.length > 0 && (
+          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 text-sm dark:divide-zinc-800 dark:border-zinc-800" aria-label="Runbooks in the file">
+            {entries.map((x, i) => (
+              <li key={i} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2" aria-label={x.name}>
+                <span className="font-medium">{x.name}</span>
+                {'error' in x ? (
+                  <span className="text-xs text-red-700 dark:text-red-400">{x.error}</span>
+                ) : existing.includes(x.name) ? (
+                  <Badge tone="amber">replaces the one with this name</Badge>
+                ) : (
+                  <Badge tone="green">new, {x.runbook.steps.length} {x.runbook.steps.length === 1 ? 'step' : 'steps'}</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {taken > 0 && (
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="accent-accent-600" /> Replace the {taken === 1 ? 'runbook' : `${taken} runbooks`} with the same name
+          </label>
+        )}
+        {bad > 0 && <p className="text-xs text-zinc-500 dark:text-zinc-400">Fix {bad === 1 ? 'the runbook' : `the ${bad} runbooks`} marked in red in the file first.</p>}
+        {error && <ErrorBox error={error} />}
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" icon={<Upload className="size-4" />} loading={busy} disabled={!ready}>
+            Import {entries.length > 0 && !bad ? `${entries.length} ${entries.length === 1 ? 'runbook' : 'runbooks'}` : ''}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }

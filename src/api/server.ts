@@ -681,6 +681,8 @@ export const runbooks = {
   list: () => request<{ runbooks: Runbook[]; approval: 'off' | 'risky' }>('/api/runbooks'),
   save: (rb: RunbookInput, id?: number) => send<{ runbook: Runbook }>(id ? 'PUT' : 'POST', id ? `/api/runbooks/${id}` : '/api/runbooks', rb),
   remove: (id: number) => send('DELETE', `/api/runbooks/${id}`),
+  /** runbooks read from a file; all or none, replacing ones with the same name only when asked */
+  import: (rbs: RunbookInput[], replace: boolean) => send<{ created: number; replaced: number }>('POST', '/api/runbooks/import', { runbooks: rbs, replace }),
   run: (id: number, params: Record<string, string>) => send<{ run: RunbookRun }>('POST', `/api/runbooks/${id}/run`, { params }),
   runs: (runbookId?: number) => request<{ runs: RunbookRun[] }>(`/api/runbook-runs${runbookId ? `?runbook=${runbookId}` : ''}`),
   getRun: (id: number) => request<{ run: RunbookRun }>(`/api/runbook-runs/${id}`),

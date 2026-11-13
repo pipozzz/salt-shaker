@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Runbooks**
+
+- **Export** a runbook, or all of them, as YAML, to keep in git or carry to another Salt Shaker, and **Import…** them back: the dialog shows what's new, what it replaces and what's wrong before anything is saved, and a file goes in whole or not at all. See [In a file](https://pipozzz.github.io/salt-shaker/guide/runbooks/#in-a-file).
+
 ## 1.29.0
 
 **Runbooks**

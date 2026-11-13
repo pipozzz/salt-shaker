@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
-import { continuedSteps, continueFrom, mayRun, readRunbook, resolveRunbook, type ResolvedStep, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
+import { continuedSteps, continueFrom, MAX_IMPORT, mayRun, readRunbook, resolveRunbook, type ResolvedStep, type RunbookInput, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
 import { needsApproval } from './changes'
 import type { Db, Schema } from './db'
 import type { Notifier } from './notify'
@@ -332,6 +332,40 @@ export function runbookRoutes(d: RouteDeps) {
   }
   r.post('/runbooks', (c) => write(c, null))
   r.put('/runbooks/:id', (c) => write(c, Number(c.req.param('id'))))
+
+  /**
+   * Runbooks from a file (the page reads the YAML): all or none. Each is checked like the editor
+   * checks it; one whose name is taken replaces that runbook only when the admin said so.
+   */
+  r.post('/runbooks/import', async (c) => {
+    const m = me(c)
+    if (m.role !== 'admin') return c.json({ error: 'Only admins write runbooks' }, 403)
+    const body = (await c.req.json().catch(() => ({}))) as { runbooks?: unknown; replace?: unknown }
+    const items = Array.isArray(body.runbooks) ? body.runbooks : []
+    if (!items.length) return c.json({ error: 'There are no runbooks to import' }, 400)
+    if (items.length > MAX_IMPORT) return c.json({ error: `At most ${MAX_IMPORT} runbooks at a time` }, 400)
+    const read: RunbookInput[] = []
+    for (const [i, item] of items.entries()) {
+      const rb = readRunbook((item ?? {}) as Record<string, unknown>)
+      if ('error' in rb) return c.json({ error: `Runbook ${i + 1}: ${rb.error}` }, 400)
+      if (read.some((x) => x.name === rb.name)) return c.json({ error: `"${rb.name}" is there twice` }, 400)
+      read.push(rb)
+    }
+    const existing = new Map((await d.db.select({ id: t.id, name: t.name }).from(t)).map((x) => [x.name, x.id]))
+    const taken = read.filter((rb) => existing.has(rb.name)).map((rb) => rb.name)
+    if (taken.length && body.replace !== true) return c.json({ error: `These already exist: ${taken.join(', ')}. Replace them, or rename them in the file`, taken }, 409)
+    let created = 0
+    for (const rb of read) {
+      const values = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), runners: JSON.stringify(rb.runners ?? []), updatedAt: new Date() }
+      const id = existing.get(rb.name)
+      if (id === undefined) {
+        await d.db.insert(t).values({ ...values, createdBy: m.username })
+        created++
+      } else await d.db.update(t).set(values).where(eq(t.id, id))
+      await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: 'runbook.import', target: rb.name, args: JSON.stringify({ replaced: id !== undefined, params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
+    }
+    return c.json({ created, replaced: read.length - created })
+  })
 
   r.delete('/runbooks/:id', async (c) => {
     const m = me(c)

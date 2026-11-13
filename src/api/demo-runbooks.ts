@@ -186,6 +186,28 @@ export const demoRunbooks: typeof runbooks = {
     recordDemoAudit({ username: 'demo', client: 'admin', fun: existing ? 'runbook.update' : 'runbook.create', target: rb.name, outcome: 'ok' })
     return delay({ runbook: { ...row } })
   },
+  import: (input, replace) => {
+    const read: RunbookInput[] = []
+    for (const [i, item] of input.entries()) {
+      const rb = readRunbook(item as unknown as Record<string, unknown>)
+      if ('error' in rb) return fail(`Runbook ${i + 1}: ${rb.error}`)
+      if (read.some((x) => x.name === rb.name)) return fail(`"${rb.name}" is there twice`)
+      read.push(rb)
+    }
+    const taken = read.filter((rb) => list.some((x) => x.name === rb.name)).map((rb) => rb.name)
+    if (taken.length && !replace) return fail(`These already exist: ${taken.join(', ')}. Replace them, or rename them in the file`)
+    let created = 0
+    for (const rb of read) {
+      const existing = list.find((x) => x.name === rb.name)
+      if (existing) Object.assign(existing, rb, { updatedAt: new Date().toISOString() })
+      else {
+        list.push({ ...rb, id: nextId++, createdBy: 'demo', updatedAt: new Date().toISOString() })
+        created++
+      }
+      recordDemoAudit({ username: 'demo', client: 'admin', fun: 'runbook.import', target: rb.name, outcome: 'ok' })
+    }
+    return delay({ created, replaced: read.length - created })
+  },
   remove: (id) => {
     const schedule = usedBy(id)
     if (schedule) return fail(`The schedule "${schedule}" runs it; delete that schedule or pick another runbook for it first`)

@@ -435,6 +435,33 @@ test('a runbook waits before a step that asks first, until someone lets it go on
   await expect(steps.getByRole('listitem', { name: /^Apply: (running|done|failed)$/ })).toContainText('let go on by demo')
 })
 
+test('runbooks export as YAML and import back, replacing only when asked', async ({ page }) => {
+  await openDemo(page, '/runbooks')
+  const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export Restart a service safely' }).click()])
+  expect(file.suggestedFilename()).toBe('runbook-restart-a-service-safely.yaml')
+  const exported = await (await file.createReadStream()).toArray().then((b) => Buffer.concat(b).toString())
+  expect(exported).toContain('name: Restart a service safely')
+  expect(exported).toContain('onFailure: true')
+
+  await page.getByRole('button', { name: 'Import…' }).click()
+  const pasted = exported.replace('runbooks:\n', 'runbooks:\n  - name: Ping the web servers\n    steps:\n      - fun: test.ping\n        target: web-*\n')
+  await page.getByLabel('Runbook YAML').fill(pasted)
+  const listed = page.getByRole('list', { name: 'Runbooks in the file' })
+  await expect(listed.getByRole('listitem', { name: 'Ping the web servers' })).toContainText('new, 1 step')
+  await expect(listed.getByRole('listitem', { name: 'Restart a service safely' })).toContainText('replaces the one with this name')
+  const go = page.getByRole('button', { name: 'Import 2 runbooks' })
+  await expect(go).toBeDisabled()
+  await page.getByLabel('Replace the runbook with the same name').check()
+  await go.click()
+  await expect(page.getByRole('heading', { name: 'Ping the web servers' })).toBeVisible()
+
+  // a broken file says what's wrong before anything is imported
+  await page.getByRole('button', { name: 'Import…' }).click()
+  await page.getByLabel('Runbook YAML').fill('runbooks:\n  - name: Nothing\n    steps: []\n')
+  await expect(page.getByRole('list', { name: 'Runbooks in the file' })).toContainText('Add at least one step')
+  await expect(page.getByRole('button', { name: /^Import/ }).last()).toBeDisabled()
+})
+
 test('a schedule runs a runbook, and its runbook stays while it does', async ({ page }) => {
   await openDemo(page, '/schedules')
   const web = page.getByRole('listitem').filter({ hasText: 'Web highstate' })

@@ -249,6 +249,23 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     expect((await call(bob, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).status).toBe(201)
   })
 
+  it('admins import runbooks from a file: all or none, replacing only when asked', async () => {
+    const { call, audited } = await setup()
+    await call(ada, 'POST', '/runbooks', restart)
+    const ping = { name: 'Ping', steps: [{ fun: 'test.ping', target: '*' }] }
+    expect((await call(olga, 'POST', '/runbooks/import', { runbooks: [ping] })).status).toBe(403)
+    expect(await call(ada, 'POST', '/runbooks/import', { runbooks: [ping, { name: 'Bad', steps: [] }] })).toEqual({ status: 400, body: { error: 'Runbook 2: Add at least one step' } })
+    expect(await call(ada, 'POST', '/runbooks/import', { runbooks: [ping, ping] })).toEqual({ status: 400, body: { error: '"Ping" is there twice' } })
+    const changed = { ...restart, description: 'From git', runners: ['olga'] }
+    expect(await call(ada, 'POST', '/runbooks/import', { runbooks: [ping, changed] })).toEqual({ status: 409, body: { error: 'These already exist: Restart a service. Replace them, or rename them in the file', taken: ['Restart a service'] } })
+    // nothing was written
+    expect(((await call(ada, 'GET', '/runbooks')).body.runbooks as unknown[]).length).toBe(1)
+    expect(await call(ada, 'POST', '/runbooks/import', { runbooks: [ping, changed], replace: true })).toEqual({ status: 200, body: { created: 1, replaced: 1 } })
+    const listed = (await call(ada, 'GET', '/runbooks')).body.runbooks as Array<{ name: string; description: string; runners: string[] }>
+    expect(listed.map((x) => [x.name, x.description, x.runners])).toEqual([['Ping', '', []], ['Restart a service', 'From git', ['olga']]])
+    expect(audited.slice(-2)).toEqual(['ada runbook.import Ping', 'ada runbook.import Restart a service'])
+  })
+
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {
     const { call, returns, run, runner, advance } = await setup()
     const lenient = { ...restart, name: 'Lenient', steps: restart.steps.map((s, i) => ({ ...s, continueOnFailure: i === 0 })) }

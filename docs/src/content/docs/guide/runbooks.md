@@ -21,6 +21,39 @@ Admins write runbooks on **Runbooks → New runbook**:
 
 A value is put *into* an argument, after the arguments are split: a value of `nginx test=True` stays one argument and can't add `test=True` of its own. In a target it's used as typed, and the target is checked against the person's scope like any other.
 
+## In a file
+
+**Export** on a runbook, or **Export all**, saves them as YAML, to keep in git or carry to another Salt Shaker. Anyone who can see runbooks can export them. The file holds what an admin wrote, no ids, authors or dates:
+
+```yaml
+runbooks:
+  - name: Restart a service safely
+    params:
+      - name: host
+        label: Minions
+        default: web-01
+        required: true
+    steps:
+      - name: Check the configuration
+        target: "{{host}}"
+        fun: cmd.run
+        args: "'nginx -t'"
+      - name: Restart
+        target: "{{host}}"
+        fun: service.restart
+        args: nginx
+        confirm: true
+      - name: Start it again
+        target: "{{host}}"
+        fun: service.start
+        args: nginx
+        onFailure: true
+    runners:
+      - olga
+```
+
+A step can also have `targetType` (`glob` when left out) and `continueOnFailure: true`. Admins bring a file in with **Import…**: pick it or paste it, and the dialog shows each runbook as new, as replacing the one with its name, or what's wrong with it, before anything is saved. They're imported together or not at all, and one whose name is taken replaces that runbook only if you tick **Replace**. Each runbook imported is a line in the audit log.
+
 ## Running one
 
 **Run…** asks for the values, starts the run and opens it. Each step:

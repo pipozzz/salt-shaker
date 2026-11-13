@@ -42,6 +42,8 @@ export interface RunbookInput {
 }
 
 export const MAX_RUNNERS = 50
+/** runbooks in one import */
+export const MAX_IMPORT = 100
 const USERNAME = /^[\w.@+-]{1,64}$/
 
 /** Whether someone may run a runbook: admins always; operators when it names none, or them. */

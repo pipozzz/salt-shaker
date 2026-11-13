@@ -6,7 +6,7 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, 
 import { relTime } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { TARGET_TYPES, type RunbookInput, type RunbookParam, type RunbookStep } from '../lib/runbook'
-import { RUN_STATUS, useRunbookRole, useRunbooksApi } from '../lib/runbooks'
+import { RUN_STATUS, runnersText, useRunbookRole, useRunbooksApi, useUsersForRunbooks } from '../lib/runbooks'
 import { RunbookHooksCard } from './RunbookHooks'
 
 const stepText = (s: RunbookStep) => `${s.fun}${s.args ? ` ${s.args}` : ''} → ${s.targetType === 'glob' ? '' : `${s.targetType}:`}${s.target}`
@@ -14,7 +14,7 @@ const stepText = (s: RunbookStep) => `${s.fun}${s.args ? ` ${s.args}` : ''} → 
 /** Saved procedures of a few steps: run one with its values, follow it step by step. */
 export function RunbooksPage() {
   const api = useRunbooksApi()
-  const { canWrite, canRun } = useRunbookRole()
+  const { canWrite, mayRun } = useRunbookRole()
   const [reloads, setReloads] = useState(0)
   const list = useAsync(() => (api ? api.list() : Promise.resolve(null)), [api, reloads])
   const runs = useAsync(() => (api ? api.runs() : Promise.resolve(null)), [api, reloads])
@@ -77,8 +77,11 @@ export function RunbooksPage() {
               ))}
             </ol>
             <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{rb.params.length ? `Asks for ${rb.params.map((p) => p.label).join(', ')}` : 'No values to fill in'}</span>
-              {canRun && (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {rb.params.length ? `Asks for ${rb.params.map((p) => p.label).join(', ')}` : 'No values to fill in'}
+                {!!rb.runners?.length && <span className="block">Run by {runnersText(rb.runners)}</span>}
+              </span>
+              {mayRun(rb) && (
                 <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} onClick={() => setRunning(rb)}>
                   Run…
                 </Button>
@@ -210,7 +213,7 @@ const emptyParam = (): RunbookParam => ({ name: '', label: '', default: '', requ
 /** Admins: the runbook's values to ask for, and its steps in order. */
 function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null; onClose: () => void; onSaved: () => void }) {
   const api = useRunbooksApi()!
-  const [rb, setRb] = useState<RunbookInput>(() => (runbook ? { name: runbook.name, description: runbook.description, params: runbook.params.map((p) => ({ ...p })), steps: runbook.steps.map((s) => ({ ...s })) } : { name: '', description: '', params: [], steps: [emptyStep()] }))
+  const [rb, setRb] = useState<RunbookInput>(() => (runbook ? { name: runbook.name, description: runbook.description, params: runbook.params.map((p) => ({ ...p })), steps: runbook.steps.map((s) => ({ ...s })), runners: [...(runbook.runners ?? [])] } : { name: '', description: '', params: [], steps: [emptyStep()], runners: [] }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const setStep = (i: number, patch: Partial<RunbookStep>) => setRb({ ...rb, steps: rb.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)) })
@@ -318,6 +321,8 @@ function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null;
           </Button>
         </fieldset>
 
+        <RunnersField runners={rb.runners ?? []} onChange={(runners) => setRb({ ...rb, runners })} />
+
         {error && <ErrorBox error={error} />}
         <div className="flex justify-end gap-2">
           <Button type="button" onClick={onClose}>
@@ -329,5 +334,33 @@ function RunbookEditor({ runbook, onClose, onSaved }: { runbook: Runbook | null;
         </div>
       </form>
     </Modal>
+  )
+}
+
+/** Who may run it: the operators it names, or every operator when it names none; admins always. */
+function RunnersField({ runners, onChange }: { runners: string[]; onChange: (runners: string[]) => void }) {
+  const usersApi = useUsersForRunbooks()
+  const list = useAsync(() => usersApi.list(), [usersApi])
+  const operators = (list.data?.users ?? []).filter((u) => u.role === 'operator' && !u.banned && u.username).map((u) => u.username!)
+  // someone it names who's no longer an operator stays listed, to take off
+  const names = [...new Set([...operators, ...runners])].sort()
+  const toggle = (name: string, on: boolean) => onChange(on ? [...runners, name].sort() : runners.filter((x) => x !== name))
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Who may run it</legend>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">Admins always may. Name no one and every operator may; name some and only they may. Viewers never run runbooks.</p>
+      {list.error && <ErrorBox error={list.error} onRetry={list.reload} />}
+      {!list.data && list.loading && <Spinner />}
+      {list.data && !names.length && <p className="text-xs text-zinc-500 dark:text-zinc-400">There are no operators yet.</p>}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {names.map((name) => (
+          <label key={name} className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={runners.includes(name)} onChange={(e) => toggle(name, e.target.checked)} className="accent-accent-600" aria-label={`${name} may run it`} />
+            <span className="font-mono text-xs">{name}</span>
+            {!operators.includes(name) && list.data && <span className="text-xs text-amber-700 dark:text-amber-400">(not an operator)</span>}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }

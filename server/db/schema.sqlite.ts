@@ -336,6 +336,8 @@ export const runbook = sqliteTable('runbook', {
   // JSON RunbookParam[] and RunbookStep[]
   params: text('params').notNull(),
   steps: text('steps').notNull(),
+  // JSON string[]: the operators who may run it; empty for every operator (admins always may)
+  runners: text('runners').notNull().default('[]'),
   createdBy: text('created_by'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })

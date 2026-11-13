@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
-import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type ResolvedStep, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
+import { continuedSteps, continueFrom, mayRun, readRunbook, resolveRunbook, type ResolvedStep, type RunbookParam, type RunbookStep } from '../src/lib/runbook'
 import { needsApproval } from './changes'
 import type { Db, Schema } from './db'
 import type { Notifier } from './notify'
@@ -210,7 +210,8 @@ export class RunbookRunner {
   }
 }
 
-const view = (r: Schema['runbook']['$inferSelect']) => ({ ...r, params: JSON.parse(r.params) as RunbookParam[], steps: JSON.parse(r.steps) as RunbookStep[] })
+const view = (r: Schema['runbook']['$inferSelect']) => ({ ...r, params: JSON.parse(r.params) as RunbookParam[], steps: JSON.parse(r.steps) as RunbookStep[], runners: JSON.parse(r.runners || '[]') as string[] })
+const NOT_YOURS = 'Only admins and the operators it names run this runbook'
 const runView = (r: RunRow) => ({ ...r, params: JSON.parse(r.params) as Record<string, string>, steps: JSON.parse(r.steps) as StepState[] })
 
 export interface RouteDeps {
@@ -319,14 +320,14 @@ export function runbookRoutes(d: RouteDeps) {
     if ('error' in rb) return c.json({ error: rb.error }, 400)
     const [same] = await d.db.select({ id: t.id }).from(t).where(eq(t.name, rb.name))
     if (same && same.id !== id) return c.json({ error: 'A runbook with this name already exists' }, 400)
-    const values = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), updatedAt: new Date() }
+    const values = { name: rb.name, description: rb.description, params: JSON.stringify(rb.params), steps: JSON.stringify(rb.steps), runners: JSON.stringify(rb.runners ?? []), updatedAt: new Date() }
     let row
     if (id === null) [row] = await d.db.insert(t).values({ ...values, createdBy: m.username }).returning()
     else {
       ;[row] = await d.db.update(t).set(values).where(eq(t.id, id)).returning()
       if (!row) return c.json({ error: 'Not found' }, 404)
     }
-    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: id === null ? 'runbook.create' : 'runbook.update', target: rb.name, args: JSON.stringify({ params: rb.params, steps: rb.steps }), outcome: 'ok' })
+    await d.audit({ userId: m.userId, username: m.username, role: m.role, client: 'admin', fun: id === null ? 'runbook.create' : 'runbook.update', target: rb.name, args: JSON.stringify({ params: rb.params, steps: rb.steps, runners: rb.runners }), outcome: 'ok' })
     return c.json({ runbook: view(row) })
   }
   r.post('/runbooks', (c) => write(c, null))
@@ -351,6 +352,7 @@ export function runbookRoutes(d: RouteDeps) {
     if (m.role !== 'admin' && m.role !== 'operator') return c.json({ error: 'Viewers can read runbooks, not run them' }, 403)
     const [rb] = await d.db.select().from(t).where(eq(t.id, Number(c.req.param('id'))))
     if (!rb) return c.json({ error: 'Not found' }, 404)
+    if (!mayRun(view(rb), m)) return c.json({ error: NOT_YOURS }, 403)
     const body = (await c.req.json().catch(() => ({}))) as { params?: Record<string, unknown> }
     const started = await startRun(d, rb, body.params ?? {}, { userId: m.userId, username: m.username, role: m.role })
     if ('error' in started) return c.json({ error: started.error }, 400)
@@ -375,6 +377,8 @@ export function runbookRoutes(d: RouteDeps) {
     if (m.role !== 'admin' && m.role !== 'operator') return c.json({ error: 'Viewers can read runbooks, not run them' }, 403)
     const [row] = await d.db.select().from(runs).where(eq(runs.id, Number(c.req.param('id'))))
     if (!row) return c.json({ error: 'Not found' }, 404)
+    const [rb] = row.runbookId === null ? [] : await d.db.select().from(t).where(eq(t.id, row.runbookId))
+    if (rb && !mayRun(view(rb), m)) return c.json({ error: NOT_YOURS }, 403)
     const prev = runView(row)
     const at = continueFrom(prev)
     if (at === null) return c.json({ error: prev.status === 'stopped' || prev.status === 'failed' ? 'Every step has run; run it again instead' : 'Only a stopped or failed run can be continued' }, 400)

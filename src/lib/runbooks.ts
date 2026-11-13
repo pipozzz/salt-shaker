@@ -1,5 +1,7 @@
+import { demoUsers } from '../api/demo-admin'
 import { demoRunbookHooks, demoRunbooks } from '../api/demo-runbooks'
-import { runbookHooks, runbooks } from '../api/server'
+import { runbookHooks, runbooks, users } from '../api/server'
+import { mayRun, type RunbookInput } from './runbook'
 import { useSession } from './session'
 
 /** Runbooks: the server's, the demo's, or none (live mode keeps nothing). */
@@ -31,5 +33,21 @@ export const RUN_STATUS = {
 export function useRunbookRole() {
   const { session } = useSession()
   const role = session?.mode === 'demo' ? 'admin' : session?.mode === 'server' ? session.eauth : null
-  return { canWrite: role === 'admin', canRun: role === 'admin' || role === 'operator', me: session?.mode === 'demo' ? 'demo' : (session?.user ?? null) }
+  const me = session?.mode === 'demo' ? 'demo' : (session?.user ?? null)
+  return {
+    canWrite: role === 'admin',
+    canRun: role === 'admin' || role === 'operator',
+    me,
+    /** whether this runbook is one I may run: admins any, operators the ones that name none or them */
+    mayRun: (rb: Pick<RunbookInput, 'runners'>) => mayRun(rb, { role, username: me }),
+  }
 }
+
+/** Accounts to name as a runbook's runners (admins write runbooks, and only they list users). */
+export function useUsersForRunbooks() {
+  const { session } = useSession()
+  return session?.mode === 'demo' ? demoUsers : users
+}
+
+/** "olga, bob and admins" */
+export const runnersText = (runners: string[]) => (runners.length ? `${runners.join(', ')} and admins` : 'every operator')

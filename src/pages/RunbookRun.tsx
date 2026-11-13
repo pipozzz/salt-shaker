@@ -30,7 +30,7 @@ const call = (s: RunbookStepState) => `${s.fun} ${formatArgs([...s.arg, ...(Obje
 export function RunbookRunPage() {
   const { id } = useParams()
   const api = useRunbooksApi()
-  const { canWrite, canRun, me } = useRunbookRole()
+  const { canWrite, canRun: anyRun, me, mayRun } = useRunbookRole()
   const navigate = useNavigate()
   const [tick, setTick] = useState(0)
   const res = useAsync(() => (api ? api.getRun(Number(id)) : Promise.resolve(null)), [api, id, tick])
@@ -44,7 +44,9 @@ export function RunbookRunPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   // the runbook, to run it again with this run's values; gone if it was deleted
-  const runbook = useAsync(() => (api && canRun ? api.list() : Promise.resolve(null)), [api, canRun]).data?.runbooks.find((rb) => rb.id === run?.runbookId) ?? null
+  const runbook = useAsync(() => (api && anyRun ? api.list() : Promise.resolve(null)), [api, anyRun]).data?.runbooks.find((rb) => rb.id === run?.runbookId) ?? null
+  // one it names someone else for, I don't run again or continue
+  const canRun = runbook ? mayRun(runbook) : anyRun
   const [again, setAgain] = useState(false)
   const from = run ? continueFrom(run) : null
   const resume = async () => {

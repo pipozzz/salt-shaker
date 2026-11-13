@@ -37,6 +37,19 @@ export interface RunbookInput {
   description: string
   params: RunbookParam[]
   steps: RunbookStep[]
+  /** the operators who may run it, by username; empty for every operator (admins always may) */
+  runners?: string[]
+}
+
+export const MAX_RUNNERS = 50
+const USERNAME = /^[\w.@+-]{1,64}$/
+
+/** Whether someone may run a runbook: admins always; operators when it names none, or them. */
+export function mayRun(rb: Pick<RunbookInput, 'runners'>, who: { role?: string | null; username?: string | null }) {
+  if (who.role === 'admin') return true
+  if (who.role !== 'operator') return false
+  const runners = rb.runners ?? []
+  return !runners.length || (!!who.username && runners.includes(who.username))
 }
 
 /** A step as it runs: its function, target and arguments with the values filled in. */
@@ -99,7 +112,12 @@ export function readRunbook(body: Record<string, unknown>): RunbookInput | { err
     steps.push(step)
   }
   if (steps.every((x) => x.onFailure)) return { error: 'Add a step that runs every time, not only on a failure' }
-  return { name, description, params, steps }
+  const rawRunners = Array.isArray(body.runners) ? body.runners : []
+  const runners = [...new Set(rawRunners.map(str).filter(Boolean))].sort()
+  const bad = runners.find((u) => !USERNAME.test(u))
+  if (bad) return { error: `"${bad}" isn't a username` }
+  if (runners.length > MAX_RUNNERS) return { error: `Name at most ${MAX_RUNNERS} operators` }
+  return { name, description, params, steps, runners }
 }
 
 const fill = (s: string, values: Record<string, string>) => s.replace(PLACEHOLDER, (_, p: string) => values[p] ?? '')

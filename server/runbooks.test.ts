@@ -232,6 +232,23 @@ describe.each(testDialects)('runbooks (%s)', (dialect) => {
     expect((await run(second)).steps.map((s) => s.status)).toEqual(['done', 'skipped', 'skipped'])
   })
 
+  it('runs only for admins and the operators it names, when it names any', async () => {
+    const { call, audited } = await setup()
+    const bob: SessionUser = { id: 'b', name: 'Bob', username: 'bob', role: 'operator' }
+    const made = await call(ada, 'POST', '/runbooks', { ...restart, runners: ['olga'] })
+    const id = (made.body.runbook as { id: number; runners: string[] }).id
+    expect(made.body.runbook).toMatchObject({ runners: ['olga'] })
+    expect(audited.at(-1)).toBe('ada runbook.create Restart a service')
+    expect(await call(bob, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).toEqual({ status: 403, body: { error: 'Only admins and the operators it names run this runbook' } })
+    expect((await call(olga, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).status).toBe(201)
+    expect((await call(ada, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).status).toBe(201)
+    // everyone sees whom it names
+    expect(((await call(vic, 'GET', '/runbooks')).body.runbooks as Array<{ runners: string[] }>)[0].runners).toEqual(['olga'])
+    // naming none again: every operator
+    await call(ada, 'PUT', `/runbooks/${id}`, { ...restart, runners: [] })
+    expect((await call(bob, 'POST', `/runbooks/${id}/run`, { params: { host: 'web-01' } })).status).toBe(201)
+  })
+
   it("goes on past a step that may fail, counts minions that never answer, and fails a step that can't start", async () => {
     const { call, returns, run, runner, advance } = await setup()
     const lenient = { ...restart, name: 'Lenient', steps: restart.steps.map((s, i) => ({ ...s, continueOnFailure: i === 0 })) }

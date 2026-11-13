@@ -416,8 +416,11 @@ test('a runbook runs step by step and stops at the step that fails', async ({ pa
   await expect(page.getByText("Step 1 uses {{host}}, which isn't a parameter")).toBeVisible()
   await page.getByRole('button', { name: 'Add a value' }).click()
   await page.getByLabel('Value 1 name').fill('host')
+  // only olga, and admins, may run it
+  await page.getByRole('checkbox', { name: 'olga may run it' }).check()
   await page.getByRole('button', { name: 'Create runbook' }).click()
   await expect(page.getByText('Reboot', { exact: true })).toBeVisible()
+  await expect(page.getByText('Run by olga and admins')).toHaveCount(2)
 })
 
 test('a runbook waits before a step that asks first, until someone lets it go on', async ({ page }) => {

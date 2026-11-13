@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { continuedSteps, continueFrom, readRunbook, resolveRunbook, type RunbookInput } from './runbook'
+import { continuedSteps, continueFrom, mayRun, readRunbook, resolveRunbook, type RunbookInput } from './runbook'
 
 const restart: RunbookInput = {
   name: 'Restart a service safely',
@@ -16,7 +16,7 @@ const restart: RunbookInput = {
 
 describe('runbooks', () => {
   it('reads what an admin enters, and says what is wrong', () => {
-    expect(readRunbook({ ...restart, name: '  Restart a service safely ' })).toEqual(restart)
+    expect(readRunbook({ ...restart, name: '  Restart a service safely ' })).toEqual({ ...restart, runners: [] })
     expect(readRunbook({ ...restart, steps: [] })).toEqual({ error: 'Add at least one step' })
     expect(readRunbook({ ...restart, params: [{ name: 'Host' }] })).toMatchObject({ error: expect.stringContaining("can't be a parameter name") })
     expect(readRunbook({ ...restart, params: [restart.params[0], restart.params[0]] })).toEqual({ error: 'The parameter host is there twice' })
@@ -30,6 +30,9 @@ describe('runbooks', () => {
     // a step may ask before it runs
     expect(readRunbook({ ...restart, steps: [restart.steps[0], { ...restart.steps[1], confirm: true }] })).toMatchObject({ steps: [{}, { name: 'Restart', confirm: true }] })
     expect(resolveRunbook({ ...restart, steps: [{ ...restart.steps[1], confirm: true }] }, { host: 'a' })).toMatchObject({ steps: [{ confirm: true }] })
+    // the operators who may run it: trimmed, once each, in order
+    expect(readRunbook({ ...restart, runners: [' olga', 'bob', 'olga', ''] })).toMatchObject({ runners: ['bob', 'olga'] })
+    expect(readRunbook({ ...restart, runners: ['a b'] })).toEqual({ error: '"a b" isn\'t a username' })
     // a step without a name is numbered
     expect(readRunbook({ ...restart, steps: [{ ...restart.steps[0], name: '' }] })).toMatchObject({ steps: [{ name: 'Step 1' }] })
   })
@@ -76,5 +79,14 @@ describe('runbooks', () => {
       { ...base, name: 'C', status: 'waiting' },
       { ...base, name: 'D', status: 'waiting' },
     ])
+  })
+
+  it('lets admins run any runbook, and operators the ones that name none or them', () => {
+    expect(mayRun({ runners: ['dba'] }, { role: 'admin', username: 'ada' })).toBe(true)
+    expect(mayRun({ runners: [] }, { role: 'operator', username: 'olga' })).toBe(true)
+    expect(mayRun({}, { role: 'operator', username: 'olga' })).toBe(true)
+    expect(mayRun({ runners: ['dba'] }, { role: 'operator', username: 'olga' })).toBe(false)
+    expect(mayRun({ runners: ['dba', 'olga'] }, { role: 'operator', username: 'olga' })).toBe(true)
+    expect(mayRun({ runners: [] }, { role: 'viewer', username: 'vic' })).toBe(false)
   })
 })

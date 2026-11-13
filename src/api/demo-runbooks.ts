@@ -28,6 +28,8 @@ const SEED: RunbookInput[] = [
       { name: 'Make sure it runs', fun: 'service.status', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false },
       { name: 'Start it again', fun: 'service.start', target: '{{host}}', targetType: 'glob', args: '{{service}}', continueOnFailure: false, onFailure: true },
     ],
+
+    runners: ['olga'],
   },
   {
     name: 'Sync and apply the highstate',

@@ -1,0 +1,1 @@
+ALTER TABLE `runbook` ADD `runners` text DEFAULT '[]' NOT NULL;

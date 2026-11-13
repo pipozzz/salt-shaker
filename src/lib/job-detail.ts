@@ -24,7 +24,10 @@ export async function loadJobDetail(salt: { job: (jid: string) => Promise<JobDet
       if (!(e instanceof SaltError && e.status === 404)) throw e
     }
   }
-  return salt.job(jid)
+  const job = await salt.job(jid)
+  // salt-api answers an unknown jid with an empty job
+  if (!job.Function) throw new SaltError(`No job ${jid} is kept${fromServer ? '' : ": the master's job cache keeps jobs for about a day"}`, 404)
+  return job
 }
 
 /** Each minion's return, keyed by minion. */

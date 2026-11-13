@@ -147,6 +147,36 @@ test('the filtered minions list saves as a target, filters by it and opens Run w
   await expect(page.getByText('2 minions:')).toBeVisible()
 })
 
+test('a job compares with another run of it, minion by minion', async ({ page }) => {
+  await openDemo(page, '/jobs')
+  await page.getByRole('row').filter({ hasText: /^\s*state\.apply\s*web-\*\s*pipo/ }).click()
+  await expect(page).toHaveURL(/\/jobs\/\d{20}$/)
+  const real = page.url().split('/').pop()!
+  await page.getByRole('button', { name: 'Compare with…' }).click()
+  // the dry run before it, on the same target
+  await page.getByRole('button', { name: /^test=True\s+on web-\*/ }).click()
+  await expect(page).toHaveURL(new RegExp(`/jobs/compare\\?a=\\d{20}&b=${real}$`))
+  await expect(page.getByText('These ran different commands')).toBeVisible()
+  await expect(page.getByText('2 of 2 minions differ')).toBeVisible()
+
+  const web01 = page.getByRole('listitem', { name: 'web-01' })
+  await expect(web01.getByRole('button').first()).toContainText(/→\s*changed$/)
+  await expect(web01.getByRole('row', { name: /file\.managed \/etc\/motd/ })).toContainText('The file /etc/motd is set to be changed')
+  const web02 = page.getByRole('listitem', { name: 'web-02' })
+  await expect(web02.getByRole('button').first()).toContainText(/→\s*failed$/)
+  await expect(web02.getByRole('row', { name: /service\.running nginx/ })).toContainText('failed')
+
+  // swapped, the newer run is on the left
+  await page.getByRole('button', { name: 'Swap' }).click()
+  await expect(page).toHaveURL(new RegExp(`/jobs/compare\\?a=${real}&b=\\d{20}$`))
+  await expect(web02.getByRole('button').first()).toContainText(/web-02failed\s*→/)
+})
+
+test('a job the master no longer keeps says so', async ({ page }) => {
+  await openDemo(page, '/jobs/20200101000000000000')
+  await expect(page.getByText(/No job 20200101000000000000 is kept/)).toBeVisible()
+})
+
 test('the filtered minions list downloads as CSV', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')

@@ -8,6 +8,14 @@ sidebar: { order: 8 }
 
 **Jobs** shows full results of past jobs. From a job you can *run it again*, retry only the minions that failed or didn't return, or download the results as CSV or JSON.
 
+**Compare with…** on a job's page lists the other runs of its function that are kept, the ones with the same arguments first, and opens the two side by side (`/jobs/compare?a=<jid>&b=<jid>`, the older one as A; **Swap** turns them around). Each minion shows how it ended in each, ok, changed, would change, failed, no return or not targeted, and the minions that differ come first. Under a minion:
+
+- for a state run, the states that ended differently, with each one's comment: the dry run that said *would change* next to the run that changed it, or the service that started yesterday and failed today;
+- for text, such as `cmd.run`, the lines that differ;
+- for anything else, the values that differ, key by key.
+
+Two different commands can be compared too; it says so, and lines the minions up all the same. A job the master no longer keeps (or, with the server, older than its retention) says so instead of opening empty.
+
 **Running now**, at the top, lists the jobs minions are still working on (`jobs.active`, which asks every minion, so it takes a few seconds). **Stop** ends a job on the minions still running it with `saltutil.kill_job`, after a confirmation. Those minions return no result, and a state run stopped midway may leave some states applied and others not. Viewers see running jobs but can't stop them, and every stop is in the audit log.
 
 A job's own page asks the minions that haven't returned yet whether they're still working on it (`saltutil.find_job`), shows them as *still running* and offers **Stop** there too. The rest are listed as *no return*.

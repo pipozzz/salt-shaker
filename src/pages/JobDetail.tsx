@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, RotateCcw, Square } from 'lucide-react'
+import { ArrowLeft, GitCompare, Loader2, RotateCcw, Square } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
@@ -9,6 +9,7 @@ import { useAsync } from '../lib/hooks'
 import { jobResults, loadJobDetail } from '../lib/job-detail'
 import { useCan, useSalt, useSession } from '../lib/session'
 import { funTone } from '../lib/format'
+import { CompareWithModal } from './JobCompare'
 
 export function JobDetailPage() {
   const { jid = '' } = useParams()
@@ -29,6 +30,7 @@ export function JobDetailPage() {
   const stillRunning = running.data ?? []
   const noReturn = missing.filter((m) => !stillRunning.includes(m))
   const [stopping, setStopping] = useState(false)
+  const [comparing, setComparing] = useState(false)
   const refresh = () => {
     void reload()
     void running.reload()
@@ -62,11 +64,16 @@ export function JobDetailPage() {
               </div>
               <p className="mt-2 font-mono text-xs text-zinc-500">jid {jid}</p>
             </div>
-            {canRerun && (
-              <Button icon={<RotateCcw className="size-4" />} onClick={() => rerun()}>
-                Run again
+            <div className="flex flex-wrap gap-2">
+              <Button icon={<GitCompare className="size-4" />} onClick={() => setComparing(true)}>
+                Compare with…
               </Button>
-            )}
+              {canRerun && (
+                <Button icon={<RotateCcw className="size-4" />} onClick={() => rerun()}>
+                  Run again
+                </Button>
+              )}
+            </div>
           </div>
 
           <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 text-sm sm:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-800">
@@ -125,6 +132,7 @@ export function JobDetailPage() {
               )}
             </div>
           </Card>
+          {comparing && <CompareWithModal job={{ ...data, jid }} onClose={() => setComparing(false)} />}
           <StopJobModal
             job={stopping ? { jid, fun: data.Function, args: data.Arguments, minions: stillRunning } : null}
             onClose={() => setStopping(false)}

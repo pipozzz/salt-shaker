@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Jobs**
+
+- **Compare with…** on a job puts it next to another run of the same function, minion by minion: how each ended (ok, changed, would change, failed, no return), the states that ended differently with their comments, and for other functions the lines or values that differ. Yesterday's highstate against today's, or the dry run against the real one. See [Jobs](https://pipozzz.github.io/salt-shaker/guide/jobs-events/#jobs).
+
+**Fixes**
+
+- A job page for a jid the master no longer keeps says so instead of showing an empty page.
+
 ## 1.33.0
 
 **Minions**

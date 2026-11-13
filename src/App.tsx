@@ -8,6 +8,7 @@ import { CompliancePage } from './pages/Compliance'
 import { EventsPage } from './pages/Events'
 import { FilesPage } from './pages/Files'
 import { JobDetailPage } from './pages/JobDetail'
+import { JobComparePage } from './pages/JobCompare'
 import { JobHistoryPage } from './pages/JobHistory'
 import { JobsPage } from './pages/Jobs'
 import { KeysPage } from './pages/Keys'
@@ -88,6 +89,7 @@ function Gate() {
         {session.mode !== 'live' && <Route path="runbooks" element={<RunbooksPage />} />}
         {session.mode !== 'live' && <Route path="runbooks/runs/:id" element={<RunbookRunPage />} />}
         <Route path="jobs" element={<JobsSwitch />} />
+        <Route path="jobs/compare" element={<JobComparePage />} />
         <Route path="jobs/:jid" element={<JobDetailPage />} />
         <Route path="files" element={<FilesPage />} />
         <Route path="events" element={<EventsPage />} />

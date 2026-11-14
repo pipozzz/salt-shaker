@@ -176,6 +176,13 @@
       "when": 1794574639377,
       "tag": "0024_runbook_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794589648062,
+      "tag": "0025_minion_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Bookmark, BookmarkPlus, CircleOff, Download, GitCompare, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
+import { Bookmark, BookmarkPlus, CircleOff, StickyNote, Download, GitCompare, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
@@ -14,6 +14,7 @@ import { useSalt, useSession } from '../lib/session'
 import { fmtMem, relTime } from '../lib/format'
 import { filterTarget, listTarget, type Facet, type FacetKind, type Target } from '../lib/minion-target'
 import { useSavedTargets } from '../lib/targets'
+import { useMinionNotes } from '../lib/notes'
 
 export function OsIcon({ os }: { os?: string }) {
   const color: Record<string, string> = { Ubuntu: 'bg-orange-500', Debian: 'bg-rose-600', Rocky: 'bg-emerald-700', CentOS: 'bg-violet-600', RedHat: 'bg-red-600', Windows: 'bg-sky-600', MacOS: 'bg-zinc-600' }
@@ -83,7 +84,12 @@ export function MinionsPage() {
   const vulnReport = useAsync(() => (fromServer ? vulns.minions().catch(() => null) : demo ? demoVulns.minions() : Promise.resolve(null)), [fromServer, demo, refreshes])
   const vulnBy = useMemo(() => new Map((vulnReport.data?.minions ?? []).map((m) => [m.minion, m])), [vulnReport.data])
   const showVulns = vulnBy.size > 0
-  const reload = () => setRefreshes((n) => n + 1)
+  // the team's notes, searched with the rest
+  const { notes, available: withNotes, reload: reloadNotes } = useMinionNotes()
+  const reload = () => {
+    setRefreshes((n) => n + 1)
+    void reloadNotes()
+  }
 
   const rows = useMemo(() => {
     if (!data) return []
@@ -100,11 +106,11 @@ export function MinionsPage() {
       .filter((r) => !targetName || !!matched.data?.has(r.id))
       .filter((r) => {
         if (!query) return true
-        const hay = [r.id, r.g.os, r.g.osrelease, ...(r.g.ipv4 ?? []), ...(r.g.roles ?? [])].join(' ').toLowerCase()
+        const hay = [r.id, r.g.os, r.g.osrelease, ...(r.g.ipv4 ?? []), ...(r.g.roles ?? []), notes?.[r.id]?.note ?? ''].join(' ').toLowerCase()
         return query.toLowerCase().split(/\s+/).every((q) => hay.includes(q))
       })
       .sort((a, b) => Number(b.up ?? 0) - Number(a.up ?? 0) || a.id.localeCompare(b.id))
-  }, [data, status.data, compliance.data, query, filter, facet, targetName, matched.data])
+  }, [data, status.data, compliance.data, query, filter, facet, targetName, matched.data, notes])
 
   // render in pages; any change of filters starts again from the first page
   const filterKey = `${query}|${filter}|${facet?.kind}:${facet?.value}|${targetName}`
@@ -143,8 +149,9 @@ export function MinionsPage() {
       `minions-${new Date().toISOString().slice(0, 10)}.csv`,
       'text/csv',
       minionsCsv(
-        rows.map((r) => ({ ...r, compliance: compliance.data?.minions[r.id], updates: updates.data?.minions[r.id], vulns: vulnBy.get(r.id) })),
+        rows.map((r) => ({ ...r, compliance: compliance.data?.minions[r.id], updates: updates.data?.minions[r.id], vulns: vulnBy.get(r.id), note: notes?.[r.id]?.note })),
         fromServer,
+        withNotes,
       ),
     )
 
@@ -217,7 +224,7 @@ export function MinionsPage() {
           )}
           <div className="relative min-w-48 flex-1">
             <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500 dark:text-zinc-400" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by id, OS, IP or role…" className="pl-9" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by id, OS, IP or role…" title={withNotes ? 'Notes are searched too' : undefined} className="pl-9" />
           </div>
           {savedTargets.length > 0 && (
             <Select aria-label="Saved target" value={targetName ?? ''} onChange={(e) => update({ target: e.target.value || null })} className="max-w-56">
@@ -302,6 +309,12 @@ export function MinionsPage() {
                         <StatusDot up={up} />
                         <span className="font-mono font-medium">{id}</span>
                       </div>
+                      {notes?.[id] && (
+                        <p className="mt-0.5 flex max-w-72 items-center gap-1 pl-5 text-xs text-zinc-500 dark:text-zinc-400" title={notes[id].note}>
+                          <StickyNote className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">{notes[id].note}</span>
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       {g.os ? (

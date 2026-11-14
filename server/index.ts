@@ -23,6 +23,7 @@ import { systemStatus } from './system'
 import { OsvClient, VulnService } from './vulns'
 import { automationRoutes } from './routes/automation'
 import { targetRoutes } from './routes/targets'
+import { noteRoutes } from './routes/notes'
 import { queryRoutes } from './routes/queries'
 import { scopeRoutes } from './routes/scopes'
 import { changeRoutes } from './routes/changes'
@@ -476,6 +477,7 @@ app.route('/api', windowRoutes({ db, schema, audit }))
 app.route('/api', runbookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', hookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', targetRoutes({ db, schema }))
+app.route('/api', noteRoutes({ db, schema, audit }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))

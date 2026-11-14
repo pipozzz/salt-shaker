@@ -20,6 +20,12 @@ The **saved target** picker next to the search shows only the minions a saved ta
 
 **Export CSV** downloads the minions the search and filters match, all of them, not just the 100 on screen, as an inventory spreadsheet: status, OS and release, kernel, IPs, CPUs, memory, virtualization, roles and Salt version. With the server it also has each minion's latest compliance result, pending package upgrades and known [vulnerabilities](/salt-shaker/guide/vulnerabilities/), with when they were checked. Minions whose grains aren't cached yet have empty columns.
 
+## Notes
+
+A **note** on a minion tells the team what its grains can't: who owns it, what it's for, what not to do to it (*Restart only in the Tuesday window*, *Powered off on purpose, being replaced*). It shows at the top of the minion's page, and under its name on the Minions list, where the search finds it too. **Export CSV** has it in a `note` column.
+
+Operators and admins write notes with **Add a note** or **Edit note** on the minion's page, up to 2000 characters; clearing it and saving removes it. Viewers read them. Each note says who changed it last and when, and every change is in the [audit log](/salt-shaker/guide/users-audit/) as `minions.note` (or `minions.note_removed`) with the minion as its target. Notes need the server (or the demo), and stay when a minion's key is removed, so a minion that comes back has its note.
+
 ## Large fleets
 
 The list comes from the master's minion data cache (`cache.grains`), so opening it doesn't start a job on the minions. Offline minions keep their last known OS and IPs. Which minions respond (`manage.status`) is filled in once that check finishes. The table shows 100 minions at a time.

@@ -1,4 +1,4 @@
-import { ArrowLeft, Cpu, Database, HardDrive, History, Network, Play, Search, Terminal } from 'lucide-react'
+import { ArrowLeft, Cpu, Database, HardDrive, History, Network, Pencil, Play, Search, StickyNote, Terminal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { formatArgs } from '../api/salt'
@@ -8,6 +8,7 @@ import { JsonView } from '../components/JsonView'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Input, Spinner, StatusDot, Tabs, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSalt, useSession } from '../lib/session'
+import { useMinionNotes } from '../lib/notes'
 import { OsIcon } from './Minions'
 import { fmtMem, funTone, relTime } from '../lib/format'
 import { MinionPackagesList, MinionVulnerabilities } from './Vulnerabilities'
@@ -76,6 +77,8 @@ export function MinionDetailPage() {
           </Button>
         </div>
       </div>
+
+      <NoteCard id={id} />
 
       {grains.error && <ErrorBox error={grains.error} onRetry={grains.reload} />}
       {grains.loading && !grains.data && <Spinner />}
@@ -252,5 +255,84 @@ function Fact({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
       </p>
       {sub && <div className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{sub}</div>}
     </Card>
+  )
+}
+
+/** The team's note on this minion: who owns it, what it's for. Operators and admins edit it. */
+function NoteCard({ id }: { id: string }) {
+  const { notes, available, canWrite, save } = useMinionNotes()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!available || !notes) return null
+  const note = notes[id]
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (draft === null) return
+    setBusy(true)
+    setError(null)
+    save(id, draft).then(
+      () => {
+        setBusy(false)
+        setDraft(null)
+      },
+      (err: unknown) => {
+        setBusy(false)
+        setError(err instanceof Error ? err.message : String(err))
+      },
+    )
+  }
+  if (draft !== null)
+    return (
+      <Card className="mb-6 p-4">
+        <form onSubmit={submit} className="space-y-2">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Note for the team</span>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              autoFocus
+              placeholder="Who owns it, what it's for, what not to do to it"
+              className="w-full rounded-lg border border-zinc-200 bg-white p-2 text-sm focus:border-accent-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900"
+            />
+          </label>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {note && <span className="mr-auto text-xs text-zinc-500 dark:text-zinc-400">Clear it and save to remove the note.</span>}
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" loading={busy}>
+              Save note
+            </Button>
+          </div>
+        </form>
+      </Card>
+    )
+  if (!note)
+    return canWrite ? (
+      <div className="-mt-3 mb-4">
+        <Button variant="ghost" size="sm" icon={<StickyNote className="size-3.5" />} onClick={() => setDraft('')}>
+          Add a note
+        </Button>
+      </div>
+    ) : null
+  return (
+    <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs dark:border-amber-900/60 dark:bg-amber-950/20">
+      <StickyNote className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm whitespace-pre-wrap" aria-label="Note">{note.note}</p>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400" title={new Date(note.updatedAt).toLocaleString()}>
+          {note.updatedBy ?? 'someone'}, {relTime(new Date(note.updatedAt))}
+        </p>
+      </div>
+      {canWrite && (
+        <Button variant="ghost" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setDraft(note.note)}>
+          Edit note
+        </Button>
+      )}
+    </div>
   )
 }

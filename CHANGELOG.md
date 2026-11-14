@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Minions**
+
+- **Notes**: operators and admins can keep a note on a minion for the team, such as who owns it, what it's for or what not to do to it. It shows at the top of the minion's page and under its name on the Minions list, the search finds it, and **Export CSV** has it. Every change is in the audit log. See [Notes](https://pipozzz.github.io/salt-shaker/guide/minions/#notes).
+
 ## 1.34.0
 
 **Jobs**

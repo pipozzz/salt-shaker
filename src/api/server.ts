@@ -411,6 +411,19 @@ export const targets = {
   remove: (id: number) => send('DELETE', `/api/targets/${id}`),
 }
 
+/** A note the team keeps on a minion. */
+export interface MinionNote {
+  note: string
+  updatedBy: string | null
+  updatedAt: string
+}
+
+export const minionNotes = {
+  list: () => request<{ notes: Record<string, MinionNote> }>('/api/minion-notes'),
+  /** an empty note removes it */
+  save: (minion: string, note: string) => send<{ note: MinionNote | null }>('PUT', `/api/minion-notes/${encodeURIComponent(minion)}`, { note }),
+}
+
 export interface SavedQuery {
   id: number
   name: string

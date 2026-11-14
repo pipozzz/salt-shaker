@@ -66,4 +66,12 @@ describe('minionsCsv', () => {
     expect(web.endsWith(',drift,2026-11-01T10:00:00.000Z,0,2026-11-02T10:00:00.000Z,7,1,2,5,2026-11-03T10:00:00.000Z')).toBe(true)
     expect(db.endsWith(',unknown,,,,,,,,,,,,,,,,,,')).toBe(true)
   })
+
+  it('adds the note last, where notes are kept', () => {
+    const csv = minionsCsv([{ id: 'db-01', g: {}, note: 'Owner: DBA team, "nights only"' }, { id: 'web-01', g: {} }], false, true)
+    const [head, db, web] = csv.split('\r\n')
+    expect(head.endsWith(',salt_version,note')).toBe(true)
+    expect(db).toBe('db-01,unknown,,,,,,,,,,"Owner: DBA team, ""nights only"""')
+    expect(web).toBe('web-01,unknown,,,,,,,,,,')
+  })
 })

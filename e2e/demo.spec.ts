@@ -29,7 +29,7 @@ test('the overview shows how the fleet is doing and what needs attention', async
   await expect(tile('Minions responding')).toContainText('1 not responding')
   await tile('Minions responding').click()
   await expect(page).toHaveURL(/\/minions\?status=down$/)
-  await expect(page.getByRole('cell', { name: 'cache-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^cache-01( |$)/ })).toBeVisible()
 })
 
 test('an old link to the minions list with filters still opens it', async ({ page }) => {
@@ -55,19 +55,19 @@ test('minion filters are kept in the URL and survive going back', async ({ page 
   await page.getByRole('button', { name: /3007\.1/ }).click()
   await expect(page).toHaveURL(/q=db/)
   await expect(page).toHaveURL(/facet=salt%3A3007\.1/)
-  await page.getByRole('cell', { name: 'db-01', exact: true }).click()
+  await page.getByRole('cell', { name: /^db-01( |$)/ }).click()
   await expect(page).toHaveURL(/\/minions\/db-01$/)
   await page.goBack()
   await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('db')
   await expect(page.getByText('Salt: 3007.1')).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^db-01( |$)/ })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 })
 
 test('a minion page keeps its tab and filter in the URL and links back to the filtered list', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('db')
-  await page.getByRole('cell', { name: 'db-01', exact: true }).click()
+  await page.getByRole('cell', { name: /^db-01( |$)/ }).click()
   await page.getByRole('button', { name: 'Pillar', exact: true }).click()
   await expect(page).toHaveURL(/tab=pillar/)
   await page.getByPlaceholder('Filter keys…').fill('postgres')
@@ -120,7 +120,7 @@ test('the filtered minions list saves as a target, filters by it and opens Run w
   await expect(page.getByLabel('Saved target')).toHaveValue('Web tier')
   await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'web-02', exact: true })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeHidden()
+  await expect(page.getByRole('cell', { name: /^db-01( |$)/ })).toBeHidden()
 
   // a pick on top of it joins them
   await page.getByRole('button', { name: /^Ubuntu 24\.04/ }).click()
@@ -137,8 +137,8 @@ test('the filtered minions list saves as a target, filters by it and opens Run w
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page).toHaveURL(/target=Debian\+now$/)
   await expect(page.getByPlaceholder('Filter by id, OS, IP or role…')).toHaveValue('')
-  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'cache-01', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^db-01( |$)/ })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^cache-01( |$)/ })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'web-01', exact: true })).toBeHidden()
 
   await page.getByRole('link', { name: 'Run on it' }).click()
@@ -177,10 +177,44 @@ test('a job the master no longer keeps says so', async ({ page }) => {
   await expect(page.getByText(/No job 20200101000000000000 is kept/)).toBeVisible()
 })
 
+test('a note on a minion shows on its page and in the list, and is searched', async ({ page }) => {
+  await openDemo(page, '/minions/db-01')
+  await expect(page.getByLabel('Note')).toContainText('Owner: DBA team (olga)')
+  await page.getByRole('button', { name: 'Edit note' }).click()
+  await page.getByLabel('Note for the team').fill('Owner: DBA team. Backups run at 02:00; no patching then.')
+  await page.getByRole('button', { name: 'Save note' }).click()
+  await expect(page.getByLabel('Note')).toHaveText('Owner: DBA team. Backups run at 02:00; no patching then.')
+  await expect(page.getByText(/^demo, /)).toBeVisible()
+
+  // a minion without one can get one (in the page: the demo keeps notes until it reloads)
+  await page.getByRole('main').getByRole('link', { name: 'Minions' }).click()
+  await page.getByRole('cell', { name: 'web-01', exact: true }).click()
+  await page.getByRole('button', { name: 'Add a note' }).click()
+  await page.getByLabel('Note for the team').fill('Front door: the load balancer health-checks it')
+  await page.getByRole('button', { name: 'Save note' }).click()
+  await expect(page.getByLabel('Note')).toHaveText('Front door: the load balancer health-checks it')
+
+  // the list shows them under the minion, and the search finds them
+  await page.getByRole('main').getByRole('link', { name: 'Minions' }).click()
+  await expect(page.getByRole('row', { name: /web-01/ })).toContainText('Front door')
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('backups')
+  await expect(page.getByRole('cell', { name: /^db-01/ })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^web-01/ })).toBeHidden()
+
+  // cleared and saved, it's gone
+  await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('')
+  await page.getByRole('cell', { name: /^web-01/ }).click()
+  await page.getByRole('button', { name: 'Edit note' }).click()
+  await page.getByLabel('Note for the team').fill('')
+  await page.getByRole('button', { name: 'Save note' }).click()
+  await expect(page.getByRole('button', { name: 'Add a note' })).toBeVisible()
+  await expect(page.getByLabel('Note', { exact: true })).toBeHidden()
+})
+
 test('the filtered minions list downloads as CSV', async ({ page }) => {
   await openDemo(page)
   await page.getByPlaceholder('Filter by id, OS, IP or role…').fill('web')
-  await expect(page.getByRole('cell', { name: 'db-01', exact: true })).toBeHidden()
+  await expect(page.getByRole('cell', { name: /^db-01( |$)/ })).toBeHidden()
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export CSV' }).click()
   const file = await download

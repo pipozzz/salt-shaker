@@ -405,3 +405,11 @@ export const runbookHook = sqliteTable('runbook_hook', {
   lastRunId: integer('last_run_id'),
   lastError: text('last_error'),
 })
+
+/** A note the team keeps on a minion: who owns it, what it's for, what not to do to it. */
+export const minionNote = sqliteTable('minion_note', {
+  minion: text('minion').primaryKey(),
+  note: text('note').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})

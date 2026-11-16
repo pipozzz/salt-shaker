@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.35.0
 
 **Minions**
 
 - **Notes**: operators and admins can keep a note on a minion for the team, such as who owns it, what it's for or what not to do to it. It shows at the top of the minion's page and under its name on the Minions list, the search finds it, and **Export CSV** has it. Every change is in the audit log. See [Notes](https://pipozzz.github.io/salt-shaker/guide/minions/#notes).
+
+**Upgrading**
+
+- The database gains a table for notes on minions when the server starts; nothing to do.
 
 ## 1.34.0
 

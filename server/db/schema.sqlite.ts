@@ -205,6 +205,14 @@ export const vulnAcceptance = sqliteTable('vuln_acceptance', {
   endedNotifiedAt: integer('ended_notified_at', { mode: 'timestamp_ms' }),
 })
 
+/** The last vulnerability report built, so a restarted server shows it while it builds a new one. */
+export const vulnReport = sqliteTable('vuln_report', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull(),
+  builtAt: integer('built_at', { mode: 'timestamp_ms' }).notNull(),
+  data: text('data').notNull(),
+})
+
 /** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */
 export const vulnDaily = sqliteTable('vuln_daily', {
   day: text('day').primaryKey(),

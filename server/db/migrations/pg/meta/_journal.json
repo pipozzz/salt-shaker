@@ -183,6 +183,13 @@
       "when": 1794589648062,
       "tag": "0025_minion_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795013539398,
+      "tag": "0026_vuln_report",
+      "breakpoints": true
     }
   ]
 }

@@ -203,6 +203,14 @@ export const vulnAcceptance = pgTable('vuln_acceptance', {
   endedNotifiedAt: timestamp('ended_notified_at', { withTimezone: true }),
 })
 
+/** The last vulnerability report built, so a restarted server shows it while it builds a new one. */
+export const vulnReport = pgTable('vuln_report', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull(),
+  builtAt: timestamp('built_at', { withTimezone: true }).notNull(),
+  data: text('data').notNull(),
+})
+
 /** The vulnerability report's totals, one row per day (UTC), for the trend on the Vulnerabilities page. */
 export const vulnDaily = pgTable('vuln_daily', {
   day: text('day').primaryKey(),

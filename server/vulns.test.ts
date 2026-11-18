@@ -230,6 +230,32 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     expect(done.updating).toBe(false)
     expect(done.report!.minions[0].findings.map((f) => f.vuln.id)).toEqual(['DEBIAN-CVE-2024-1'])
   })
+
+  it('shows the saved report after a restart while it builds a new one', async () => {
+    const { db, schema, scan } = await setup()
+    await scan('1', 0, { web: { ret: inventory('debian\t12\t12', 'openssl\t3.0.11-1~deb12u2\tlibssl3') } })
+    const first = (await new VulnService(db, schema, fakeOsv(affects, records).client, { now: () => NOW }).get()).report!
+
+    // a new server whose build can't finish yet
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const osv = fakeOsv(affects, records)
+    const slow = new OsvClient('https://osv.test', async (url, init) => {
+      await gate
+      return osv.fetchFn(url, init)
+    })
+    const svc = new VulnService(db, schema, slow, { now: () => NOW + 13 * 3600_000 })
+    const got = await svc.get(10)
+    expect(got.updating).toBe(true)
+    expect(got.report!.builtAt).toEqual(first.builtAt)
+    expect(got.report!.minions.map((m) => [m.minion, m.scannedAt, m.findings.map((f) => [f.vuln.id, f.fixed])])).toEqual(
+      first.minions.map((m) => [m.minion, m.scannedAt, m.findings.map((f) => [f.vuln.id, f.fixed])]),
+    )
+    // its packages are read on demand, the inventories aren't in the saved report
+    expect((await svc.minionPackages('web'))!.packages.map((p) => [p.name, p.vulns])).toEqual([['openssl', 1]])
+    release()
+    expect((await svc.get()).updating).toBe(false)
+  })
 })
 
 describe.each(testDialects)('vulnerability API (%s)', (dialect) => {

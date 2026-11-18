@@ -301,6 +301,12 @@ export interface ScanRef {
 const chunks = <T>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
 
 /**
+ * Lets other requests run. better-sqlite3 and JSON.parse are synchronous, so a report build over a
+ * large fleet would otherwise hold the event loop (and every API call) for as long as it takes.
+ */
+const yieldToLoop = () => new Promise<void>((r) => setImmediate(r))
+
+/**
  * Each minion's latest inventory since `since`: the newest one that succeeded, or its newest failure
  * when none did. Only metadata is read, so this is cheap enough to run on every request.
  */
@@ -335,13 +341,15 @@ interface Parsed {
 /** Reads and parses the output of the given inventory returns. */
 async function loadInventories(db: Db, schema: Schema, scans: ScanRef[]) {
   const r = schema.jobReturn
-  const wanted = new Set(scans.map((s) => `${s.jid}|${s.minion}`))
   const out = new Map<string, Parsed>()
-  for (const c of chunks([...new Set(scans.map((s) => s.jid))], 200)) {
-    const rows = await db.select({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode }).from(r).where(inArray(r.jid, c))
+  // one scan of the whole fleet is one jid with every minion's (large) package list: read a few
+  // minions at a time, and let other requests in between
+  const byJid = new Map<string, string[]>()
+  for (const s of scans) byJid.set(s.jid, [...(byJid.get(s.jid) ?? []), s.minion])
+  for (const [jid, minions] of byJid) for (const c of chunks(minions, 20)) {
+    const rows = await db.select({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode }).from(r).where(and(eq(r.jid, jid), inArray(r.minion, c)))
     for (const x of rows) {
       const key = `${x.jid}|${x.minion}`
-      if (!wanted.has(key)) continue
       let value: unknown = null
       try {
         value = x.ret ? JSON.parse(x.ret) : null
@@ -351,6 +359,7 @@ async function loadInventories(db: Db, schema: Schema, scans: ScanRef[]) {
       const inventory = !x.retcode ? parseInventory(value) : null
       out.set(key, { inventory, error: inventory ? null : typeof value === 'string' && value.trim() ? value.trim().split('\n')[0].slice(0, 200) : 'The scan returned nothing usable' })
     }
+    await yieldToLoop()
   }
   return out
 }
@@ -506,8 +515,15 @@ export class VulnService {
   async minionPackages(minion: string) {
     const got = await this.get(0)
     const m = got.report?.minions.find((x) => x.minion === minion)
-    const inv = m && this.parsed.get(`${m.jid}|${m.minion}`)?.inventory
-    if (!m || !inv) return null
+    if (!m) return null
+    // a report restored from the database comes without the inventories: read this one
+    const k = `${m.jid}|${m.minion}`
+    if (!this.parsed.has(k)) {
+      const p = (await loadInventories(this.db, this.schema, [{ minion: m.minion, jid: m.jid, startedAt: m.scannedAt, ok: true }])).get(k)
+      if (p) this.parsed.set(k, p)
+    }
+    const inv = this.parsed.get(k)?.inventory
+    if (!inv) return null
     const byPkg = new Map<string, Finding[]>()
     for (const f of m.findings) byPkg.set(`${f.package}\0${f.version}`, [...(byPkg.get(`${f.package}\0${f.version}`) ?? []), f])
     const packages = inv.packages
@@ -552,13 +568,46 @@ export class VulnService {
     return this.db.select().from(t).where(gte(t.day, since)).orderBy(t.day)
   }
 
-  private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {
-    let scans = await latestScans(this.db, this.schema, new Date(this.now() - this.windowMs))
-    const accepted = await this.minions().catch(() => null)
-    if (accepted) {
+  /** the latest scans, reused for a few seconds: every page that shows vulnerability counts asks */
+  private scansCache: { at: number; scans: Promise<ScanRef[]> } | null = null
+
+  private scans(): Promise<ScanRef[]> {
+    if (this.scansCache && this.now() - this.scansCache.at < SCANS_TTL_MS) return this.scansCache.scans
+    const scans = (async () => {
+      const all = await latestScans(this.db, this.schema, new Date(this.now() - this.windowMs))
+      const accepted = await this.minions().catch(() => null)
+      if (!accepted) return all
       const keep = new Set(accepted)
-      scans = scans.filter((s) => keep.has(s.minion))
-    }
+      return all.filter((s) => keep.has(s.minion))
+    })()
+    this.scansCache = { at: this.now(), scans }
+    scans.catch(() => {
+      if (this.scansCache?.scans === scans) this.scansCache = null
+    })
+    return scans
+  }
+
+  private restored: Promise<void> | null = null
+
+  /** The report saved by the last build, when this server hasn't built one yet. */
+  private restore() {
+    this.restored ??= (async () => {
+      const [row] = await this.db.select().from(this.schema.vulnReport).where(eq(this.schema.vulnReport.id, 'current'))
+      if (!row || this.report) return
+      // shown until this server has built its own, which also reads the inventories it leaves out
+      this.report = { key: `restored:${row.key}`, ...unpackReport(row.data) }
+    })().catch((e) => console.warn('vulns: reading the saved report failed', e))
+    return this.restored
+  }
+
+  private async save(report: VulnReport & { key: string }) {
+    const t = this.schema.vulnReport
+    const row = { id: 'current', key: report.key, builtAt: report.builtAt, data: packReport(report) }
+    await this.db.insert(t).values(row).onConflictDoUpdate({ target: t.id, set: row })
+  }
+
+  private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {
+    const [scans] = await Promise.all([this.scans(), this.restore()])
     const key = scans.map((s) => `${s.minion}:${s.jid}`).sort().join(',')
     const fresh = this.report && this.report.key === key && this.now() - +this.report.builtAt < this.reportTtlMs
     if (!fresh && !this.building) {
@@ -603,8 +652,13 @@ export class VulnService {
     const known = new Map<string, OsvRef[]>()
     const stale: OsvQuery[] = []
     if (ecosystems.length) {
-      const rows = await db.select().from(schema.osvPackage).where(inArray(schema.osvPackage.ecosystem, ecosystems))
-      const byKey = new Map(rows.map((r) => [`${r.ecosystem}|${r.name}|${r.version}`, r]))
+      // only the names installed now: the cache also holds every version seen before
+      const byKey = new Map<string, typeof schema.osvPackage.$inferSelect>()
+      const t = schema.osvPackage
+      for (const c of chunks([...new Set([...wanted.values()].map((q) => q.name))], 500)) {
+        for (const r of await db.select().from(t).where(and(inArray(t.ecosystem, ecosystems), inArray(t.name, c)))) byKey.set(`${r.ecosystem}|${r.name}|${r.version}`, r)
+        await yieldToLoop()
+      }
       for (const [k, q] of wanted) {
         const row = byKey.get(k)
         if (row) known.set(k, JSON.parse(row.vulns) as OsvRef[])
@@ -622,6 +676,7 @@ export class VulnService {
             .insert(schema.osvPackage)
             .values(c)
             .onConflictDoUpdate({ target: [schema.osvPackage.ecosystem, schema.osvPackage.name, schema.osvPackage.version], set: { vulns: sql`excluded.vulns`, fetchedAt: sql`excluded.fetched_at` } })
+          await yieldToLoop()
         }
         stale.forEach((q, i) => known.set(`${q.ecosystem}|${q.name}|${q.version}`, answers[i] ?? []))
         this.progress = { step: 'packages', done: stale.length, total: stale.length }
@@ -644,6 +699,7 @@ export class VulnService {
         if (r.modified === refs.get(r.id) && data.v === INFO_VERSION) have.add(r.id)
       }
       for (const id of c) if (!have.has(id)) missing.push(id)
+      await yieldToLoop()
     }
     if (missing.length) {
       this.progress = { step: 'vulns', done: 0, total: missing.length }
@@ -663,7 +719,12 @@ export class VulnService {
     }
 
     let unchecked = 0
-    const minions: MinionVulns[] = inventories.map(({ scan, inventory, error: scanError }) => {
+    const minions: MinionVulns[] = []
+    for (const [n, { scan, inventory, error: scanError }] of inventories.entries()) {
+      if (n % 50 === 49) await yieldToLoop()
+      minions.push(matchMinion(scan, inventory, scanError))
+    }
+    function matchMinion(scan: ScanRef, inventory: Inventory | null, scanError: string | null): MinionVulns {
       const base = { minion: scan.minion, jid: scan.jid, scannedAt: scan.startedAt, os: inventory ? `${inventory.os.id} ${inventory.os.versionId}`.trim() : null, ecosystem: inventory?.ecosystem ?? null, packages: inventory?.packages.length ?? 0 }
       if (!inventory) return { ...base, error: scanError, findings: [] }
       if (!inventory.ecosystem) return { ...base, error: `OSV.dev has no vulnerability data for ${base.os || 'this OS'}`, findings: [] }
@@ -682,11 +743,42 @@ export class VulnService {
         }
       }
       return { ...base, error: null, findings }
-    })
+    }
 
     const report = { key, builtAt: new Date(this.now()), minions, error, unchecked }
     this.report = report
+    await this.save(report).catch((e) => console.warn('vulns: saving the report failed', e))
     return report
+  }
+}
+
+const SCANS_TTL_MS = 10_000
+
+/** The report as saved in the database: each vulnerability's details once, findings refer to them. */
+export function packReport(report: VulnReport): string {
+  const vulns: Record<string, VulnInfo> = {}
+  const minions = report.minions.map(({ findings, ...m }) => ({
+    ...m,
+    findings: findings.map((f) => {
+      vulns[f.vuln.id] = f.vuln
+      return [f.vuln.id, f.package, f.version, f.binaries, f.fixed] as const
+    }),
+  }))
+  return JSON.stringify({ builtAt: report.builtAt, error: report.error, unchecked: report.unchecked, vulns, minions })
+}
+
+export function unpackReport(data: string): VulnReport {
+  type Packed = { builtAt: string; error: string | null; unchecked: number; vulns: Record<string, VulnInfo>; minions: Array<Omit<MinionVulns, 'findings' | 'scannedAt'> & { scannedAt: string; findings: [string, string, string, string[], string | null][] }> }
+  const p = JSON.parse(data) as Packed
+  return {
+    builtAt: new Date(p.builtAt),
+    error: p.error,
+    unchecked: p.unchecked,
+    minions: p.minions.map((m) => ({
+      ...m,
+      scannedAt: new Date(m.scannedAt),
+      findings: m.findings.filter(([id]) => p.vulns[id]).map(([id, pkg, version, binaries, fixed]) => ({ vuln: p.vulns[id], package: pkg, version, binaries, fixed })),
+    })),
   }
 }
 

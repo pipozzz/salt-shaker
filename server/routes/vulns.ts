@@ -118,7 +118,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** Every finding as CSV, with the page's filters: ?severity=critical,high&fix=1&q=openssl */
   r.get('/vulns/export', async (c) => {
-    const got = await vulns.get()
+    const got = await vulns.get(3000)
     const severities = (c.req.query('severity') ?? '').split(',').filter(Boolean)
     const fixOnly = c.req.query('fix') === '1'
     const q = (c.req.query('q') ?? '').toLowerCase()
@@ -170,7 +170,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** What was found on one minion. */
   r.get('/vulns/minions/:id', async (c) => {
-    const got = await vulns.get()
+    const got = await vulns.get(3000)
     const m = got.report?.minions.find((x) => x.minion === c.req.param('id'))
     if (!m) return c.json({ error: 'This minion has no inventory yet' }, 404)
     const findings = m.findings.map(findingFields).sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.package.localeCompare(b.package) || a.id.localeCompare(b.id))
@@ -186,7 +186,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** The minions one vulnerability was found on. */
   r.get('/vulns/by-id/:id', async (c) => {
-    const got = await vulns.get()
+    const got = await vulns.get(3000)
     const id = c.req.param('id')
     let vuln: VulnInfo | null = null
     const affected: Array<{ minion: string; package: string; version: string; binaries: string[]; fixed: string | null }> = []

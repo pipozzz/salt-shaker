@@ -6,6 +6,10 @@
 
 - `SALT_MASTER` sets the master's address in the bootstrap command. Without it, the host in `SALT_API_URL` is used (unless that's `127.0.0.1` or `localhost`), instead of the host Salt Shaker is opened on, which was wrong whenever the two run under different names.
 
+**Fixes**
+
+- With newer Salt masters, which stamp events with a time zone (`…+00:00`), no job was recorded: every event failed with `NOT NULL constraint failed: job.started_at`. Event times on **Events** and the master's clock offset were also off. All three now read stamps with or without a zone.
+
 ## 1.37.0
 
 **States & Pillar**

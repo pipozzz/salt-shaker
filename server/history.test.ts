@@ -125,6 +125,17 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
     expect(j).toMatchObject({ fun: 'state.apply', dryRun: true, minions: '["web-02"]', shakerUser: 'otto' })
   })
 
+  it('stores events from masters that stamp them with a time zone', async () => {
+    // newer Salt sends _stamp as an aware UTC time ("…+00:00"); it used to become an invalid date
+    const jid = '20261118124914123456'
+    await rec.record(`salt/job/${jid}/new`, { ...newEvent, jid, _stamp: '2026-11-18T12:49:14.123456+00:00' })
+    await rec.record(`salt/job/${jid}/ret/web-01`, { ...retEvent, jid, _stamp: '2026-11-18T12:49:15.500000+00:00' })
+    const [j] = await jobs(jid)
+    expect(j.startedAt.toISOString()).toBe('2026-11-18T12:49:14.123Z')
+    const [r] = await returns(jid)
+    expect(r.returnedAt.toISOString()).toBe('2026-11-18T12:49:15.500Z')
+  })
+
   it('prunes jobs past the retention window with their returns', async () => {
     const old = { ...newEvent, jid: '20200101000000000000', _stamp: '2020-01-01T00:00:00.000000' }
     await rec.record('salt/job/20200101000000000000/new', old)

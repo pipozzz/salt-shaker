@@ -5,6 +5,7 @@ import type { SaltEvent } from '../api/types'
 import { JsonView } from '../components/JsonView'
 import { Badge, Button, Card, Empty, Input, PageHeader, StatusDot, type Tone } from '../components/ui'
 import { useSession } from '../lib/session'
+import { parseSaltStamp } from '../lib/stamp'
 
 const CATEGORIES: Array<{ key: string; label: string; match: RegExp; tone: Tone }> = [
   { key: 'job', label: 'Jobs', match: /^salt\/job\//, tone: 'blue' },
@@ -88,7 +89,7 @@ export function EventsPage() {
 function EventRow({ event }: { event: SaltEvent }) {
   const [open, setOpen] = useState(false)
   const cat = categorize(event.tag)
-  const stamp = typeof event.data._stamp === 'string' ? new Date(event.data._stamp.endsWith('Z') ? event.data._stamp : `${event.data._stamp}Z`) : null
+  const stamp = parseSaltStamp(event.data._stamp)
   const { _stamp, _received, ...data } = event.data
   void _stamp
   void _received

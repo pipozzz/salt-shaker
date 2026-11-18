@@ -3,6 +3,7 @@ import { stateSummary } from '../src/lib/states'
 import { pruneAudit } from './audit'
 import type { Db, Schema } from './db'
 import type { SaltService } from './salt'
+import { parseSaltStamp } from '../src/lib/stamp'
 
 /**
  * Records jobs from the master's event bus into the database, so history outlives the
@@ -41,7 +42,8 @@ export interface JobRet {
   returnedAt: Date
 }
 
-const stamp = (s: unknown) => (typeof s === 'string' ? new Date(s.endsWith('Z') ? s : `${s}Z`) : new Date())
+// when the event was made, or now if it carries no stamp Salt Shaker can read
+const stamp = (s: unknown) => parseSaltStamp(s) ?? new Date()
 
 /** test=True arrives as a trailing {__kwarg__: true, test: true} argument. */
 export const isDryRun = (args: unknown) =>

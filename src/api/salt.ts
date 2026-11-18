@@ -1,4 +1,5 @@
 import { trimFleet } from '../lib/fleet'
+import { parseSaltStamp } from '../lib/stamp'
 export { parseArgs } from '../lib/args'
 import {
   SaltError,
@@ -46,7 +47,8 @@ export class SaltApi {
     if (res.data.jid && res.data._stamp) {
       const local = jidToDate(res.data.jid)
       this.offsetKnown = true
-      if (local) this.masterOffsetMs = Math.round((local.getTime() - Date.parse(`${res.data._stamp}Z`)) / 60_000) * 60_000
+      const utc = parseSaltStamp(res.data._stamp)
+      if (local && utc) this.masterOffsetMs = Math.round((local.getTime() - utc.getTime()) / 60_000) * 60_000
     }
     if (res.data.success === false) {
       throw new SaltError(typeof res.data.return === 'string' ? res.data.return : `${fun} failed`)

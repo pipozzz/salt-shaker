@@ -1,4 +1,5 @@
 import { trimFleet } from '../lib/fleet'
+import { gitConfigUrl, gitPillarRemotes as parseGitPillar, headBranch, matchRemote, parseRemoteMap, treeFiles, type GitPillarRemote, type GitPillarRepo } from '../lib/gitpillar'
 import { parseSaltStamp } from '../lib/stamp'
 export { parseArgs } from '../lib/args'
 import {
@@ -230,6 +231,53 @@ export class SaltApi {
   /** Fetches gitfs and other remote backends now instead of at the next update interval. */
   updateFileserver() {
     return this.runner<boolean>('fileserver.update')
+  }
+
+  // ---- git_pillar ----
+  /** An execution module function run on the master itself, with the master's config. */
+  private onMaster<T>(fun: string, arg: unknown[] = [], kwarg: Record<string, unknown> = {}) {
+    return this.runner<T>('salt.cmd', { arg: [fun, ...arg], kwarg })
+  }
+  /** git_pillar remotes in the master's ext_pillar; empty when pillar doesn't come from git. */
+  async gitPillarRemotes() {
+    return parseGitPillar(await this.onMaster<unknown>('config.get', ['ext_pillar']))
+  }
+  /** The working trees git_pillar checked out on the master, matched to their remotes. */
+  async gitPillarRepos(remotes: GitPillarRemote[]): Promise<GitPillarRepo[]> {
+    const cachedir = await this.onMaster<string>('config.get', ['cachedir'])
+    const base = `${String(cachedir || '/var/cache/salt/master').replace(/\/+$/, '')}/git_pillar`
+    const [gitDirs, mapText] = await Promise.all([
+      this.onMaster<string[] | string>('file.find', [base], { type: 'd', name: '.git', maxdepth: 3 }),
+      this.onMaster<string | false>('file.read', [`${base}/remote_map.txt`]).catch(() => ''),
+    ])
+    const remoteMap = parseRemoteMap(typeof mapText === 'string' ? mapText : '')
+    const repos = await Promise.all(
+      (Array.isArray(gitDirs) ? gitDirs : []).map(async (g) => {
+        const dir = g.replace(/\/\.git$/, '')
+        const [config, head] = await Promise.all([
+          this.onMaster<string>('file.read', [`${g}/config`]).catch(() => ''),
+          this.onMaster<string>('file.read', [`${g}/HEAD`]).catch(() => ''),
+        ])
+        const m = matchRemote(remotes, { rel: dir.slice(base.length + 1), url: gitConfigUrl(String(config)), head: headBranch(String(head)) }, remoteMap)
+        return m && { remote: m.remote, branch: m.branch, dir }
+      }),
+    )
+    return repos.filter((r): r is GitPillarRepo => !!r).sort((a, b) => remotes.indexOf(a.remote) - remotes.indexOf(b.remote) || a.branch.localeCompare(b.branch))
+  }
+  /** Files of a checked out git_pillar repo, relative to its root parameter. */
+  async gitPillarFiles(repo: GitPillarRepo) {
+    const res = await this.onMaster<string[] | string>('file.find', [repo.dir], { type: 'f' })
+    return treeFiles(Array.isArray(res) ? res : [], repo.dir, repo.remote.root)
+  }
+  async readGitPillar(repo: GitPillarRepo, path: string) {
+    const full = `${repo.dir}/${repo.remote.root ? `${repo.remote.root}/` : ''}${path}`
+    const res = await this.onMaster<string | false>('file.read', [full])
+    if (typeof res !== 'string') throw new SaltError(`Can't read ${full} on the master`)
+    return res
+  }
+  /** Fetches the git_pillar remotes now. */
+  updateGitPillar() {
+    return this.runner<unknown>('git_pillar.update')
   }
 
   /** When a job started, in the browser's clock. */

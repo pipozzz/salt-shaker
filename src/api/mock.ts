@@ -671,6 +671,9 @@ export class MockTransport implements Transport {
           return ['base', 'nginx-tls']
         case 'fileserver.file_list':
           return Object.keys(served(String(kw.saltenv ?? 'base')) ?? {}).sort()
+        case 'git_pillar.update':
+          await sleep(800)
+          return { 'main https://github.com/acme/salt-pillar.git': false }
         case 'fileserver.update':
           await sleep(800)
           return true
@@ -684,6 +687,30 @@ export class MockTransport implements Transport {
             const path = String(low.arg[1] ?? '').replace(/^salt:\/\//, '')
             const env = String((low.kwarg as Record<string, unknown> | undefined)?.saltenv ?? 'base')
             return served(env)?.[path] ?? false
+          }
+          if (low.arg?.[0] === 'config.get') {
+            // pillar comes from git_pillar, like most gitfs setups
+            if (low.arg[1] === 'ext_pillar') return [{ git: [{ 'main https://github.com/acme/salt-pillar.git': [{ root: 'pillar' }] }] }]
+            if (low.arg[1] === 'cachedir') return '/var/cache/salt/master'
+            return ''
+          }
+          if (low.arg?.[0] === 'file.find' || low.arg?.[0] === 'file.read') {
+            const repo = '/var/cache/salt/master/git_pillar/9b1c4e7d'
+            const gitFiles: Record<string, string> = {
+              [`${repo}/.git/HEAD`]: 'ref: refs/heads/main\n',
+              [`${repo}/.git/config`]: '[remote "origin"]\n\turl = https://github.com/acme/salt-pillar.git\n',
+              [`${repo}/README.md`]: '# salt-pillar\n\nPillar for the lab, served by git_pillar.\n',
+              ...Object.fromEntries(Object.entries(files.pillar).map(([k, v]) => [`${repo}/pillar/${k}`, v])),
+            }
+            const path = String(low.arg[1] ?? '')
+            if (low.arg[0] === 'file.read') {
+              if (path.endsWith('/remote_map.txt')) return `# git_pillar_remote map\n9b1c4e7d = main https://github.com/acme/salt-pillar.git\n`
+              if (gitFiles[path] === undefined) throw new SaltError(`No such file: ${path}`, 500)
+              return gitFiles[path]
+            }
+            const kwarg = (low.kwarg ?? {}) as Record<string, unknown>
+            if (kwarg.name === '.git') return path.endsWith('/git_pillar') ? [`${repo}/.git`] : []
+            return Object.keys(gitFiles).filter((f) => f.startsWith(`${path.replace(/\/+$/, '')}/`))
           }
           throw new SaltError(`salt.cmd ${String(low.arg?.[0])} is not available in demo mode`, 500)
         case 'cache.grains':
@@ -779,7 +806,8 @@ export class MockTransport implements Transport {
         case 'file_roots.list_roots':
           return wheelOk(fun, { base: [{ '/srv/salt': buildTree(Object.keys(files.file)) }] })
         case 'pillar_roots.list_roots':
-          return wheelOk(fun, { base: [{ '/srv/pillar': buildTree(Object.keys(files.pillar)) }] })
+          // pillar lives in git_pillar, so pillar_roots is empty like on the real setups
+          return wheelOk(fun, { base: [{ '/srv/pillar': {} }] })
         case 'file_roots.read':
         case 'pillar_roots.read': {
           const kind = fun.startsWith('file') ? 'file' : 'pillar'

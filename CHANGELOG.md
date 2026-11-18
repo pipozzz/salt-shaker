@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.36.0
 
 **Enrollment**
 
 - **Several keys at once**: tick keys, or a whole list, and accept, reject or delete them together. A dialog lists them first, with fingerprints when accepting; each key is its own call and audit line, and if one fails the dialog says which, while the others stay done. See [Enrollment](https://pipozzz.github.io/salt-shaker/guide/enrollment/).
+
+**Upgrading**
+
+- Nothing to do.
 
 ## 1.35.0
 

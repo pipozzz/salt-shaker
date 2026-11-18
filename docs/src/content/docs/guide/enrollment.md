@@ -10,6 +10,8 @@ sidebar: { order: 4 }
 
 It also generates bootstrap commands for new minions. With **pre-seeded keys**, the key pair is generated on the master and accepted in advance, so the new minion is trusted on first contact.
 
+The command points minions at the master's address: `SALT_MASTER`, or else the host in `SALT_API_URL`. When neither fits, for example salt-api on `127.0.0.1`, type it once in **Master address** and it's remembered in your browser.
+
 :::caution
 Pre-seeded enrollment shows the minion's private key once. Copy it to the minion over a trusted channel.
 :::

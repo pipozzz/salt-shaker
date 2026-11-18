@@ -22,6 +22,8 @@ export interface Me {
   user: { id: string; name: string; username: string; role: Role }
   perms: unknown[]
   scope?: UserScope | null
+  /** the master's address for minions (SALT_MASTER, else salt-api's host) */
+  saltMaster?: string | null
   expiresAt: string | null
 }
 
@@ -95,6 +97,7 @@ export function sessionFromMe(me: Me): Session {
     eauth: me.user.role,
     perms: me.perms,
     scope: me.scope ?? null,
+    saltMaster: me.saltMaster ?? null,
   }
 }
 

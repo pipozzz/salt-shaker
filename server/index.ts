@@ -236,7 +236,7 @@ app.get('/api/me', async (c) => {
   const role = isRole(user.role) ? user.role : 'viewer'
   // the minions they're limited to, if any, so the UI can say so
   const scope = await loadScope(db, schema, user.id)
-  return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], scope, expiresAt: c.get('expiresAt') })
+  return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], scope, saltMaster: config.saltMaster, expiresAt: c.get('expiresAt') })
 })
 
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { KeyList } from '../api/types'
 import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
+import { masterHostFrom } from '../lib/master'
 import { useCan, useSalt, useSession } from '../lib/session'
 
 type Action = 'accept' | 'reject' | 'delete'
@@ -420,7 +421,16 @@ function EnrollModal({ open, onClose, existing, onEnrolled }: { open: boolean; o
   const canEnroll = useCan()('wheel', 'key.gen_accept')
   const [method, setMethod] = useState<'approve' | 'preseed'>('approve')
   const [id, setId] = useState('')
-  const [master, setMaster] = useStoredState('salt-shaker.enroll.master', window.location.hostname === 'localhost' ? 'salt.example.com' : window.location.hostname)
+  const { session } = useSession()
+  // SALT_MASTER or salt-api's host when known; otherwise what was typed here last time
+  const known = session?.saltMaster ?? (session?.mode === 'live' ? masterHostFrom(session.apiUrl, window.location.href) : null)
+  const [stored, setStored] = useStoredState('salt-shaker.enroll.master', window.location.hostname === 'localhost' ? 'salt.example.com' : window.location.hostname)
+  const [typed, setTyped] = useState<string | null>(null)
+  const master = typed ?? known ?? stored
+  const setMaster = (v: string) => {
+    setTyped(v)
+    if (!known) setStored(v)
+  }
   const [roles, setRoles] = useState('')
   const [keys, setKeys] = useState<{ pub: string; priv: string } | null>(null)
   const [busy, setBusy] = useState(false)

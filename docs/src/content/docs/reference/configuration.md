@@ -10,6 +10,7 @@ The server is configured with environment variables.
 | `SALT_API_URL` | *(required)* | salt-api (`rest_cherrypy`) base URL |
 | `SALT_API_USERNAME` / `SALT_API_PASSWORD` | *(required)* | the service account |
 | `SALT_API_EAUTH` | `pam` | eauth backend of the service account |
+| `SALT_MASTER` | the host of `SALT_API_URL` | the master's address minions connect to (ports 4505 and 4506), put in the bootstrap command on **Enrollment**; set it when salt-api is reached under another name, or on `127.0.0.1` |
 | `PUBLIC_URL` | `http://localhost:8080` | the URL users open; cookies and origin checks are based on it |
 | `INSTANCE_NAME` | the host of `PUBLIC_URL` | this instance's name among [several masters](/salt-shaker/deploy/masters/), e.g. `prod-eu` |
 | `PORT` | `8080` | port the server listens on |

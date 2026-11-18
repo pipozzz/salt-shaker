@@ -21,6 +21,8 @@ export interface Session {
   perms?: unknown[]
   /** with the server: the minions this user is limited to, if an admin limited them */
   scope?: { target: string; targetType: string } | null
+  /** with the server: the master's address for minions, for the bootstrap command */
+  saltMaster?: string | null
 }
 
 export interface SaltEvent {

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { masterHostFrom } from '../src/lib/master'
 
 export interface Config {
   port: number
@@ -10,6 +11,8 @@ export interface Config {
   dialect: 'sqlite' | 'pg'
   authSecret: string
   saltApi: { url: string; username: string; password: string; eauth: string }
+  /** the master's address for minions (SALT_MASTER, else salt-api's host), offered in the bootstrap command */
+  saltMaster: string | null
   staticDir: string
   /** Extra origins allowed to call the API with cookies (e.g. the Vite dev server). */
   trustedOrigins: string[]
@@ -106,6 +109,7 @@ export function loadConfig(): Config {
       password: required('SALT_API_PASSWORD'),
       eauth: process.env.SALT_API_EAUTH ?? 'pam',
     },
+    saltMaster: process.env.SALT_MASTER?.trim() || masterHostFrom(process.env.SALT_API_URL),
     staticDir: process.env.STATIC_DIR ?? './dist',
     trustProxy: /^(1|true|yes)$/i.test(process.env.TRUST_PROXY ?? ''),
     passwordLogin: process.env.PASSWORD_LOGIN === 'admins' ? 'admins' : 'all',

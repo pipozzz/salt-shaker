@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Enrollment**
+
+- `SALT_MASTER` sets the master's address in the bootstrap command. Without it, the host in `SALT_API_URL` is used (unless that's `127.0.0.1` or `localhost`), instead of the host Salt Shaker is opened on, which was wrong whenever the two run under different names.
+
 ## 1.37.0
 
 **States & Pillar**

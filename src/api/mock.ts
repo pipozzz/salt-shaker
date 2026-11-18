@@ -618,7 +618,7 @@ export class MockTransport implements Transport {
   async login(username: string, _password: string, eauth: string): Promise<Session> {
     await sleep(350)
     this.user = username || 'demo'
-    return { token: 'demo-token', expire: Date.now() / 1000 + 12 * 3600, user: this.user, eauth, perms: ['.*', '@wheel', '@runner', '@jobs'] }
+    return { token: 'demo-token', expire: Date.now() / 1000 + 12 * 3600, user: this.user, eauth, perms: ['.*', '@wheel', '@runner', '@jobs'], saltMaster: 'salt-master.lab.internal' }
   }
 
   async logout() {}

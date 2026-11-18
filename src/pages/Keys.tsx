@@ -32,11 +32,11 @@ export function KeysPage() {
       }
       return next
     })
-  const [bulk, setBulk] = useState<{ action: Action; ids: string[] } | null>(null)
-  const pick = { selected, onToggle: toggle, onBulk: (action: Action, ids: string[]) => setBulk({ action, ids }) }
+  const [bulk, setBulk] = useState<{ action: Action; ids: string[]; fingers: Record<string, string> } | null>(null)
+  const pick = { selected, onToggle: toggle, onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => setBulk({ action, ids, fingers }) }
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as Record<string, string>)])
+    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as Partial<Record<string, Record<string, string>>>)])
     return { keys, fingers }
   }, [salt])
 
@@ -134,7 +134,7 @@ export function KeysPage() {
                 New minions show up here as soon as they contact the master.
               </Empty>
             ) : (
-              <KeyRows ids={k.minions_pre} fingers={data?.fingers ?? {}} label="pending" bulkActions={['accept', 'reject']} {...pick}>
+              <KeyRows ids={k.minions_pre} fingers={data?.fingers.minions_pre ?? {}} label="pending" bulkActions={['accept', 'reject']} {...pick}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="success" icon={<Check className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -161,7 +161,7 @@ export function KeysPage() {
             {k.minions.length === 0 ? (
               <Empty icon={<KeyRound />} title="No accepted keys" />
             ) : (
-              <KeyRows ids={acceptedShown} fingers={data?.fingers ?? {}} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick}>
+              <KeyRows ids={acceptedShown} fingers={data?.fingers.minions ?? {}} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
@@ -186,7 +186,7 @@ export function KeysPage() {
                 }
                 subtitle="Denied keys belong to a minion id that already has a different accepted key."
               />
-              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={data?.fingers ?? {}} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
+              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={{ ...data?.fingers.minions_rejected, ...data?.fingers.minions_denied }} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -228,7 +228,7 @@ export function KeysPage() {
         <BulkKeysModal
           action={bulk.action}
           ids={bulk.ids}
-          fingers={data?.fingers ?? {}}
+          fingers={bulk.fingers}
           onClose={() => setBulk(null)}
           onDone={(done) => {
             toggle(done, false)
@@ -272,7 +272,7 @@ function KeyRows({
   bulkActions: Action[]
   selected: Set<string>
   onToggle: (ids: string[], on: boolean) => void
-  onBulk: (action: Action, ids: string[]) => void
+  onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => void
 }) {
   const canManage = useCan()('wheel', 'key.accept')
   const sorted = useMemo(() => [...ids].sort(), [ids])
@@ -290,7 +290,7 @@ function KeyRows({
           {picked.length > 0 && (
             <span className="flex flex-wrap gap-1.5">
               {bulkActions.map((a) => (
-                <Button key={a} size="sm" variant={VERB[a].variant} icon={VERB[a].icon} onClick={() => onBulk(a, picked)}>
+                <Button key={a} size="sm" variant={VERB[a].variant} icon={VERB[a].icon} onClick={() => onBulk(a, picked, fingers)}>
                   {VERB[a].label} {keysWord(picked.length)}
                 </Button>
               ))}

@@ -1,12 +1,12 @@
 import clsx from 'clsx'
 import { Bookmark, BookmarkPlus, CircleOff, StickyNote, Download, GitCompare, KeyRound, Play, RefreshCw, Search, Server, TriangleAlert, Wifi, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { compareVersions } from '../api/salt'
 import { demoVulns } from '../api/demo-vulns'
 import { history, vulns, type MinionUpdates } from '../api/server'
 import type { Grains } from '../api/types'
-import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
+import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, RowCheck, Select, Spinner, Stat, StatusDot, Tabs, type Tone } from '../components/ui'
 import { download, minionsCsv } from '../lib/export'
 import { CountsBadges } from './Vulnerabilities'
 import { useAsync } from '../lib/hooks'
@@ -280,7 +280,7 @@ export function MinionsPage() {
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                   <th className="w-0 py-2.5 pr-1 pl-4">
-                    <Check
+                    <RowCheck
                       label={allShown ? 'Deselect all shown minions' : `Select all ${rows.length} shown minions`}
                       checked={allShown}
                       indeterminate={!allShown && rows.some((r) => selected.has(r.id))}
@@ -302,7 +302,7 @@ export function MinionsPage() {
                 {visible.map(({ id, up, g }) => (
                   <tr key={id} onClick={() => navigate(`/minions/${encodeURIComponent(id)}`, { state: { back: params.toString() } })} className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
                     <td className="py-2.5 pr-1 pl-4" onClick={(e) => e.stopPropagation()}>
-                      <Check label={`Select ${id}`} checked={selected.has(id)} onChange={(on) => toggle([id], on)} />
+                      <RowCheck label={`Select ${id}`} checked={selected.has(id)} onChange={(on) => toggle([id], on)} />
                     </td>
                     <td className="py-2.5 pr-3 pl-2">
                       <div className="flex items-center gap-2.5">
@@ -474,19 +474,6 @@ function SaveTargetModal({ rule, ids, why, onClose, onSaved }: { rule: Target | 
         </div>
       </form>
     </Modal>
-  )
-}
-
-/** A row checkbox with a larger click area than the box itself. */
-function Check({ label, checked, indeterminate = false, onChange }: { label: string; checked: boolean; indeterminate?: boolean; onChange: (on: boolean) => void }) {
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate
-  }, [indeterminate])
-  return (
-    <label className="-m-2 flex cursor-pointer p-2">
-      <input ref={ref} type="checkbox" aria-label={label} checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-4 cursor-pointer accent-accent-600" />
-    </label>
   )
 }
 

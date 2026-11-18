@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { KeyList } from '../api/types'
-import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, ShowMore, Spinner, Tabs } from '../components/ui'
+import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
 import { useCan, useSalt, useSession } from '../lib/session'
 
@@ -20,6 +20,19 @@ export function KeysPage() {
   const [actionError, setActionError] = useState<Error | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  // keys picked for a bulk action; an id is in one list at a time, so one set serves them all
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const toggle = (ids: string[], on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  const [bulk, setBulk] = useState<{ action: Action; ids: string[] } | null>(null)
+  const pick = { selected, onToggle: toggle, onBulk: (action: Action, ids: string[]) => setBulk({ action, ids }) }
 
   const { data, error, loading, reload } = useAsync(async () => {
     const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as Record<string, string>)])
@@ -120,7 +133,7 @@ export function KeysPage() {
                 New minions show up here as soon as they contact the master.
               </Empty>
             ) : (
-              <KeyRows ids={k.minions_pre} fingers={data?.fingers ?? {}}>
+              <KeyRows ids={k.minions_pre} fingers={data?.fingers ?? {}} label="pending" bulkActions={['accept', 'reject']} {...pick}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="success" icon={<Check className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -147,7 +160,7 @@ export function KeysPage() {
             {k.minions.length === 0 ? (
               <Empty icon={<KeyRound />} title="No accepted keys" />
             ) : (
-              <KeyRows ids={acceptedShown} fingers={data?.fingers ?? {}} pageKey={keyQuery}>
+              <KeyRows ids={acceptedShown} fingers={data?.fingers ?? {}} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
@@ -172,7 +185,7 @@ export function KeysPage() {
                 }
                 subtitle="Denied keys belong to a minion id that already has a different accepted key."
               />
-              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={data?.fingers ?? {}} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
+              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={data?.fingers ?? {}} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -210,34 +223,188 @@ export function KeysPage() {
         </div>
       </Modal>
 
+      {bulk && (
+        <BulkKeysModal
+          action={bulk.action}
+          ids={bulk.ids}
+          fingers={data?.fingers ?? {}}
+          onClose={() => setBulk(null)}
+          onDone={(done) => {
+            toggle(done, false)
+            void reload()
+          }}
+        />
+      )}
+
       {enrollOpen && <EnrollModal open onClose={() => setEnrollOpen(false)} existing={k} onEnrolled={reload} />}
     </>
   )
 }
 
-function KeyRows({ ids, fingers, children, tag, pageKey = '' }: { ids: string[]; fingers: Record<string, string>; children: (id: string) => ReactNode; tag?: (id: string) => ReactNode; pageKey?: string }) {
+const VERB: Record<Action, { label: string; doing: string; done: string; variant: 'success' | 'danger'; icon: ReactNode }> = {
+  accept: { label: 'Accept', doing: 'Accepting', done: 'accepted', variant: 'success', icon: <Check className="size-3.5" /> },
+  reject: { label: 'Reject', doing: 'Rejecting', done: 'rejected', variant: 'danger', icon: <Ban className="size-3.5" /> },
+  delete: { label: 'Delete', doing: 'Deleting', done: 'deleted', variant: 'danger', icon: <Trash2 className="size-3.5" /> },
+}
+
+const keysWord = (n: number) => (n === 1 ? '1 key' : `${n} keys`)
+
+function KeyRows({
+  ids,
+  fingers,
+  children,
+  tag,
+  pageKey = '',
+  label,
+  bulkActions,
+  selected,
+  onToggle,
+  onBulk,
+}: {
+  ids: string[]
+  fingers: Record<string, string>
+  children: (id: string) => ReactNode
+  tag?: (id: string) => ReactNode
+  pageKey?: string
+  /** what the list holds, for the select-all box */
+  label: string
+  bulkActions: Action[]
+  selected: Set<string>
+  onToggle: (ids: string[], on: boolean) => void
+  onBulk: (action: Action, ids: string[]) => void
+}) {
   const canManage = useCan()('wheel', 'key.accept')
   const sorted = useMemo(() => [...ids].sort(), [ids])
   const paged = usePaged(sorted, pageKey)
+  const picked = sorted.filter((id) => selected.has(id))
+  const all = sorted.length > 0 && picked.length === sorted.length
   return (
     <>
-    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      {paged.visible.map((id) => (
-        <li key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
-          <span className="font-mono text-sm font-medium">{id}</span>
-          {tag?.(id)}
-          {fingers[id] && (
-            <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400" title={fingers[id]}>
-              <Fingerprint className="size-3.5 shrink-0" />
-              <span className="truncate font-mono">{fingers[id].slice(0, 23)}…</span>
+      {canManage && sorted.length > 1 && (
+        <div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-100 px-4 py-2 text-sm dark:border-zinc-800">
+          <span className="flex items-center gap-2.5">
+            <RowCheck label={all ? `Deselect all ${label} keys` : `Select all ${sorted.length} ${label} keys`} checked={all} indeterminate={!all && picked.length > 0} onChange={(on) => onToggle(sorted, on)} />
+            <span className="text-zinc-500 dark:text-zinc-400">{picked.length ? `${picked.length} selected` : 'Select all'}</span>
+          </span>
+          {picked.length > 0 && (
+            <span className="flex flex-wrap gap-1.5">
+              {bulkActions.map((a) => (
+                <Button key={a} size="sm" variant={VERB[a].variant} icon={VERB[a].icon} onClick={() => onBulk(a, picked)}>
+                  {VERB[a].label} {keysWord(picked.length)}
+                </Button>
+              ))}
+              <Button size="sm" variant="ghost" onClick={() => onToggle(picked, false)}>
+                Clear
+              </Button>
             </span>
           )}
-          {canManage && <span className="ml-auto flex gap-1.5">{children(id)}</span>}
-        </li>
-      ))}
-    </ul>
-    <ShowMore paged={paged} />
+        </div>
+      )}
+      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+        {paged.visible.map((id) => (
+          <li key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
+            {canManage && <RowCheck label={`Select ${id}`} checked={selected.has(id)} onChange={(on) => onToggle([id], on)} />}
+            <span className="font-mono text-sm font-medium">{id}</span>
+            {tag?.(id)}
+            {fingers[id] && (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400" title={fingers[id]}>
+                <Fingerprint className="size-3.5 shrink-0" />
+                <span className="truncate font-mono">{fingers[id].slice(0, 23)}…</span>
+              </span>
+            )}
+            {canManage && <span className="ml-auto flex gap-1.5">{children(id)}</span>}
+          </li>
+        ))}
+      </ul>
+      <ShowMore paged={paged} />
     </>
+  )
+}
+
+/**
+ * Accepts, rejects or deletes several keys after one look at them: one call per key, so one that
+ * fails doesn't stop the rest, and each is its own line in the audit log.
+ */
+function BulkKeysModal({ action, ids, fingers, onClose, onDone }: { action: Action; ids: string[]; fingers: Record<string, string>; onClose: () => void; onDone: (done: string[]) => void }) {
+  const salt = useSalt()
+  const verb = VERB[action]
+  const [progress, setProgress] = useState<{ at: number; done: string[]; failed: Array<{ id: string; error: string }> } | null>(null)
+  const running = !!progress && progress.at < ids.length
+  const finished = !!progress && progress.at === ids.length
+  const go = async () => {
+    const done: string[] = []
+    const failed: Array<{ id: string; error: string }> = []
+    for (const [i, id] of ids.entries()) {
+      setProgress({ at: i, done: [...done], failed: [...failed] })
+      try {
+        if (action === 'accept') await salt.acceptKey(id)
+        if (action === 'reject') await salt.rejectKey(id)
+        if (action === 'delete') await salt.deleteKey(id)
+        done.push(id)
+      } catch (e) {
+        failed.push({ id, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    setProgress({ at: ids.length, done, failed })
+    onDone(done)
+    if (!failed.length) onClose()
+  }
+  const shown = ids.slice(0, 50)
+  return (
+    <Modal open onClose={running ? () => {} : onClose} title={`${verb.label} ${keysWord(ids.length)}?`}>
+      <div className="space-y-4 text-sm">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          {action === 'accept' && 'These minions will be trusted and can be targeted right away. Compare each fingerprint with salt-call --local key.finger on the minion first.'}
+          {action === 'reject' && 'These minions will be refused: they can no longer be targeted, and their keys move to Rejected, where they can be accepted again.'}
+          {action === 'delete' && 'These keys will be removed from the master. A minion that is still running submits its key again and lands in Pending.'}
+        </p>
+        <ul className="max-h-64 divide-y divide-zinc-100 overflow-y-auto rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-label="Keys">
+          {shown.map((id) => {
+            const failed = progress?.failed.find((f) => f.id === id)
+            return (
+              <li key={id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5">
+                <span className="font-mono font-medium">{id}</span>
+                {action === 'accept' && fingers[id] && <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{fingers[id]}</span>}
+                {progress?.done.includes(id) && <Badge tone="green" className="ml-auto">{verb.done}</Badge>}
+                {failed && (
+                  <Badge tone="red" className="ml-auto" title={failed.error}>
+                    failed
+                  </Badge>
+                )}
+              </li>
+            )
+          })}
+          {ids.length > shown.length && <li className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400">and {ids.length - shown.length} more</li>}
+        </ul>
+        {finished && progress.failed.length > 0 && (
+          <div className="space-y-1 rounded-lg bg-red-50 p-3 text-red-800 dark:bg-red-950/40 dark:text-red-300">
+            <p className="font-medium">
+              {progress.done.length} {verb.done}, {progress.failed.length} failed:
+            </p>
+            {progress.failed.map((f) => (
+              <p key={f.id}>
+                <span className="font-mono">{f.id}</span>: {f.error}
+              </p>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          {running && <span className="mr-auto text-zinc-500 dark:text-zinc-400">{verb.doing} {progress.at + 1} of {ids.length}…</span>}
+          {finished ? (
+            <Button onClick={onClose}>Close</Button>
+          ) : (
+            <>
+              <Button onClick={onClose} disabled={running}>
+                Cancel
+              </Button>
+              <Button variant={verb.variant} icon={verb.icon} loading={running} onClick={go}>
+                {verb.label} {keysWord(ids.length)}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </Modal>
   )
 }
 

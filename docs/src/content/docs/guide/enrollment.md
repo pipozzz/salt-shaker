@@ -16,6 +16,8 @@ Pre-seeded enrollment shows the minion's private key once. Copy it to the minion
 
 Managing keys needs the **admin** role.
 
+To act on several keys at once, tick them, or the box above a list to pick all of it, and use the buttons that appear there: **Accept** and **Reject** for pending keys, **Reject** and **Delete** for accepted ones, **Accept** and **Delete** for rejected and denied ones. A dialog lists the keys first, with their fingerprints when you accept, and nothing changes until you confirm. Each key is its own call, and its own line in the [audit log](/salt-shaker/guide/users-audit/#audit-log), so one that fails doesn't stop the others; the dialog then says which failed and why, and the rest stay done.
+
 ## Enrollment windows
 
 When you bring up a batch of servers, an admin can open an **enrollment window** instead of accepting each key: their ids match a pattern (e.g. `web-2026-*`), and for the window's time (1 to 72 hours) their keys are accepted as they arrive, up to a number. A window closes when its time is up or its number is reached, or with **Close**; it stays listed with what it accepted. Keys already waiting that match are accepted when they knock again (minions knock about every 10 seconds).

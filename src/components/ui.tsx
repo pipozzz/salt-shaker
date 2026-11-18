@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { AlertTriangle, Check, Copy, Loader2, Lock, X } from 'lucide-react'
-import { useEffect, useState, type ButtonHTMLAttributes, type AnchorHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type AnchorHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
 
@@ -284,5 +284,18 @@ export function ShowMore({ paged }: { paged: { visible: unknown[]; remaining: nu
         Show {Math.min(paged.size, paged.remaining)} more
       </Button>
     </div>
+  )
+}
+
+/** A row checkbox with a larger click area than the box itself. */
+export function RowCheck({ label, checked, indeterminate = false, onChange }: { label: string; checked: boolean; indeterminate?: boolean; onChange: (on: boolean) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate
+  }, [indeterminate])
+  return (
+    <label className="-m-2 flex cursor-pointer p-2">
+      <input ref={ref} type="checkbox" aria-label={label} checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-4 cursor-pointer accent-accent-600" />
+    </label>
   )
 }

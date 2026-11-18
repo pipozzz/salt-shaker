@@ -915,6 +915,40 @@ test('enroll dialog starts clean every time it opens', async ({ page }) => {
   await expect(page.getByPlaceholder('web-03')).toHaveValue('')
 })
 
+test('picked keys are accepted, rejected or deleted together after a look at them', async ({ page }) => {
+  await openDemo(page, '/keys')
+  await page.getByRole('checkbox', { name: 'Select all 2 pending keys' }).check()
+  await expect(page.getByText('2 selected')).toBeVisible()
+  await page.getByRole('button', { name: 'Accept 2 keys' }).click()
+  // the dialog names them, with their fingerprints, before anything happens
+  const keys = page.getByRole('list', { name: 'Keys' })
+  await expect(keys.getByRole('listitem')).toHaveCount(2)
+  await expect(keys).toContainText('edge-lon-01')
+  await expect(keys).toContainText('worker-02')
+  await expect(page.getByRole('heading', { name: /Pending approval\s*2/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Accept 2 keys' }).last().click()
+  await expect(page.getByText('No minions waiting')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Accepted\s*8/ })).toBeVisible()
+
+  // two accepted ones, rejected together
+  await page.getByRole('checkbox', { name: 'Select web-01' }).check()
+  await page.getByRole('checkbox', { name: 'Select web-02' }).check()
+  await page.getByRole('button', { name: 'Reject 2 keys' }).click()
+  await expect(page.getByText(/These minions will be refused/)).toBeVisible()
+  await page.getByRole('button', { name: 'Reject 2 keys' }).last().click()
+  await expect(page.getByRole('heading', { name: /Rejected & denied\s*3/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Accepted\s*6/ })).toBeVisible()
+
+  // and deleted from there; cancelling first changes nothing
+  await page.getByRole('checkbox', { name: 'Select all 3 rejected and denied keys' }).check()
+  await page.getByRole('button', { name: 'Delete 3 keys' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('heading', { name: /Rejected & denied\s*3/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Delete 3 keys' }).click()
+  await page.getByRole('button', { name: 'Delete 3 keys' }).last().click()
+  await expect(page.getByRole('heading', { name: /Rejected & denied/ })).toBeHidden()
+})
+
 test('an enrollment window accepts the new keys that match it', async ({ page }) => {
   await openDemo(page, '/keys')
   await page.getByLabel('Minion ids like').fill('*')

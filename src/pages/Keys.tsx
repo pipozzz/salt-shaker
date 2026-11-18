@@ -7,13 +7,13 @@ import type { KeyList } from '../api/types'
 import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
 import { masterHostFrom } from '../lib/master'
-import { useCan, useSalt, useSession } from '../lib/session'
+import { useCan, useKeyEvents, useSalt, useSession } from '../lib/session'
 
 type Action = 'accept' | 'reject' | 'delete'
 
 export function KeysPage() {
   const salt = useSalt()
-  const { events } = useSession()
+  const keyEvents = useKeyEvents()
   const can = useCan()
   const canManage = can('wheel', 'key.accept')
   const canEnroll = can('wheel', 'key.gen_accept')
@@ -41,10 +41,9 @@ export function KeysPage() {
   }, [salt])
 
   // a new minion knocking (salt/auth) or a key change elsewhere refreshes the lists
-  const lastKeyEvent = events.find((e) => e.tag === 'salt/auth' || e.tag === 'salt/key')
   useEffect(() => {
-    if (lastKeyEvent) void reload()
-  }, [lastKeyEvent, reload])
+    if (keyEvents) void reload()
+  }, [keyEvents, reload])
 
   const act = async (action: Action, id: string) => {
     setBusy(`${action}:${id}`)

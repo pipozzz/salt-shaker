@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { compress } from 'hono/compress'
 import { secureHeaders } from 'hono/secure-headers'
 import { timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -122,6 +123,10 @@ function clientIp(c: Context<Env>) {
   }
   return c.env.incoming?.socket?.remoteAddress ?? null
 }
+
+// gzip for the UI bundle and JSON answers (fleet grains, history) when no proxy in front compresses
+// them; the event stream is left alone (its content type isn't compressible, so it keeps flushing)
+app.use('*', compress())
 
 app.use(
   '*',

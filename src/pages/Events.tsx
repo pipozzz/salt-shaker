@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import type { SaltEvent } from '../api/types'
 import { JsonView } from '../components/JsonView'
 import { Badge, Button, Card, Empty, Input, PageHeader, StatusDot, type Tone } from '../components/ui'
-import { useSession } from '../lib/session'
+import { useEvents, useSession } from '../lib/session'
 import { parseSaltStamp } from '../lib/stamp'
 
 const CATEGORIES: Array<{ key: string; label: string; match: RegExp; tone: Tone }> = [
@@ -17,7 +17,8 @@ const CATEGORIES: Array<{ key: string; label: string; match: RegExp; tone: Tone 
 const categorize = (tag: string) => CATEGORIES.find((c) => c.match.test(tag))!
 
 export function EventsPage() {
-  const { events, eventsConnected, clearEvents } = useSession()
+  const { eventsConnected } = useSession()
+  const { events, clearEvents } = useEvents()
   const [paused, setPaused] = useState<SaltEvent[] | null>(null)
   const [query, setQuery] = useState('')
   const [hidden, setHidden] = useState<Set<string>>(new Set(['other']))

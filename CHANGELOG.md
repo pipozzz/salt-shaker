@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.39.0
+
+**States & Pillar**
+
+- **git_pillar on Pillar files**: on masters whose pillar comes from `git_pillar`, Pillar files lists the repositories from `ext_pillar` and browses the master's checkouts of them, each from its `root`. Pick between repos (and `pillar_roots`, when it has files too); **Update** runs `git_pillar.update`. `top.sls` opens by default only when there is one, instead of a blank file that made it look like there was no pillar at all.
+
+**Fixes**
+
+- Building the vulnerability report no longer stalls the server. On large fleets it held up every API call, so pages loaded slowly or failed with `Unexpected token '<'` (the proxy's error page). The last report is now kept in the database and shown right after a restart while a new one is built in the background.
+
+**Upgrading**
+
+- A database migration adds the `vuln_report` table; it runs on start.
+- Browsing git_pillar repos reads files on the master through `salt.cmd`, which only admins may use that way; operators and viewers still see `pillar_roots` and **Pillar by minion**.
+
 ## 1.38.0
 
 **Enrollment**

@@ -30,4 +30,7 @@ The master keeps jobs for about 24 hours. With the server, jobs are recorded fro
 
 ![States](../../../../screenshots/states.png)
 
-Browse `file_roots` and `pillar_roots` with syntax highlighting.
+Browse the states and pillar files with syntax highlighting.
+
+- **States** shows what the master's fileserver serves, as minions get it: `file_roots` and [gitfs](https://docs.saltproject.io/en/latest/topics/tutorials/gitfs.html) merged. With gitfs every branch is an environment; pick one to read the states on that branch before you merge it. Admins can press **Update** to fetch the repositories now (`fileserver.update`) instead of waiting for `gitfs_update_interval`.
+- **Pillar files** shows `pillar_roots`. Pillar from `git_pillar` or another `ext_pillar` lives in its repository, which salt-api can't read; **Pillar by minion** shows what each minion gets, from any source.

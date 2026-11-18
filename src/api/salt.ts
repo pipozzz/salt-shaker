@@ -209,6 +209,27 @@ export class SaltApi {
     return Object.values(res[0] ?? {})[0] ?? ''
   }
 
+  /** Every file the fileserver serves in a saltenv, from file_roots, gitfs and any other backend, as minions see them. */
+  async served(saltenv = 'base') {
+    const res = await this.runner<string[]>('fileserver.file_list', { saltenv })
+    return Array.isArray(res) ? res : []
+  }
+  /** A file as minions get it from the fileserver (cp.get_file_str on the master), whatever backend serves it. */
+  async readServed(path: string, saltenv = 'base') {
+    const res = await this.runner<string | false>('salt.cmd', { arg: ['cp.get_file_str', `salt://${path}`], kwarg: { saltenv } })
+    if (typeof res !== 'string') throw new SaltError(`salt://${path} isn't served in ${saltenv}`)
+    return res
+  }
+  /** The fileserver's environments: base, and with gitfs every branch and tag. */
+  async saltenvs() {
+    const res = await this.runner<string[]>('fileserver.envs')
+    return Array.isArray(res) && res.length ? res : ['base']
+  }
+  /** Fetches gitfs and other remote backends now instead of at the next update interval. */
+  updateFileserver() {
+    return this.runner<boolean>('fileserver.update')
+  }
+
   /** When a job started, in the browser's clock. */
   jidDate(jid: string) {
     const d = jidToDate(jid)

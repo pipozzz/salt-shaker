@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**States & Pillar**
+
+- **States from gitfs**: the States tab lists what the master's fileserver serves (`file_roots` and gitfs merged), with every gitfs branch as an environment to pick, and reads files as minions get them. Admins can fetch the repositories now with **Update** (`fileserver.update`). Pillar files explain that `git_pillar` isn't readable through salt-api and point to **Pillar by minion**.
+
+**Upgrading**
+
+- Operators and viewers get the runner `fileserver.file_list`, and `salt.cmd` now also allows `cp.get_file_str` of a single `salt://` file. If you mirror these roles in your own `external_auth` for direct mode, add `fileserver.file_list` and `salt.cmd`; without them the tab falls back to `file_roots`.
+
 ## 1.36.0
 
 **Enrollment**

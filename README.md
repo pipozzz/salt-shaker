@@ -25,7 +25,7 @@ A web UI for [SaltStack](https://saltproject.io) that works with your master thr
 - **Changes:** roll a command out in batches, stopping when too many minions fail, and, with the approval policy on, have an admin approve operators' risky commands first.
 - **Orchestrate:** runs `state.orchestrate` files, with dry-run and pillar overrides, and shows step-by-step results with per-minion output.
 - **Jobs:** full results and *run again*. With the server, jobs are recorded from the event bus and kept for 90 days by default (the master keeps them about 24 hours). That includes jobs run from the salt CLI, along with who ran them.
-- **States & Pillar:** browse `file_roots` / `pillar_roots` with syntax highlighting.
+- **States & Pillar:** browse the states the master serves, from `file_roots` and gitfs per branch, and `pillar_roots`, with syntax highlighting.
 - **Events:** the master event bus, live, with filters. Toasts pop up for failed jobs and for minions waiting for approval.
 - **Users & roles:** *admin*, *operator* and *viewer* accounts, managed in the UI. No Linux accounts are needed on the master.
 - **Single sign-on:** OIDC with Keycloak, Entra ID, Google, Authentik, Okta and others. Roles can come from IdP groups and are refreshed on every sign-in.

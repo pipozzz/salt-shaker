@@ -3,7 +3,8 @@ import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
 import { demoOsquery } from './demo-osquery'
 import { recordDemoAudit, saltArgs } from './demo-audit'
 import { isAudited } from '../lib/readonly'
-import { SaltError, type FileTree, type Grains, type JobSummary, type KeyList, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
+import { buildTree } from '../lib/filetree'
+import { SaltError, type Grains, type JobSummary, type KeyList, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /**
  * An in-browser fake Salt master for demo mode. It answers the same lowstate calls
@@ -133,6 +134,18 @@ function applyUpgrades(id: string, only?: string[]) {
     delete upgrades[id][name]
   }
   return done
+}
+
+/** What the fileserver serves per saltenv: base is file_roots; the nginx-tls gitfs branch adds TLS for the web tier. */
+function served(saltenv: string): Record<string, string> | null {
+  if (saltenv === 'base') return files.file
+  if (saltenv !== 'nginx-tls') return null
+  return {
+    ...files.file,
+    'top.sls': files.file['top.sls'].replace('    - webserver\n', '    - webserver\n    - webserver.tls\n'),
+    'webserver/tls.sls': `include:\n  - webserver\n\n/etc/nginx/conf.d/tls.conf:\n  file.managed:\n    - source: salt://webserver/files/tls.conf.j2\n    - template: jinja\n    - watch_in:\n      - service: nginx\n`,
+    'webserver/files/tls.conf.j2': `ssl_certificate     /etc/ssl/{{ pillar['site_name'] }}.crt;\nssl_certificate_key /etc/ssl/{{ pillar['site_name'] }}.key;\nssl_protocols       TLSv1.2 TLSv1.3;\n`,
+  }
 }
 
 const pillarFor = (id: string): Record<string, unknown> => {
@@ -553,19 +566,6 @@ function lookup(jid: string) {
   return Object.fromEntries(Object.entries(job.results).filter(([, r]) => r.at <= now).map(([id, r]) => [id, r.ret]))
 }
 
-function buildTree(paths: string[]): FileTree {
-  const root: FileTree = {}
-  for (const p of paths) {
-    const parts = p.split('/')
-    let node = root
-    parts.forEach((part, i) => {
-      if (i === parts.length - 1) node[part] = 'f'
-      else node = (node[part] ??= {}) as FileTree
-    })
-  }
-  return root
-}
-
 const wheelOk = (fun: string, ret: unknown) => {
   const jid = newJid()
   return { tag: `salt/wheel/${jid}`, data: { fun: `wheel.${fun}`, jid, _stamp: new Date().toISOString().slice(0, -1), return: ret, success: true } }
@@ -669,12 +669,22 @@ export class MockTransport implements Transport {
         case 'fileserver.envs':
           // base, and a gitfs branch with TLS for the web tier
           return ['base', 'nginx-tls']
+        case 'fileserver.file_list':
+          return Object.keys(served(String(kw.saltenv ?? 'base')) ?? {}).sort()
+        case 'fileserver.update':
+          await sleep(800)
+          return true
         case 'manage.status':
           // like a real master, this waits for minions that don't answer
           await sleep(1200)
           return { up: keys.minions.filter((id) => minions[id]?.up), down: keys.minions.filter((id) => !minions[id]?.up) }
         case 'salt.cmd':
           if (low.arg?.[0] === 'test.version') return '3007.1'
+          if (low.arg?.[0] === 'cp.get_file_str') {
+            const path = String(low.arg[1] ?? '').replace(/^salt:\/\//, '')
+            const env = String((low.kwarg as Record<string, unknown> | undefined)?.saltenv ?? 'base')
+            return served(env)?.[path] ?? false
+          }
           throw new SaltError(`salt.cmd ${String(low.arg?.[0])} is not available in demo mode`, 500)
         case 'cache.grains':
           return Object.fromEntries(matchTarget(String(kw.tgt), String(kw.tgt_type ?? 'glob')).map((id) => [id, minions[id].grains]))

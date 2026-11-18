@@ -24,10 +24,9 @@ export function authorize(role: Role | string | null | undefined, username: stri
   const kind = CLIENTS[client as Client]
 
   if (!canFor(role)(kind, fun)) return { ok: false, status: 403, reason: `Your role (${role ?? 'none'}) may not run ${kind} ${fun}`, client, fun }
-  // salt.cmd runs any function on the master itself; the UI only needs its version
-  if (kind === 'runner' && fun === 'salt.cmd' && role !== 'admin') {
-    const arg = Array.isArray(low.arg) ? low.arg : []
-    if (arg[0] !== 'test.version' || arg.length > 1) return { ok: false, status: 403, reason: 'salt.cmd is limited to test.version', client, fun }
+  // salt.cmd runs any function on the master itself; the UI only needs its version and files from the fileserver
+  if (kind === 'runner' && fun === 'salt.cmd' && role !== 'admin' && !saltCmdAllowed(low)) {
+    return { ok: false, status: 403, reason: 'salt.cmd is limited to test.version and reading salt:// files', client, fun }
   }
 
   for (const k of AUTH_KEYS) delete low[k]
@@ -37,6 +36,26 @@ export function authorize(role: Role | string | null | undefined, username: stri
     low.metadata = { ...meta, salt_shaker_user: username }
   }
   return { ok: true, low, client: client as Client, audited: !READ_ONLY[kind].test(fun) }
+}
+
+/**
+ * What non-admins may run through salt.cmd: the master's version, and cp.get_file_str of one salt:// file,
+ * which serves the same states file_roots.read already shows (from gitfs too), never a path on the master.
+ */
+function saltCmdAllowed(low: Record<string, unknown>) {
+  const arg = Array.isArray(low.arg) ? low.arg : []
+  if (arg[0] === 'test.version') return arg.length === 1
+  if (arg[0] !== 'cp.get_file_str' || arg.length !== 2) return false
+  const extra = Object.keys(low).filter((k) => !['client', 'fun', 'arg', 'kwarg', ...AUTH_KEYS].includes(k))
+  if (extra.length > 0) return false
+  const kwarg = low.kwarg ?? {}
+  if (typeof kwarg !== 'object' || Array.isArray(kwarg)) return false
+  const kw = kwarg as Record<string, unknown>
+  if (Object.keys(kw).some((k) => k !== 'saltenv') || (kw.saltenv !== undefined && typeof kw.saltenv !== 'string')) return false
+  const path = arg[1]
+  if (typeof path !== 'string' || !path.startsWith('salt://')) return false
+  const rel = path.slice('salt://'.length)
+  return rel.length > 0 && !/^[/\\]|[?\\\0]/.test(rel) && !rel.split('/').includes('..')
 }
 
 /** The jid a call returned, if any (local_async, runner_async, wheel). */

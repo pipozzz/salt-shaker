@@ -1,13 +1,14 @@
 import clsx from 'clsx'
-import { ChevronRight, Database, FileCode2, FileText, Folder, FolderOpen, Layers } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ChevronRight, Database, FileCode2, FileText, Folder, FolderOpen, Layers, RefreshCw } from 'lucide-react'
+import { type ReactNode, useMemo, useState } from 'react'
 import type { RootsKind } from '../api/salt'
 import type { FileTree } from '../api/types'
 import { CodeView } from '../components/CodeView'
 import { JsonView } from '../components/JsonView'
-import { Card, CardHeader, CopyButton, Empty, ErrorBox, PageHeader, Select, Spinner, Tabs } from '../components/ui'
+import { Button, Card, CardHeader, CopyButton, Empty, ErrorBox, PageHeader, Select, Spinner, Tabs } from '../components/ui'
 import { useAsync } from '../lib/hooks'
-import { useSalt } from '../lib/session'
+import { buildTree } from '../lib/filetree'
+import { useCan, useSalt } from '../lib/session'
 
 type View = RootsKind | 'rendered'
 
@@ -17,7 +18,7 @@ export function FilesPage() {
     <>
       <PageHeader
         title="States & Pillar"
-        description="Browse file_roots and pillar_roots on the master, or see the pillar a minion actually gets."
+        description="Browse the states the master serves (file_roots and gitfs, per branch) and pillar_roots, or see the pillar a minion actually gets."
         actions={
           <Tabs
             value={view}
@@ -30,18 +31,73 @@ export function FilesPage() {
           />
         }
       />
-      {view === 'rendered' ? <RenderedPillar /> : <RootsBrowser key={view} kind={view} />}
+      {view === 'rendered' ? <RenderedPillar /> : view === 'file' ? <StatesBrowser /> : <RootsBrowser kind="pillar" />}
     </>
+  )
+}
+
+/** States from the fileserver when the user may list it (so gitfs shows up too), else file_roots on disk. */
+function StatesBrowser() {
+  const can = useCan()
+  return can('runner', 'fileserver.file_list') && can('runner', 'salt.cmd') ? <ServedBrowser /> : <RootsBrowser kind="file" />
+}
+
+/** What minions get: every fileserver backend (file_roots, gitfs, …) merged, per saltenv. */
+function ServedBrowser() {
+  const salt = useSalt()
+  const can = useCan()
+  const envs = useAsync(() => salt.saltenvs(), [salt])
+  const [env, setEnv] = useState('base')
+  const list = useAsync(() => salt.served(env), [salt, env])
+  const tree = useMemo(() => buildTree(list.data ?? []), [list.data])
+  const [updating, setUpdating] = useState(false)
+  const [updateError, setUpdateError] = useState<Error | null>(null)
+  const update = async () => {
+    setUpdating(true)
+    setUpdateError(null)
+    try {
+      await salt.updateFileserver()
+      envs.reload()
+      list.reload()
+    } catch (e) {
+      setUpdateError(e instanceof Error ? e : new Error(String(e)))
+    } finally {
+      setUpdating(false)
+    }
+  }
+  const branches = envs.data ?? ['base']
+  return (
+    <Browser
+      title="Fileserver"
+      subtitle={branches.length > 1 ? `${branches.length} environments, from file_roots and gitfs` : 'file_roots and gitfs, as minions get them'}
+      envs={branches}
+      env={env}
+      onEnv={setEnv}
+      tree={tree}
+      loading={list.loading}
+      error={list.error || updateError}
+      onRetry={list.reload}
+      read={(path) => salt.readServed(path, env)}
+      extra={
+        can('runner', 'fileserver.update') && (
+          <Button size="sm" icon={<RefreshCw className="size-3.5" />} loading={updating} onClick={update} title="Fetch gitfs remotes now (fileserver.update) instead of at the next update interval">
+            Update
+          </Button>
+        )
+      }
+      empty={
+        <Empty title="Nothing served">
+          The fileserver serves no files{env === 'base' ? '' : ` in ${env}`}. Check <span className="font-mono">fileserver_backend</span>, and for gitfs the master's log.
+        </Empty>
+      }
+    />
   )
 }
 
 function RootsBrowser({ kind }: { kind: RootsKind }) {
   const salt = useSalt()
   const roots = useAsync(() => salt.roots(kind), [salt, kind])
-  const envs = Object.keys(roots.data ?? {})
   const [env, setEnv] = useState('base')
-  const [selected, setSelected] = useState<string | null>('top.sls')
-  const file = useAsync(() => (selected ? salt.readFile(kind, selected, env) : Promise.resolve(null)), [salt, kind, selected, env])
 
   // merge every root dir of the env into one tree, like the fileserver does
   const tree = useMemo(() => {
@@ -52,26 +108,83 @@ function RootsBrowser({ kind }: { kind: RootsKind }) {
   const rootDirs = (roots.data?.[env] ?? []).flatMap((r) => Object.keys(r))
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+    <Browser
+      title={kind === 'file' ? 'file_roots' : 'pillar_roots'}
+      subtitle={<span className="font-mono">{rootDirs.join(', ')}</span>}
+      envs={Object.keys(roots.data ?? {})}
+      env={env}
+      onEnv={setEnv}
+      tree={tree}
+      loading={roots.loading}
+      error={roots.error}
+      onRetry={roots.reload}
+      read={(path) => salt.readFile(kind, path, env)}
+      empty={
+        <Empty title="Empty root">
+          {kind === 'pillar'
+            ? 'With git_pillar or another ext_pillar, pillar files live in their repository and salt-api can\'t read them. Pillar by minion shows what each minion gets.'
+            : null}
+        </Empty>
+      }
+    />
+  )
+}
+
+function Browser({
+  title,
+  subtitle,
+  envs,
+  env,
+  onEnv,
+  tree,
+  loading,
+  error,
+  onRetry,
+  read,
+  extra,
+  empty,
+}: {
+  title: ReactNode
+  subtitle: ReactNode
+  envs: string[]
+  env: string
+  onEnv: (env: string) => void
+  tree: FileTree
+  loading: boolean
+  error: Error | null
+  onRetry: () => void
+  read: (path: string) => Promise<string>
+  extra?: ReactNode
+  empty: ReactNode
+}) {
+  const [selected, setSelected] = useState<string | null>('top.sls')
+  const file = useAsync(() => (selected ? read(selected) : Promise.resolve(null)), [selected, env, title])
+  const isEmpty = !loading && !error && Object.keys(tree).length === 0
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <Card className="h-fit">
         <CardHeader
-          title={kind === 'file' ? 'file_roots' : 'pillar_roots'}
-          subtitle={<span className="font-mono">{rootDirs.join(', ')}</span>}
+          title={title}
+          subtitle={subtitle}
           actions={
-            envs.length > 1 && (
-              <Select value={env} onChange={(e) => setEnv(e.target.value)} className="h-7 w-28 text-xs">
-                {envs.map((e) => (
-                  <option key={e}>{e}</option>
-                ))}
-              </Select>
-            )
+            <div className="flex items-center gap-2">
+              {extra}
+              {envs.length > 1 && (
+                <Select value={env} onChange={(e) => onEnv(e.target.value)} className="h-7 w-36 text-xs" aria-label="Environment">
+                  {envs.map((e) => (
+                    <option key={e}>{e}</option>
+                  ))}
+                </Select>
+              )}
+            </div>
           }
         />
         <div className="max-h-[65vh] overflow-y-auto p-2">
-          {roots.error && <ErrorBox error={roots.error} onRetry={roots.reload} />}
-          {roots.loading && <Spinner />}
-          {roots.data && Object.keys(tree).length === 0 && <Empty title="Empty root" />}
-          <TreeNode tree={tree} path="" selected={selected} onSelect={setSelected} depth={0} />
+          {error && <ErrorBox error={error} onRetry={onRetry} />}
+          {loading && <Spinner />}
+          {isEmpty && empty}
+          {!loading && <TreeNode tree={tree} path="" selected={selected} onSelect={setSelected} depth={0} />}
         </div>
       </Card>
 
@@ -80,7 +193,7 @@ function RootsBrowser({ kind }: { kind: RootsKind }) {
           <>
             <CardHeader
               title={<span className="font-mono">{selected}</span>}
-              subtitle={selected === 'top.sls' ? (kind === 'file' ? 'Maps states to minions' : 'Maps pillar data to minions') : `salt://${selected}`}
+              subtitle={selected === 'top.sls' ? (title === 'pillar_roots' ? 'Maps pillar data to minions' : 'Maps states to minions') : `salt://${selected}${env === 'base' ? '' : ` (${env})`}`}
               actions={file.data && <CopyButton text={file.data} />}
             />
             <div className="py-2">

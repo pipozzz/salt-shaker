@@ -44,6 +44,28 @@ describe('authorize', () => {
     expect(authorize('admin', 'a', { client: 'runner', fun: 'salt.cmd', arg: ['cmd.run', 'id'] }).ok).toBe(true)
   })
 
+  it('lets non-admins read one salt:// file through salt.cmd, and nothing else', () => {
+    const read = (arg: unknown[], extra: Record<string, unknown> = {}) => authorize('viewer', 'v', { client: 'runner', fun: 'salt.cmd', arg, ...extra })
+    expect(read(['cp.get_file_str', 'salt://nginx/init.sls']).ok).toBe(true)
+    expect(read(['cp.get_file_str', 'salt://top.sls'], { kwarg: { saltenv: 'feature/tls' } }).ok).toBe(true)
+    expect(authorize('viewer', 'v', { client: 'runner', fun: 'fileserver.file_list', saltenv: 'base' })).toMatchObject({ ok: true, audited: false })
+    for (const bad of [
+      ['cp.get_file_str', '/etc/shadow'],
+      ['cp.get_file_str', 'salt:///etc/shadow'],
+      ['cp.get_file_str', 'salt://../../etc/shadow'],
+      ['cp.get_file_str', 'salt://a/../../etc/shadow'],
+      ['cp.get_file_str', 'salt://top.sls?saltenv=x'],
+      ['cp.get_file_str', 'salt://'],
+      ['cp.get_file_str'],
+      ['cp.get_file', 'salt://top.sls', '/tmp/x'],
+    ]) expect(read(bad), JSON.stringify(bad)).toMatchObject({ ok: false, status: 403 })
+    expect(read(['cp.get_file_str', 'salt://top.sls'], { kwarg: { dest: '/tmp/x' } })).toMatchObject({ ok: false, status: 403 })
+    expect(read(['cp.get_file_str', 'salt://top.sls'], { saltenv: 'base', dest: '/tmp/x' })).toMatchObject({ ok: false, status: 403 })
+    // fetching from git changes what the master serves, so it stays with admins and is audited
+    expect(authorize('operator', 'o', { client: 'runner', fun: 'fileserver.update' })).toMatchObject({ ok: false, status: 403 })
+    expect(authorize('admin', 'a', { client: 'runner', fun: 'fileserver.update' })).toMatchObject({ ok: true, audited: true })
+  })
+
   it('strips per-request credentials so users cannot swap the service account', () => {
     const d = ok(authorize('admin', 'a', { client: 'local', fun: 'test.ping', username: 'root', password: 'x', eauth: 'pam', token: 't' }))
     expect(d.low).not.toHaveProperty('username')

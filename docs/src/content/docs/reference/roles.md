@@ -55,7 +55,7 @@ admin:
 operator:
   - '.*'
   - '@jobs'
-  - '@runner': [manage.status, manage.versions, cache.grains, jobs.*, pillar.show_pillar, salt.cmd, state.orchestrate, fileserver.envs]
+  - '@runner': [manage.status, manage.versions, cache.grains, jobs.*, pillar.show_pillar, salt.cmd, state.orchestrate, fileserver.envs, fileserver.file_list]
   - '@wheel': [key.list_all, key.finger, file_roots.list_roots, file_roots.read, file_roots.list_env]
 
 viewer:
@@ -65,10 +65,10 @@ viewer:
   - pkg.version
   - sys.list_functions
   - saltutil.find_job
-  - '@runner': [manage.status, cache.grains, jobs.*, salt.cmd, fileserver.envs]
+  - '@runner': [manage.status, cache.grains, jobs.*, salt.cmd, fileserver.envs, fileserver.file_list]
   - '@wheel': [key.list_all, key.finger, file_roots.list_roots, file_roots.read, file_roots.list_env]
 
 none: []
 ```
 
-For everyone but admins, the runner `salt.cmd` is limited to `test.version`, because it would otherwise run any function on the master itself.
+For everyone but admins, the runner `salt.cmd` is limited to `test.version` and to `cp.get_file_str` of one `salt://` file (how **States & Pillar** reads states from gitfs), because it would otherwise run any function on the master itself.

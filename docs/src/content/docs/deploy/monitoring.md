@@ -42,6 +42,8 @@ All are gauges.
 | `salt_shaker_schedule_last_run_failed_minions` | `schedule`, `kind` | failed returns in its last run |
 | `salt_shaker_schedule_last_run_error` | `schedule`, `kind` | 1 if the last run couldn't start |
 | `salt_shaker_events_leader` | | 1 on the instance that records job history |
+| `salt_shaker_salt_api_calls_running` | `lane`: interactive, background | calls to salt-api being made now |
+| `salt_shaker_salt_api_calls_waiting` | `lane`: interactive, background | calls waiting for a free slot (see `SALT_API_CONCURRENCY`); a number that stays above 0 means the master is slow or the limit is too low |
 
 Compliance and job metrics come from job history. They're only complete while one instance reports `salt_shaker_events_leader 1`.
 

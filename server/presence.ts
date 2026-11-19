@@ -8,7 +8,7 @@ import { minionsDownMessage, minionsUpMessage } from './summaries'
  * Minions already down when watching starts are taken as the baseline, not reported.
  */
 export class PresenceWatcher {
-  private salt: SaltService
+  private salt: Pick<SaltService, 'call'>
   private notifier: Notifier
   private intervalMs: number
   private downAfter: number
@@ -20,7 +20,7 @@ export class PresenceWatcher {
   private onSeen?: (up: string[]) => Promise<unknown>
 
   /** onSeen gets the minions that answered each round (to record when they were last seen). */
-  constructor(salt: SaltService, notifier: Notifier, intervalMs: number, downAfter = 2, onSeen?: (up: string[]) => Promise<unknown>) {
+  constructor(salt: Pick<SaltService, 'call'>, notifier: Notifier, intervalMs: number, downAfter = 2, onSeen?: (up: string[]) => Promise<unknown>) {
     this.salt = salt
     this.onSeen = onSeen
     this.notifier = notifier

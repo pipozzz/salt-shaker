@@ -197,6 +197,13 @@
       "when": 1795073195845,
       "tag": "0027_minion_state",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1795075405289,
+      "tag": "0028_job_counts",
+      "breakpoints": true
     }
   ]
 }

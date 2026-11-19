@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm'
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jobHistory, jobsCsv } from './job-history'
 import { openTestDatabase, testDialects } from './testdb'
@@ -15,9 +17,9 @@ describe.each(testDialects)('jobHistory (%s)', (dialect) => {
     close = opened.close
     const { db, schema } = opened
     await db.insert(schema.job).values([
-      { jid: '1', fun: 'state.apply', dryRun: true, target: 'web*', shakerUser: 'alice', minions: '["a","b"]', startedAt: at(1) },
-      { jid: '2', fun: 'cmd.run', target: 'db*', shakerUser: 'bob', minions: '["a","b"]', startedAt: at(2) },
-      { jid: '3', fun: 'pkg.upgrade', target: '*', saltUser: 'root', minions: '["a"]', startedAt: at(3) },
+      { jid: '1', fun: 'state.apply', dryRun: true, target: 'web*', shakerUser: 'alice', minions: '["a","b"]', returned: 2, failed: 1, startedAt: at(1) },
+      { jid: '2', fun: 'cmd.run', target: 'db*', shakerUser: 'bob', minions: '["a","b"]', returned: 2, startedAt: at(2) },
+      { jid: '3', fun: 'pkg.upgrade', target: '*', saltUser: 'root', minions: '["a"]', returned: 1, failed: 1, startedAt: at(3) },
       { jid: '4', fun: 'state.apply', target: 'web*', shakerUser: 'alice', minions: '["a"]', startedAt: at(4) },
     ])
     await db.insert(schema.jobReturn).values([
@@ -47,6 +49,21 @@ describe.each(testDialects)('jobHistory (%s)', (dialect) => {
     expect((await jobHistory(db, schema, { result: 'failed', q: 'alice' })).map((r) => r.jid)).toEqual(['1'])
     expect((await jobHistory(db, schema, { result: 'failed', before: at(3).getTime() })).map((r) => r.jid)).toEqual(['1'])
     expect((await jobHistory(db, schema, { result: 'dryrun' })).map((r) => r.jid)).toEqual(['1'])
+  })
+
+  it('counts the returns of jobs recorded before the counts were kept (the migration)', async () => {
+    const { db, schema } = await setup()
+    await db.update(schema.job).set({ returned: 0, failed: 0 })
+    const file = readFileSync(new URL(`./db/migrations/${dialect}/0028_job_counts.sql`, import.meta.url), 'utf8')
+    const backfill = file.split('--> statement-breakpoint').at(-1)!
+    const raw = db as unknown as { run?: (q: unknown) => unknown; execute?: (q: unknown) => Promise<unknown> }
+    await (raw.run ? raw.run(sql.raw(backfill)) : raw.execute!(sql.raw(backfill)))
+    expect((await jobHistory(db, schema)).map((r) => [r.jid, r.returned, r.failed])).toEqual([
+      ['4', 0, 0],
+      ['3', 1, 1],
+      ['2', 2, 0],
+      ['1', 2, 1],
+    ])
   })
 
   it('exports jobs as CSV with counts and who started them', async () => {

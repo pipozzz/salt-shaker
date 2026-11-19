@@ -35,7 +35,7 @@ export function QuietKeys({ accepted, onDeleted }: { accepted: string[]; onDelet
     setBusy(true)
     setError(null)
     try {
-      for (const q of quiet) await salt.deleteKey(q.id)
+      for (const q of quiet) await salt.deleteKey(q.id, 'minions')
       setConfirm(false)
       onDeleted()
       await data.reload()

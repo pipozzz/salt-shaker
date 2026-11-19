@@ -50,6 +50,9 @@ export interface KeyList {
   local?: string[]
 }
 
+/** One of the master's key lists, as key.list_all names them. */
+export type KeyStatus = 'minions' | 'minions_pre' | 'minions_rejected' | 'minions_denied'
+
 export type Grains = Record<string, unknown> & {
   id?: string
   os?: string

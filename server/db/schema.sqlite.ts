@@ -421,3 +421,23 @@ export const minionNote = sqliteTable('minion_note', {
   updatedBy: text('updated_by'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+/**
+ * What the fleet pages show of each accepted minion, kept current by the server so that opening a
+ * page reads the database instead of asking the master: its grains, whether it answers, and its
+ * latest compliance check and patch scan.
+ */
+export const minion = sqliteTable('minion', {
+  id: text('id').primaryKey(),
+  /** JSON of the grains the fleet views use; null until the master's cache has them */
+  grains: text('grains'),
+  /** whether it answered the last status check; null until one ran */
+  up: integer('up', { mode: 'boolean' }),
+  statusAt: integer('status_at', { mode: 'timestamp_ms' }),
+  complianceStatus: text('compliance_status'),
+  complianceJid: text('compliance_jid'),
+  complianceAt: integer('compliance_at', { mode: 'timestamp_ms' }),
+  updatesPackages: integer('updates_packages'),
+  updatesJid: text('updates_jid'),
+  updatesAt: integer('updates_at', { mode: 'timestamp_ms' }),
+})

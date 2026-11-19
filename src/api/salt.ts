@@ -94,7 +94,16 @@ export class SaltApi {
   }
 
   // ---- minions ----
-  status() {
+  /** Who answers. With the server it's what it last recorded, unless `fresh` asks the master now. */
+  async status(fresh = false) {
+    if (this.transport.status) {
+      try {
+        return await this.transport.status(fresh)
+      } catch (e) {
+        if (e instanceof SaltError && e.status === 401) this.onAuthError()
+        throw e
+      }
+    }
     // as kwarg: a top-level `timeout` is salt-api's own limit for the runner, which then answers
     // 504 whenever a minion is down instead of waiting for manage.status to give up on it
     return this.runner<{ up: string[]; down: string[] }>('manage.status', { kwarg: { timeout: 3, gather_job_timeout: 3 } })

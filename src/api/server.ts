@@ -101,6 +101,41 @@ export function sessionFromMe(me: Me): Session {
   }
 }
 
+/** One minion as the server keeps it: see GET /api/minions. */
+export interface MinionState {
+  grains: Grains | null
+  up: boolean | null
+  compliance: MinionCompliance | null
+  updates: MinionUpdates | null
+}
+
+export interface FleetState {
+  minions: Record<string, MinionState>
+  /** when the server last asked the master who answers */
+  statusAt: string | null
+}
+
+// a page asks for grains, who's up, compliance and updates at once: they share one request
+const FLEET_SHARE_MS = 2000
+let fleetAsked: { at: number; fresh: boolean; state: Promise<FleetState> } | null = null
+
+/** The fleet as the server recorded it; `fresh` has it ask the master first (a Refresh button). */
+export function fleetState(fresh = false): Promise<FleetState> {
+  const age = fleetAsked ? Date.now() - fleetAsked.at : Infinity
+  // one click on Refresh reloads several things: they share one fresh answer too
+  if (fleetAsked && (fresh ? fleetAsked.fresh && age < 500 : age < FLEET_SHARE_MS)) return fleetAsked.state
+  const state = fresh ? post<FleetState>('/api/minions/refresh', {}) : request<FleetState>('/api/minions')
+  const asked = { at: Date.now(), fresh, state }
+  fleetAsked = asked
+  state.catch(() => {
+    if (fleetAsked === asked) fleetAsked = null
+  })
+  return state
+}
+
+const pick = <K extends 'compliance' | 'updates'>(state: FleetState, key: K) =>
+  Object.fromEntries(Object.entries(state.minions).flatMap(([id, m]) => (m[key] ? [[id, m[key]]] : []))) as Record<string, NonNullable<MinionState[K]>>
+
 export class ServerTransport implements Transport {
   async login(username: string, password: string): Promise<Session> {
     await post('/api/auth/sign-in/username', { username, password })
@@ -119,8 +154,15 @@ export class ServerTransport implements Transport {
   }
 
   async fleet(fresh: boolean) {
-    const res = await request<{ minions: Record<string, Grains> }>(`/api/fleet${fresh ? '?fresh=1' : ''}`)
-    return res.minions
+    const { minions } = await fleetState(fresh)
+    return Object.fromEntries(Object.entries(minions).flatMap(([id, m]) => (m.grains ? [[id, m.grains]] : []))) as Record<string, Grains>
+  }
+
+  async status(fresh: boolean) {
+    const { minions } = await fleetState(fresh)
+    // a minion nobody has checked yet (its key was just accepted) is in neither list
+    const ids = (up: boolean) => Object.keys(minions).filter((id) => minions[id].up === up).sort()
+    return { up: ids(true), down: ids(false) }
   }
 
   events(_token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void) {
@@ -297,8 +339,8 @@ export const history = {
     return request<{ rows: MinionJob[]; retentionDays: number }>(`/api/history/minions/${encodeURIComponent(id)}/jobs?${p}`)
   },
   /** Each minion's result in the latest compliance check it returned from. */
-  minionCompliance: () => request<{ minions: Record<string, MinionCompliance> }>('/api/history/compliance/minions'),
-  minionUpdates: () => request<{ minions: Record<string, MinionUpdates> }>('/api/history/updates/minions'),
+  minionCompliance: async () => ({ minions: pick(await fleetState(), 'compliance') }),
+  minionUpdates: async () => ({ minions: pick(await fleetState(), 'updates') }),
   job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
   compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),
 }

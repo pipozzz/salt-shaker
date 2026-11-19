@@ -419,3 +419,23 @@ export const minionNote = pgTable('minion_note', {
   updatedBy: text('updated_by'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 })
+
+/**
+ * What the fleet pages show of each accepted minion, kept current by the server so that opening a
+ * page reads the database instead of asking the master: its grains, whether it answers, and its
+ * latest compliance check and patch scan.
+ */
+export const minion = pgTable('minion', {
+  id: text('id').primaryKey(),
+  /** JSON of the grains the fleet views use; null until the master's cache has them */
+  grains: text('grains'),
+  /** whether it answered the last status check; null until one ran */
+  up: boolean('up'),
+  statusAt: timestamp('status_at', { withTimezone: true }),
+  complianceStatus: text('compliance_status'),
+  complianceJid: text('compliance_jid'),
+  complianceAt: timestamp('compliance_at', { withTimezone: true }),
+  updatesPackages: integer('updates_packages'),
+  updatesJid: text('updates_jid'),
+  updatesAt: timestamp('updates_at', { withTimezone: true }),
+})

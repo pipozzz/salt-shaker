@@ -15,7 +15,8 @@ import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { INSTANCE_ID, Leader } from './leader'
 import { JOB_RESULTS, jobHistory, jobsCsv } from './job-history'
-import { latestCompliance, latestUpdates, minionJobs } from './minion-jobs'
+import { minionJobs } from './minion-jobs'
+import { MinionCollector, minionRoutes, minionState } from './minions'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
 import { Notifier } from './notify'
@@ -42,9 +43,8 @@ import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
 import { Scheduler } from './scheduler'
-import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
-import { canFor, isRole, ROLE_PERMS } from './roles'
+import { isRole, ROLE_PERMS } from './roles'
 import pkg from '../package.json' with { type: 'json' }
 import { EventHub } from './events'
 import { SaltService, UpstreamError } from './salt'
@@ -105,18 +105,24 @@ if (config.smtpUrl) notifier.mail = smtpMailer(config.smtpUrl, config.smtpFrom)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
 const weeklyReport = new WeeklyReport({ db, schema, accepted: acceptedMinions, send: (m) => notifier.emit('report', m) })
-const presence = new PresenceWatcher(saltBackground, notifier, config.presenceMinutes * 60_000, 2, (up) => recordSeen(db, schema, up))
+// the fleet's state for Minions, Map and Overview, read from the master here instead of by every page
+const minions = new MinionCollector({ db, schema, salt: saltBackground, checksStatus: config.presenceMinutes <= 0 })
+history.onEvent((tag) => minions.onEvent(tag))
+history.onReturn((r) => void minions.onReturn(r).catch((e) => console.warn('minions: recording a return failed', e)))
+const presence = new PresenceWatcher(saltBackground, notifier, config.presenceMinutes * 60_000, 2, (up, down) => Promise.all([recordSeen(db, schema, up), minions.recordStatus(up, down)]))
 // with several instances on one database, only the lease holder follows the event bus and watches
 // for minions going down, so jobs are recorded once and alerts aren't duplicated
 const eventsLeader = new Leader(db, schema, 'events', {
   onAcquire: () => {
     history.start()
     presence.start()
+    minions.start()
     weeklyReport.start()
   },
   onLose: () => {
     history.stop()
     presence.stop()
+    minions.stop()
     weeklyReport.stop()
   },
 })
@@ -357,32 +363,6 @@ app.get('/api/audit/export', async (c) => {
   return c.body(auditCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
 })
 
-// ---- fleet: grains from the master's minion data cache, trimmed and shared ----
-
-// one short-lived copy for every user, so opening Minions doesn't hit the master each time
-let fleetCache: { at: number; data: ReturnType<typeof trimFleet> } | null = null
-let fleetLoading: Promise<ReturnType<typeof trimFleet>> | null = null
-const FLEET_TTL_MS = 15_000
-
-app.get('/api/fleet', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Not signed in' }, 401)
-  if (!canFor(user.role)('runner', 'cache.grains')) return c.json({ error: 'Your role may not read grains' }, 403)
-  const fresh = c.req.query('fresh') === '1'
-  if (fresh || !fleetCache || Date.now() - fleetCache.at > FLEET_TTL_MS) {
-    fleetLoading ??= salt
-      .call({ client: 'runner', fun: 'cache.grains', tgt: '*', tgt_type: 'glob' }, { fresh })
-      .then((all) => trimFleet(all as Record<string, unknown>))
-      .finally(() => (fleetLoading = null))
-    try {
-      fleetCache = { at: Date.now(), data: await fleetLoading }
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'cache.grains failed' }, 502)
-    }
-  }
-  return c.json({ minions: fleetCache.data, cachedAt: new Date(fleetCache.at).toISOString() })
-})
-
 // ---- job history (recorded from the event bus by HistoryRecorder) ----
 
 app.get('/api/history/jobs', async (c) => {
@@ -424,7 +404,8 @@ app.get('/api/history/minions/:id/jobs', async (c) => {
 /** Each minion's result in the latest compliance check that it returned from. */
 app.get('/api/history/compliance/minions', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
-  return c.json({ minions: await latestCompliance(db, schema) })
+  const { minions: all } = await minionState(db, schema)
+  return c.json({ minions: Object.fromEntries(Object.entries(all).flatMap(([id, m]) => (m.compliance ? [[id, m.compliance]] : []))) })
 })
 
 /** For admins: whether salt-api, the event bus, the database and notifications work. */
@@ -438,7 +419,8 @@ app.get('/api/system', async (c) => {
 /** Each minion's pending upgrades from the latest patch scan that it answered. */
 app.get('/api/history/updates/minions', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
-  return c.json({ minions: await latestUpdates(db, schema) })
+  const { minions: all } = await minionState(db, schema)
+  return c.json({ minions: Object.fromEntries(Object.entries(all).flatMap(([id, m]) => (m.updates ? [[id, m.updates]] : []))) })
 })
 
 /** Past compliance checks (dry-run highstates) with per-status minion counts. */
@@ -509,6 +491,7 @@ const summary = () =>
     },
   })
 app.route('/api', peerRoutes({ db, schema, audit, self: summary }))
+app.route('/api', minionRoutes({ db, schema, collector: minions, salt }))
 app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0 }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
 app.route('/api', vulnRoutes({ vulns, audit }))

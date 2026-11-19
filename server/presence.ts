@@ -17,10 +17,10 @@ export class PresenceWatcher {
   // null until the first successful check
   private known: Map<string, { misses: number; reported: boolean }> | null = null
 
-  private onSeen?: (up: string[]) => Promise<unknown>
+  private onSeen?: (up: string[], down: string[]) => Promise<unknown>
 
-  /** onSeen gets the minions that answered each round (to record when they were last seen). */
-  constructor(salt: Pick<SaltService, 'call'>, notifier: Notifier, intervalMs: number, downAfter = 2, onSeen?: (up: string[]) => Promise<unknown>) {
+  /** onSeen gets the minions that answered each round, and those that didn't (to record when they were last seen). */
+  constructor(salt: Pick<SaltService, 'call'>, notifier: Notifier, intervalMs: number, downAfter = 2, onSeen?: (up: string[], down: string[]) => Promise<unknown>) {
     this.salt = salt
     this.onSeen = onSeen
     this.notifier = notifier
@@ -55,7 +55,7 @@ export class PresenceWatcher {
       }
       if (!res || !Array.isArray(res.up) || !Array.isArray(res.down)) return
       await this.observe(res.up, res.down)
-      if (this.onSeen && res.up.length) await this.onSeen(res.up).catch((err) => console.warn('presence: recording last seen failed', err))
+      if (this.onSeen) await this.onSeen(res.up, res.down).catch((err) => console.warn('presence: recording last seen failed', err))
     } finally {
       this.checking = false
     }

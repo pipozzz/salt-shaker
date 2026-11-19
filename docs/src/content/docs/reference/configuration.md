@@ -28,7 +28,7 @@ The server is configured with environment variables.
 | `SMTP_URL` | off | SMTP server for [email notifications](/salt-shaker/guide/schedules/#email), e.g. `smtp://user:pass@smtp.example.com:587` |
 | `SMTP_FROM` | `Salt Shaker <salt-shaker@…>` | the sender of those emails; defaults to the host of `PUBLIC_URL` |
 | `SLACK_SIGNING_SECRET` | off | the Slack app's signing secret, for the [/salt command](/salt-shaker/guide/slack/) |
-| `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert and the last-answered dates behind *Quiet for a while* on the Keys page; `0` turns it off |
+| `PRESENCE_CHECK_MINUTES` | `5` | how often the server checks which minions respond, for the *Minions down* alert and the last-answered dates behind *Quiet for a while* on the Keys page, and for who shows as down on Minions, Map and Overview; `0` turns the alert and the dates off, and who responds is then checked every 5 minutes |
 | `TZ` | `UTC` in the image | time zone for [schedules](/salt-shaker/guide/schedules/) and the [weekly report](/salt-shaker/guide/schedules/#weekly-report), e.g. `Europe/Bratislava` |
 | `PASSWORD_LOGIN` | `all` | `admins` allows passwords for admins only, as a break-glass next to [SSO](/salt-shaker/deploy/sso/) |
 | `OSV_API_URL` | `https://api.osv.dev` | where the [vulnerability check](/salt-shaker/guide/vulnerabilities/) asks about packages; another server with the OSV API works too |

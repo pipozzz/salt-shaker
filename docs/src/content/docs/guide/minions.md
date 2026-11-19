@@ -28,7 +28,7 @@ Operators and admins write notes with **Add a note** or **Edit note** on the min
 
 ## Large fleets
 
-The list comes from the master's minion data cache (`cache.grains`), so opening it doesn't start a job on the minions. Offline minions keep their last known OS and IPs. Which minions respond (`manage.status`) is filled in once that check finishes. The table shows 100 minions at a time.
+With the server, the list is read from its database, so opening it asks the master nothing. The server reads the accepted keys and the master's minion data cache (`cache.grains`) every five minutes and when a key changes, and checks which minions respond (`manage.status`) every `PRESENCE_CHECK_MINUTES`; a minion that returns a job or starts is marked as responding right away. **Refresh** asks the master now. Offline minions keep their last known OS and IPs. Without the server, the page asks the master itself each time. The table shows 100 minions at a time.
 
 With the server, the fleet is cached for 15 seconds and shared by all users. **Refresh** reads it again. If the master runs with `minion_data_cache: False`, Salt Shaker falls back to asking the minions directly, which is slower.
 

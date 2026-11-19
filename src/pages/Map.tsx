@@ -42,10 +42,10 @@ export function MapPage() {
   const [reloads, setReloads] = useState(0)
 
   const fleet = useAsync(async () => {
-    const [grains, keys, masterVersion] = await Promise.all([salt.fleet(false), salt.keys(), salt.masterVersion()])
+    const [grains, keys, masterVersion] = await Promise.all([salt.fleet(reloads > 0), salt.keys(), salt.masterVersion()])
     return { grains, keys, masterVersion }
   }, [salt, reloads])
-  const status = useAsync(() => salt.status(), [salt, reloads])
+  const status = useAsync(() => salt.status(reloads > 0), [salt, reloads])
   const compliance = useAsync(() => (fromServer ? history.minionCompliance() : Promise.resolve(null)), [fromServer, reloads])
   const vulnReport = useAsync(() => (fromServer ? vulns.minions().catch(() => null) : demo ? demoVulns.minions() : Promise.resolve(null)), [fromServer, demo, reloads])
 

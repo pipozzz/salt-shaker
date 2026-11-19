@@ -53,6 +53,8 @@ curl -s "https://salt.example.com/api/vulns/export?severity=critical,high&fix=1"
 | `GET /api/history/jobs`, `GET /api/history/jobs/:jid` | the job history, and one job with every minion's return |
 | `POST /api/changes`, `GET /api/changes/:id`, `POST /api/changes/:id/stop` | batched rollouts and approvals |
 | `GET /api/vulns`, `GET /api/vulns/export`, `GET /api/vulns/packages?q=` | the vulnerability report, its CSV, and where a package is installed |
+| `GET /api/minions` | every accepted minion as the server keeps it: the grains the fleet pages use, whether it answered the last status check (`up`, with `statusAt` for when that was), and its latest compliance check and patch scan |
+| `POST /api/minions/refresh` | the same, after asking the master for keys, grains and who answers right now |
 | `GET /api/history/compliance/minions`, `GET /api/history/updates/minions` | each minion's latest compliance check and patch scan |
 | `GET /api/audit`, `GET /api/audit/export` | the audit log (admins and operators) |
 

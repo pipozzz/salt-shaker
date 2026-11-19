@@ -118,6 +118,22 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
     expect(r[0]).toMatchObject({ minion: 'web-01', retcode: 2, success: true })
   })
 
+  it('counts on the job how many minions returned and failed, following repeated returns', async () => {
+    const jid = '20261119080000000001'
+    const counts = async () => (await jobs(jid)).map((j) => [j.returned, j.failed])[0]
+    await rec.record(`salt/job/${jid}/new`, { ...newEvent, jid })
+    expect(await counts()).toEqual([0, 0])
+    await rec.record(`salt/job/${jid}/ret/web-01`, { ...retEvent, jid })
+    await rec.record(`salt/job/${jid}/ret/web-02`, { ...retEvent, jid, id: 'web-02', retcode: 2 })
+    await rec.record(`salt/job/${jid}/ret/web-03`, { ...retEvent, jid, id: 'web-03', success: false })
+    expect(await counts()).toEqual([3, 2])
+    // the same minions again: one now fails, one no longer does
+    await rec.record(`salt/job/${jid}/ret/web-01`, { ...retEvent, jid, retcode: 1 })
+    await rec.record(`salt/job/${jid}/ret/web-02`, { ...retEvent, jid, id: 'web-02' })
+    await rec.record(`salt/job/${jid}/ret/web-03`, { ...retEvent, jid, id: 'web-03', success: false })
+    expect(await counts()).toEqual([3, 2])
+  })
+
   it('creates the job from a return when the new event was missed', async () => {
     await rec.record('salt/job/20261101191151999999/ret/web-02', { ...retEvent, jid: '20261101191151999999', id: 'web-02' })
     const [j] = await jobs('20261101191151999999')

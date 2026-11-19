@@ -96,6 +96,10 @@ export const job = sqliteTable(
     shakerUser: text('shaker_user'),
     minions: text('minions'),
     dryRun: integer('dry_run', { mode: 'boolean' }).notNull().default(false),
+    // how many minions returned and how many of them failed, counted as returns are recorded so
+    // lists of jobs don't have to add up job_return
+    returned: integer('returned').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
     startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [index('job_started_at_idx').on(t.startedAt), index('job_fun_idx').on(t.fun)],

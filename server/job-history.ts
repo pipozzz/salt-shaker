@@ -1,4 +1,4 @@
-import { and, count, desc, eq, like, lt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, like, lt, or, sql } from 'drizzle-orm'
 import type { Db, Schema } from './db'
 import { toCsv } from '../src/lib/csv'
 
@@ -12,10 +12,7 @@ export type JobResult = (typeof JOB_RESULTS)[number]
  */
 export async function jobHistory(db: Db, schema: Schema, opts: { q?: string; result?: JobResult | null; before?: number | null; limit?: number } = {}) {
   const t = schema.job
-  const r = schema.jobReturn
   const q = opts.q?.trim().toLowerCase()
-  // no bound booleans (SQLite can't bind them); `not coalesce(x, true)` works in both dialects
-  const failed = sql<number>`coalesce(sum(case when ${r.retcode} <> 0 or not coalesce(${r.success}, true) then 1 else 0 end), 0)`
   return db
     .select({
       jid: t.jid,
@@ -28,20 +25,19 @@ export async function jobHistory(db: Db, schema: Schema, opts: { q?: string; res
       minions: t.minions,
       dryRun: t.dryRun,
       startedAt: t.startedAt,
-      returned: count(r.minion),
-      failed: failed.mapWith(Number),
+      // counted when the returns were recorded, so this reads the job table alone
+      returned: t.returned,
+      failed: t.failed,
     })
     .from(t)
-    .leftJoin(r, eq(r.jid, t.jid))
     .where(
       and(
         opts.before ? lt(t.startedAt, new Date(opts.before)) : undefined,
         q ? or(...[t.fun, t.target, t.shakerUser, t.saltUser].map((col) => like(sql`lower(${col})`, `%${q}%`)), eq(t.jid, q)) : undefined,
         opts.result === 'dryrun' ? eq(t.dryRun, true) : undefined,
+        opts.result === 'failed' ? gt(t.failed, 0) : undefined,
       ),
     )
-    .groupBy(t.jid)
-    .having(opts.result === 'failed' ? sql`${failed} > 0` : undefined)
     .orderBy(desc(t.startedAt))
     .limit(opts.limit ?? 100)
 }

@@ -67,7 +67,7 @@ export function MinionsPage() {
     const [grains, keys, masterVersion] = await Promise.all([salt.fleet(refreshes > 0), salt.keys(), salt.masterVersion()])
     return { grains, keys, masterVersion }
   }, [salt, refreshes])
-  const status = useAsync(() => salt.status(), [salt, refreshes])
+  const status = useAsync(() => salt.status(refreshes > 0), [salt, refreshes])
   // who the saved target matches, from the master's cache like the Run page's preview
   const matched = useAsync(
     () => (savedTarget ? salt.matchTarget(savedTarget.tgt, savedTarget.tgtType).then((ids) => new Set(ids)) : Promise.resolve(null)),

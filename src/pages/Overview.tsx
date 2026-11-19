@@ -27,7 +27,7 @@ export function OverviewPage() {
   const [now, setNow] = useState(() => Date.now())
   const keys = useAsync(() => salt.keys(), [salt, refreshes])
   // manage.status waits for the slow minions; everything else shows meanwhile
-  const status = useAsync(() => salt.status(), [salt, refreshes])
+  const status = useAsync(() => salt.status(refreshes > 0), [salt, refreshes])
   const compliance = useAsync(() => (recorded ? (mode === 'demo' ? demoOverview.compliance() : history.minionCompliance()).then((r) => r.minions).catch(() => null) : Promise.resolve(null)), [mode, refreshes])
   const updates = useAsync(() => (recorded ? (mode === 'demo' ? demoOverview.updates() : history.minionUpdates()).then((r) => r.minions).catch(() => null) : Promise.resolve(null)), [mode, refreshes])
   const failed = useAsync(

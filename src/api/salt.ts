@@ -69,9 +69,12 @@ export class SaltApi {
   keys() {
     return this.wheel<KeyList>('key.list_all')
   }
+  /**
+   * Fingerprints per key list, as Salt groups them: one id can hold a key in two lists at once (an
+   * accepted key and a newer denied one after the minion was reinstalled), so they mustn't be merged.
+   */
   async fingerprints() {
-    const res = await this.wheel<Record<string, Record<string, string>>>('key.finger', { match: '*' })
-    return Object.assign({}, ...Object.values(res)) as Record<string, string>
+    return this.wheel<Partial<Record<string, Record<string, string>>>>('key.finger', { match: '*' })
   }
   acceptKey(id: string) {
     return this.wheel('key.accept', { match: id, include_rejected: true, include_denied: true })

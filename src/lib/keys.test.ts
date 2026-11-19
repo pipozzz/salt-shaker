@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SaltApi } from '../api/salt'
 import type { Transport } from '../api/types'
-import { fingersOf, noKeysPicked, pickKeys, type KeyFingers } from './keys'
+import { fingersOf, listOf, noKeysPicked, pickKeys, type KeyFingers } from './keys'
 
 // web-01 was reinstalled: its old key is still accepted, the new one is denied
 const fingers: KeyFingers = {
@@ -37,6 +37,43 @@ describe('SaltApi.fingerprints', () => {
     const got = await new SaltApi(transport, 'token', () => {}).fingerprints()
     expect(got.minions?.['web-01']).toBe('aa:aa')
     expect(got.minions_denied?.['web-01']).toBe('bb:bb')
+  })
+})
+
+describe('listOf', () => {
+  it('names the list a row of each card stands for', () => {
+    expect(listOf('pending', 'edge-01', [])).toBe('minions_pre')
+    expect(listOf('accepted', 'web-01', ['web-01'])).toBe('minions')
+    expect(listOf('refused', 'web-01', ['web-01'])).toBe('minions_denied')
+    expect(listOf('refused', 'guest-01', ['web-01'])).toBe('minions_rejected')
+  })
+})
+
+describe('SaltApi key actions', () => {
+  const sent: Record<string, unknown>[] = []
+  const transport = {
+    call: async (low: Record<string, unknown>) => {
+      sent.push(low)
+      return { data: { return: {}, success: true } }
+    },
+  } as unknown as Transport
+  const salt = new SaltApi(transport, 'token', () => {})
+
+  it('name the list, so another key of the same id is left alone', async () => {
+    sent.length = 0
+    await salt.deleteKey('web-01', 'minions_denied')
+    await salt.rejectKey('web-01', 'minions')
+    await salt.acceptKey('web-01', 'minions_denied')
+    expect(sent).toEqual([
+      { client: 'wheel', fun: 'key.delete_dict', match: { minions_denied: ['web-01'] } },
+      { client: 'wheel', fun: 'key.reject_dict', match: { minions: ['web-01'] }, include_accepted: true, include_denied: true },
+      { client: 'wheel', fun: 'key.accept_dict', match: { minions_denied: ['web-01'] }, include_rejected: true, include_denied: true },
+    ])
+  })
+  it('never send a bare id, which Salt matches in every list', async () => {
+    sent.length = 0
+    await salt.deleteKey('web-01', 'minions')
+    expect(typeof sent[0].match).toBe('object')
   })
 })
 

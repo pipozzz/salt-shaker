@@ -11,6 +11,7 @@ import {
   type JobDetail,
   type JobSummary,
   type KeyList,
+  type KeyStatus,
   type Lowstate,
   type RunnerReturn,
   type SaltEvent,
@@ -77,14 +78,17 @@ export class SaltApi {
   async fingerprints() {
     return this.wheel<KeyFingers>('key.finger', { match: '*' })
   }
-  acceptKey(id: string) {
-    return this.wheel('key.accept', { match: id, include_rejected: true, include_denied: true })
+  // Key actions name the list the key is in. By id alone (key.accept, key.reject, key.delete with
+  // `match`) Salt acts on every key of that id, so deleting a denied key would also delete the
+  // accepted key of the same minion.
+  acceptKey(id: string, from: KeyStatus) {
+    return this.wheel('key.accept_dict', { match: { [from]: [id] }, include_rejected: true, include_denied: true })
   }
-  rejectKey(id: string) {
-    return this.wheel('key.reject', { match: id, include_accepted: true, include_denied: true })
+  rejectKey(id: string, from: KeyStatus) {
+    return this.wheel('key.reject_dict', { match: { [from]: [id] }, include_accepted: true, include_denied: true })
   }
-  deleteKey(id: string) {
-    return this.wheel('key.delete', { match: id })
+  deleteKey(id: string, from: KeyStatus) {
+    return this.wheel('key.delete_dict', { match: { [from]: [id] } })
   }
   /** Generates a keypair on the master and pre-accepts it, for pre-seeded enrollment. */
   async genAccept(id: string) {

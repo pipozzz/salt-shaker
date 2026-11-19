@@ -3,7 +3,16 @@
  * old key stays accepted while the new one is denied. So what's picked, and each key's fingerprint,
  * is kept per card and never by id alone.
  */
+import type { KeyStatus } from '../api/types'
+
 export type KeySection = 'pending' | 'accepted' | 'refused'
+
+/** The key list a row of a card stands for: a refused key is denied or rejected. */
+export function listOf(section: KeySection, id: string, denied: readonly string[]): KeyStatus {
+  if (section === 'pending') return 'minions_pre'
+  if (section === 'accepted') return 'minions'
+  return denied.includes(id) ? 'minions_denied' : 'minions_rejected'
+}
 
 export type PickedKeys = Record<KeySection, ReadonlySet<string>>
 

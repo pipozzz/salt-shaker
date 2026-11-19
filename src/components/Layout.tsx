@@ -30,17 +30,19 @@ const nav = [
 function usePendingKeys() {
   const salt = useSalt()
   const keyEvents = useKeyEvents()
+  const { eventsConnected } = useSession()
   const [count, setCount] = useState(0)
   useEffect(() => {
     let alive = true
     const load = () => salt.keys().then((k) => alive && setCount(k.minions_pre.length)).catch(() => undefined)
     load()
-    const t = setInterval(load, 30_000)
+    // key events reload it; the timer is for when the stream is down, and a rare safety net otherwise
+    const t = setInterval(load, eventsConnected ? 300_000 : 30_000)
     return () => {
       alive = false
       clearInterval(t)
     }
-  }, [salt, keyEvents])
+  }, [salt, keyEvents, eventsConnected])
   return count
 }
 

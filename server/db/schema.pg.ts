@@ -97,6 +97,10 @@ export const job = pgTable(
     shakerUser: text('shaker_user'),
     minions: text('minions'),
     dryRun: boolean('dry_run').notNull().default(false),
+    // how many minions returned and how many of them failed, counted as returns are recorded so
+    // lists of jobs don't have to add up job_return
+    returned: integer('returned').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
   },
   (t) => [index('job_started_at_idx').on(t.startedAt), index('job_fun_idx').on(t.fun)],

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { stateSummary } from '../src/lib/states'
 import { pruneAudit } from './audit'
 import type { Db, Schema } from './db'
@@ -44,6 +44,9 @@ export interface JobRet {
 
 // when the event was made, or now if it carries no stamp Salt Shaker can read
 const stamp = (s: unknown) => parseSaltStamp(s) ?? new Date()
+
+/** Whether a return counts as failed in lists of jobs: a non-zero retcode, or success: false. */
+export const returnFailed = (r: { retcode: number | null; success: boolean | null }) => (r.retcode !== null && r.retcode !== 0) || r.success === false
 
 /** test=True arrives as a trailing {__kwarg__: true, test: true} argument. */
 export const isDryRun = (args: unknown) =>
@@ -221,10 +224,15 @@ export class HistoryRecorder {
       .onConflictDoNothing()
     if (r.shakerUser) await this.db.update(job).set({ shakerUser: r.shakerUser }).where(and(eq(job.jid, r.jid), isNull(job.shakerUser)))
     const row = { jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode, success: r.success, summary: r.summary, returnedAt: r.returnedAt }
+    // a return can come twice (a minion that retried); the job's counts follow what is stored
+    const [before] = await this.db.select({ retcode: jobReturn.retcode, success: jobReturn.success }).from(jobReturn).where(and(eq(jobReturn.jid, r.jid), eq(jobReturn.minion, r.minion))).limit(1)
     await this.db
       .insert(jobReturn)
       .values(row)
       .onConflictDoUpdate({ target: [jobReturn.jid, jobReturn.minion], set: row })
+    const returned = before ? 0 : 1
+    const failed = Number(returnFailed(r)) - Number(!!before && returnFailed(before))
+    if (returned || failed) await this.db.update(job).set({ returned: sql`${job.returned} + ${returned}`, failed: sql`${job.failed} + ${failed}` }).where(eq(job.jid, r.jid))
     for (const l of this.returnListeners) l(r)
   }
 

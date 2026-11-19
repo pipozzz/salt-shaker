@@ -15,8 +15,10 @@ export interface JobRun {
 }
 
 const TIMEOUT_MS = 120_000
-// returns arrive over the event bus; polling only catches what the stream missed
+// returns arrive over the event bus; polling only catches what the stream missed, so while the
+// stream is up it can be rare (each poll is a runner call on the master)
 const POLL_MS = 3000
+const POLL_CONNECTED_MS = 15_000
 // like the salt CLI: after a while, ask missing minions whether they still run the job
 const FIND_JOB_AFTER_MS = 6000
 const FIND_JOB_EVERY_MS = 10_000
@@ -27,7 +29,11 @@ const FIND_JOB_EVERY_MS = 10_000
  */
 export function useJob() {
   const salt = useSalt()
-  const { subscribe } = useSession()
+  const { subscribe, eventsConnected } = useSession()
+  const connected = useRef(eventsConnected)
+  useEffect(() => {
+    connected.current = eventsConnected
+  }, [eventsConnected])
   const [run, setRun] = useState<JobRun | null>(null)
   const cleanup = useRef<() => void>(() => undefined)
 
@@ -100,8 +106,10 @@ export function useJob() {
           setRun((r) => (r && r.jid === jid && !r.done ? { ...r, done: true, timedOut: true } : r))
           return
         }
-        timer = setTimeout(tick, POLL_MS)
+        // but never later than the next question to the minions that haven't returned
+        timer = setTimeout(tick, connected.current ? Math.min(POLL_CONNECTED_MS, Math.max(POLL_MS, nextFindJob - Date.now())) : POLL_MS)
       }
+      // right away once: a fast minion may have returned before this was listening
       timer = setTimeout(tick, 500)
 
       cleanup.current = () => {

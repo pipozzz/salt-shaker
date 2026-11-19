@@ -1,5 +1,6 @@
 import { trimFleet } from '../lib/fleet'
 import { gitConfigUrl, gitPillarRemotes as parseGitPillar, headBranch, matchRemote, parseRemoteMap, treeFiles, type GitPillarRemote, type GitPillarRepo } from '../lib/gitpillar'
+import type { KeyFingers } from '../lib/keys'
 import { parseSaltStamp } from '../lib/stamp'
 export { parseArgs } from '../lib/args'
 import {
@@ -74,7 +75,7 @@ export class SaltApi {
    * accepted key and a newer denied one after the minion was reinstalled), so they mustn't be merged.
    */
   async fingerprints() {
-    return this.wheel<Partial<Record<string, Record<string, string>>>>('key.finger', { match: '*' })
+    return this.wheel<KeyFingers>('key.finger', { match: '*' })
   }
   acceptKey(id: string) {
     return this.wheel('key.accept', { match: id, include_rejected: true, include_denied: true })

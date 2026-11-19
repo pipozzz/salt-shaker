@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { KeyList } from '../api/types'
 import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
+import { fingersOf, noKeysPicked, pickKeys, type KeyFingers, type KeySection, type PickedKeys } from '../lib/keys'
 import { masterHostFrom } from '../lib/master'
 import { useCan, useKeyEvents, useSalt, useSession } from '../lib/session'
 
@@ -21,22 +22,18 @@ export function KeysPage() {
   const [actionError, setActionError] = useState<Error | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  // keys picked for a bulk action; an id is in one list at a time, so one set serves them all
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const toggle = (ids: string[], on: boolean) =>
-    setSelected((prev) => {
-      const next = new Set(prev)
-      for (const id of ids) {
-        if (on) next.add(id)
-        else next.delete(id)
-      }
-      return next
-    })
-  const [bulk, setBulk] = useState<{ action: Action; ids: string[]; fingers: Record<string, string> } | null>(null)
-  const pick = { selected, onToggle: toggle, onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => setBulk({ action, ids, fingers }) }
+  // keys picked for a bulk action, per card: an id can have an accepted key and a denied one at once
+  const [selected, setSelected] = useState<PickedKeys>(noKeysPicked)
+  const toggle = (section: KeySection, ids: string[], on: boolean) => setSelected((prev) => pickKeys(prev, section, ids, on))
+  const [bulk, setBulk] = useState<{ section: KeySection; action: Action; ids: string[]; fingers: Record<string, string> } | null>(null)
+  const pick = (section: KeySection) => ({
+    selected: selected[section],
+    onToggle: (ids: string[], on: boolean) => toggle(section, ids, on),
+    onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => setBulk({ section, action, ids, fingers }),
+  })
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as Partial<Record<string, Record<string, string>>>)])
+    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as KeyFingers)])
     return { keys, fingers }
   }, [salt])
 
@@ -133,7 +130,7 @@ export function KeysPage() {
                 New minions show up here as soon as they contact the master.
               </Empty>
             ) : (
-              <KeyRows ids={k.minions_pre} fingers={data?.fingers.minions_pre ?? {}} label="pending" bulkActions={['accept', 'reject']} {...pick}>
+              <KeyRows ids={k.minions_pre} fingers={fingersOf(data?.fingers, 'minions_pre')} label="pending" bulkActions={['accept', 'reject']} {...pick('pending')}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="success" icon={<Check className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -160,7 +157,7 @@ export function KeysPage() {
             {k.minions.length === 0 ? (
               <Empty icon={<KeyRound />} title="No accepted keys" />
             ) : (
-              <KeyRows ids={acceptedShown} fingers={data?.fingers.minions ?? {}} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick}>
+              <KeyRows ids={acceptedShown} fingers={fingersOf(data?.fingers, 'minions')} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick('accepted')}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
@@ -185,7 +182,7 @@ export function KeysPage() {
                 }
                 subtitle="Denied keys belong to a minion id that already has a different accepted key."
               />
-              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={{ ...data?.fingers.minions_rejected, ...data?.fingers.minions_denied }} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
+              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={fingersOf(data?.fingers, 'minions_rejected', 'minions_denied')} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick('refused')} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
                 {(id) => (
                   <>
                     <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
@@ -230,7 +227,7 @@ export function KeysPage() {
           fingers={bulk.fingers}
           onClose={() => setBulk(null)}
           onDone={(done) => {
-            toggle(done, false)
+            toggle(bulk.section, done, false)
             void reload()
           }}
         />
@@ -269,7 +266,7 @@ function KeyRows({
   /** what the list holds, for the select-all box */
   label: string
   bulkActions: Action[]
-  selected: Set<string>
+  selected: ReadonlySet<string>
   onToggle: (ids: string[], on: boolean) => void
   onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => void
 }) {

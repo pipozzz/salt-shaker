@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.40.1
+
+**Fixes**
+
+- On **Keys**, accepting, rejecting or deleting a key touched every key of that minion id. When a reinstalled minion had an accepted key and a newer denied one, deleting the denied key also deleted the accepted one. Each action now names the list the key is in, and the delete dialog says which key it removes ("The denied key for web-01…").
+- Picking keys for a bulk action ticked the same id in every card. An id with keys in two cards is now picked in one card at a time, and a finished bulk action clears only the card it came from.
+
+**Upgrading**
+
+- Keys calls `key.accept_dict`, `key.reject_dict` and `key.delete_dict` instead of `key.accept`, `key.reject` and `key.delete`. Salt Shaker's admin role has all of `@wheel`, so nothing changes for the built-in roles. In direct mode, an `external_auth` that lists wheel functions one by one needs the three `_dict` functions, or Keys shows its keys read-only.
+
 ## 1.40.0
 
 **Performance**

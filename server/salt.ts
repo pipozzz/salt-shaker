@@ -1,3 +1,4 @@
+import { READ_ONLY } from '../src/lib/readonly'
 import type { Config } from './config'
 
 export class UpstreamError extends Error {
@@ -29,39 +30,107 @@ function reason(url: string, err: unknown) {
 
 export const unreachable = (url: string, err: unknown) => new UpstreamError(`Cannot reach salt-api at ${url}: ${reason(url, err)}`, 502)
 
+export type Lane = 'interactive' | 'background'
+
+export interface CallOptions {
+  /** background: work nobody waits for (schedules, presence, runbooks); it queues apart from users' calls */
+  lane?: Lane
+  /** skip an answer kept from a moment ago (a Refresh button) */
+  fresh?: boolean
+}
+
+/** Lets `limit` tasks run at once; the rest wait in line, and past `maxQueue` waiting are refused. */
+export class Limiter {
+  private active = 0
+  private waiting: Array<() => void> = []
+
+  constructor(
+    private limit: number,
+    private maxQueue: number,
+  ) {}
+
+  get stats() {
+    return { active: this.active, waiting: this.waiting.length }
+  }
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active < this.limit) this.active++
+    else {
+      if (this.waiting.length >= this.maxQueue) throw new UpstreamError('salt-api is busy: too many calls are waiting for it', 503)
+      // the finishing task hands its slot over, so `active` stays as it is
+      await new Promise<void>((go) => this.waiting.push(go))
+    }
+    try {
+      return await task()
+    } finally {
+      const next = this.waiting.shift()
+      if (next) next()
+      else this.active--
+    }
+  }
+}
+
+// reads every open page asks for; one answer serves everyone for this long
+const KEEP_MS: Record<string, number> = {
+  'wheel key.list_all': 5_000,
+  'wheel key.finger': 5_000,
+  'runner manage.status': 10_000,
+  'runner cache.grains': 10_000,
+  'runner jobs.active': 2_000,
+  'runner jobs.list_jobs': 5_000,
+}
+
 /**
- * Relays an upstream stream but ends it quietly instead of erroring. When a browser closes the
- * live event stream, the abort reaches the upstream fetch and its body fails with that reason;
- * passed on as-is, @hono/node-server logs a bare "Error: aborted". EventSource reconnects on its own.
+ * Whether a call's answer can be shared between callers, and for how long it is kept: null when it
+ * can't be, 0 when only callers asking at the same moment share it. Only runner and wheel reads
+ * qualify; calls to minions carry the user's name and are always made.
  */
-export const endQuietly = (upstream: ReadableStream<Uint8Array>) => {
-  const reader = upstream.getReader()
-  return new ReadableStream<Uint8Array>({
-    async pull(ctrl) {
-      try {
-        const { done, value } = await reader.read()
-        if (done) ctrl.close()
-        else ctrl.enqueue(value)
-      } catch {
-        ctrl.close()
-      }
-    },
-    cancel: (reason) => reader.cancel(reason).catch(() => {}),
-  })
+export function shareFor(low: Record<string, unknown>): number | null {
+  const { client, fun } = low
+  if ((client !== 'runner' && client !== 'wheel') || typeof fun !== 'string') return null
+  // salt.cmd runs anything on the master; only the version lookup is a plain read
+  if (fun === 'salt.cmd') return Array.isArray(low.arg) && low.arg.length === 1 && low.arg[0] === 'test.version' && !low.kwarg ? 300_000 : null
+  if (!READ_ONLY[client].test(fun)) return null
+  return KEEP_MS[`${client} ${fun}`] ?? 0
 }
 
 /**
  * salt-api client for the server's service account. Users never see this token; the server
  * checks their role, then calls salt-api on their behalf.
+ *
+ * Every call goes through here, so this is also where the master is protected from the console
+ * and users from each other: a call that gets no answer is given up on, users' calls and
+ * background work wait in separate lines, and identical reads share one answer.
  */
 export class SaltService {
   private cfg: Config['saltApi']
   private token: string | null = null
   private expire = 0
   private loggingIn: Promise<string> | null = null
+  private timeoutMs: number
+  private lanes: Record<Lane, Limiter>
+  private inFlight = new Map<string, Promise<unknown>>()
+  private kept = new Map<string, { at: number; fun: string; value: unknown }>()
 
   constructor(cfg: Config['saltApi']) {
     this.cfg = cfg
+    this.timeoutMs = cfg.timeoutMs ?? 120_000
+    this.lanes = { interactive: new Limiter(cfg.concurrency ?? 8, 200), background: new Limiter(cfg.backgroundConcurrency ?? 2, 1000) }
+  }
+
+  /** Calls running and waiting per lane, for /metrics. */
+  get stats() {
+    return { interactive: this.lanes.interactive.stats, background: this.lanes.background.stats }
+  }
+
+  /** The same client for work nobody waits for: its calls never take a slot from a user's. */
+  background(): Pick<SaltService, 'call'> {
+    return { call: (low, opts) => this.call(low, { ...opts, lane: 'background' }) }
+  }
+
+  /** Drops kept answers of functions starting with `prefix` (e.g. `key.` when a key changed). */
+  forget(prefix = '') {
+    for (const [k, v] of this.kept) if (v.fun.startsWith(prefix)) this.kept.delete(k)
   }
 
   private async login() {
@@ -69,6 +138,7 @@ export class SaltService {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: this.cfg.username, password: this.cfg.password, eauth: this.cfg.eauth }),
+      signal: AbortSignal.timeout(Math.min(this.timeoutMs, 30_000)),
     }).catch((e: unknown) => {
       throw unreachable(this.cfg.url, e)
     })
@@ -86,26 +156,67 @@ export class SaltService {
     return this.loggingIn
   }
 
-  async call(low: Record<string, unknown>): Promise<unknown> {
+  /**
+   * One lowstate call. The answer of a shared read may be the very object another caller got:
+   * read it, don't change it.
+   */
+  async call(low: Record<string, unknown>, opts: CallOptions = {}): Promise<unknown> {
+    const lane = this.lanes[opts.lane ?? 'interactive']
+    const keepMs = shareFor(low)
+    if (keepMs === null) {
+      try {
+        return await lane.run(() => this.send(low))
+      } finally {
+        // a key was accepted, rejected or deleted (or anything else changed): reads start over
+        if (low.client === 'wheel') this.forget()
+      }
+    }
+    const key = JSON.stringify(low)
+    const hit = this.kept.get(key)
+    if (hit && !opts.fresh && Date.now() - hit.at < keepMs) return hit.value
+    const running = this.inFlight.get(key)
+    if (running) return running
+    const fun = String(low.fun)
+    const asked = lane
+      .run(() => this.send(low))
+      .then((value) => {
+        if (keepMs > 0) this.keep(key, { at: Date.now(), fun, value })
+        return value
+      })
+      .finally(() => this.inFlight.delete(key))
+    this.inFlight.set(key, asked)
+    return asked
+  }
+
+  private keep(key: string, entry: { at: number; fun: string; value: unknown }) {
+    // targets differ per scoped user; drop what has gone stale rather than grow
+    if (this.kept.size >= 200) for (const [k, v] of this.kept) if (entry.at - v.at > 300_000 || this.kept.size >= 200) this.kept.delete(k)
+    this.kept.set(key, entry)
+  }
+
+  private async send(low: Record<string, unknown>): Promise<unknown> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await this.getToken(attempt > 0)
-      let res: Response
       try {
-        res = await fetch(`${this.cfg.url}/`, {
+        const res = await fetch(`${this.cfg.url}/`, {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Auth-Token': token },
           body: JSON.stringify([low]),
+          signal: AbortSignal.timeout(this.timeoutMs),
         })
+        if (res.status === 401 && attempt === 0) continue
+        if (!res.ok) {
+          const text = await res.text()
+          throw new UpstreamError(text.match(/<p>([^<]+)<\/p>/)?.[1] ?? `salt-api returned ${res.status}`, res.status >= 500 ? 502 : res.status)
+        }
+        const body = (await res.json()) as { return: unknown[] }
+        return body.return[0]
       } catch (e) {
+        if (e instanceof UpstreamError) throw e
+        // the master is stuck or the call is too big for a web request; don't hold the caller forever
+        if ((e as { name?: string } | null)?.name === 'TimeoutError') throw new UpstreamError(`salt-api didn't answer ${String(low.fun)} within ${Math.round(this.timeoutMs / 1000)} s`, 504)
         throw unreachable(this.cfg.url, e)
       }
-      if (res.status === 401 && attempt === 0) continue
-      if (!res.ok) {
-        const text = await res.text()
-        throw new UpstreamError(text.match(/<p>([^<]+)<\/p>/)?.[1] ?? `salt-api returned ${res.status}`, res.status >= 500 ? 502 : res.status)
-      }
-      const body = (await res.json()) as { return: unknown[] }
-      return body.return[0]
     }
     throw new UpstreamError('salt-api rejected the service account token', 502)
   }

@@ -10,7 +10,18 @@ export interface Config {
   databaseUrl: string
   dialect: 'sqlite' | 'pg'
   authSecret: string
-  saltApi: { url: string; username: string; password: string; eauth: string }
+  saltApi: {
+    url: string
+    username: string
+    password: string
+    eauth: string
+    /** how long one call may take before it is given up on */
+    timeoutMs?: number
+    /** calls made for users at once; more wait in line */
+    concurrency?: number
+    /** calls made for schedules, presence checks and runbooks at once */
+    backgroundConcurrency?: number
+  }
   /** the master's address for minions (SALT_MASTER, else salt-api's host), offered in the bootstrap command */
   saltMaster: string | null
   staticDir: string
@@ -108,6 +119,9 @@ export function loadConfig(): Config {
       username: required('SALT_API_USERNAME'),
       password: required('SALT_API_PASSWORD'),
       eauth: process.env.SALT_API_EAUTH ?? 'pam',
+      timeoutMs: Math.max(5, Number(process.env.SALT_API_TIMEOUT ?? 120) || 120) * 1000,
+      concurrency: Math.max(1, Math.floor(Number(process.env.SALT_API_CONCURRENCY ?? 8)) || 8),
+      backgroundConcurrency: Math.max(1, Math.floor(Number(process.env.SALT_API_BACKGROUND_CONCURRENCY ?? 2)) || 2),
     },
     saltMaster: process.env.SALT_MASTER?.trim() || masterHostFrom(process.env.SALT_API_URL),
     staticDir: process.env.STATIC_DIR ?? './dist',

@@ -10,6 +10,9 @@ The server is configured with environment variables.
 | `SALT_API_URL` | *(required)* | salt-api (`rest_cherrypy`) base URL |
 | `SALT_API_USERNAME` / `SALT_API_PASSWORD` | *(required)* | the service account |
 | `SALT_API_EAUTH` | `pam` | eauth backend of the service account |
+| `SALT_API_TIMEOUT` | `120` | seconds one call to salt-api may take before it's given up on (answered with a 504), so a stuck master doesn't hold requests forever |
+| `SALT_API_CONCURRENCY` | `8` | calls made to salt-api for users at once; more wait in line. Keep it well under salt-api's `thread_pool` |
+| `SALT_API_BACKGROUND_CONCURRENCY` | `2` | the same for schedules, presence checks, runbooks and changes, which wait in a line of their own and never take a user's turn |
 | `SALT_MASTER` | the host of `SALT_API_URL` | the master's address minions connect to (ports 4505 and 4506), put in the bootstrap command on **Enrollment**; set it when salt-api is reached under another name, or on `127.0.0.1` |
 | `PUBLIC_URL` | `http://localhost:8080` | the URL users open; cookies and origin checks are based on it |
 | `INSTANCE_NAME` | the host of `PUBLIC_URL` | this instance's name among [several masters](/salt-shaker/deploy/masters/), e.g. `prod-eu` |

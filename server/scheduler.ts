@@ -90,7 +90,7 @@ interface Pending {
 export class Scheduler {
   private db: Db
   private schema: Schema
-  private salt: SaltService
+  private salt: Pick<SaltService, 'call'>
   private notifier: Notifier
   private audit: (row: { username: string; client: string; fun: string; target: string; targetType: string; jid: string | null; outcome: string; error?: string }) => Promise<unknown>
   private pending = new Map<string, Pending>()
@@ -103,7 +103,7 @@ export class Scheduler {
   /** for runbook schedules: starts a run of the runbook, as the schedule */
   runbooks: ((s: ScheduleRow) => Promise<{ run: number } | { error: string }>) | null = null
 
-  constructor(db: Db, schema: Schema, salt: SaltService, notifier: Notifier, audit: Scheduler['audit']) {
+  constructor(db: Db, schema: Schema, salt: Pick<SaltService, 'call'>, notifier: Notifier, audit: Scheduler['audit']) {
     this.db = db
     this.schema = schema
     this.salt = salt

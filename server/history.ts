@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { stateSummary } from '../src/lib/states'
 import { pruneAudit } from './audit'
 import type { Db, Schema } from './db'
-import type { SaltService } from './salt'
+import type { EventHub } from './events'
 import { parseSaltStamp } from '../src/lib/stamp'
 
 /**
@@ -125,23 +125,27 @@ export interface StreamStatus {
   lastError: string | null
 }
 
+// events waiting to be written; past this (the database is far behind) new ones are dropped
+const MAX_QUEUED = 50_000
+
 export class HistoryRecorder {
   private db: Db
   private schema: Schema
-  private salt: SaltService
+  private bus: Pick<EventHub, 'subscribe'>
   private retentionDays: number
   private auditDays: number
-  private ctrl: AbortController | null = null
+  private leave: (() => void) | null = null
   private timers: ReturnType<typeof setInterval>[] = []
   private eventListeners: Array<(tag: string, data: Record<string, unknown>) => void> = []
   private returnListeners: Array<(r: JobRet) => void> = []
-  /** How following the event bus is going, for the System page. */
-  stream: StreamStatus = { state: 'stopped', since: null, lastEventAt: null, lastError: null }
+  private queue: Array<[string, Record<string, unknown>]> = []
+  private draining = false
+  private dropped = 0
 
-  constructor(db: Db, schema: Schema, salt: SaltService, retentionDays: number, auditDays = 0) {
+  constructor(db: Db, schema: Schema, bus: Pick<EventHub, 'subscribe'>, retentionDays: number, auditDays = 0) {
     this.db = db
     this.schema = schema
-    this.salt = salt
+    this.bus = bus
     this.retentionDays = retentionDays
     this.auditDays = auditDays
   }
@@ -158,53 +162,45 @@ export class HistoryRecorder {
 
   /** Safe to call again after stop() (the leader may lose and regain its lease). */
   start() {
-    if (this.ctrl) return
-    const ctrl = new AbortController()
-    this.ctrl = ctrl
-    this.stream = { ...this.stream, state: 'connecting', since: new Date() }
-    void this.listen(ctrl.signal)
+    if (this.leave) return
+    this.leave = this.bus.subscribe((e) => this.enqueue(e.tag, e.data))
     void this.prune()
     this.timers.push(setInterval(() => void this.prune(), 6 * 3600_000))
   }
 
   stop() {
-    this.ctrl?.abort()
-    this.ctrl = null
-    this.stream = { ...this.stream, state: 'stopped', since: new Date() }
+    this.leave?.()
+    this.leave = null
+    this.queue = []
     this.timers.forEach(clearInterval)
     this.timers = []
   }
 
-  private async listen(signal: AbortSignal) {
-    while (!signal.aborted) {
-      try {
-        const body = await this.salt.events(signal)
-        this.stream = { ...this.stream, state: 'connected', since: new Date(), lastError: null }
-        const reader = body.pipeThrough(new TextDecoderStream()).getReader()
-        let buf = ''
-        for (;;) {
-          const { value, done } = await reader.read()
-          if (done) break
-          const { payloads, rest } = takeSseData(buf + value)
-          buf = rest
-          if (payloads.length) this.stream.lastEventAt = new Date()
-          for (const p of payloads) {
-            try {
-              const e = JSON.parse(p) as { tag: string; data: Record<string, unknown> }
-              await this.record(e.tag, e.data)
-            } catch (err) {
-              console.warn('history: could not record event', err)
-            }
-          }
+  /**
+   * Events are written one after another, in the order they came (a job's "new" before its
+   * returns), without making the stream wait for the database: browsers read the same stream.
+   */
+  private enqueue(tag: string, data: Record<string, unknown>) {
+    if (this.queue.length >= MAX_QUEUED) {
+      if (this.dropped++ % 1000 === 0) console.warn(`history: the database is not keeping up, dropping events (${this.dropped} so far)`)
+      return
+    }
+    this.queue.push([tag, data])
+    if (!this.draining) void this.drain()
+  }
+
+  private async drain() {
+    this.draining = true
+    try {
+      for (let next = this.queue.shift(); next; next = this.queue.shift()) {
+        try {
+          await this.record(next[0], next[1])
+        } catch (err) {
+          console.warn('history: could not record event', err)
         }
-        if (!signal.aborted) this.stream = { ...this.stream, state: 'connecting', since: new Date(), lastError: 'salt-api closed the event stream' }
-      } catch (err) {
-        if (signal.aborted) return
-        const message = err instanceof Error ? err.message : String(err)
-        this.stream = { ...this.stream, state: 'connecting', since: new Date(), lastError: message }
-        console.warn('history: event stream lost, retrying', message)
       }
-      await new Promise((r) => setTimeout(r, 5000))
+    } finally {
+      this.draining = false
     }
   }
 

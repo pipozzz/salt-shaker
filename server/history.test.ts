@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { HistoryRecorder, isDryRun, parseJobEvent, takeSseData } from './history'
-import type { SaltService } from './salt'
 import { openTestDatabase, testDialects } from './testdb'
 
 // shapes captured from salt-api's /events on Salt 3007
@@ -100,7 +99,7 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
   let rec: HistoryRecorder
   beforeAll(async () => {
     opened = await openTestDatabase(dialect)
-    rec = new HistoryRecorder(opened.db, opened.schema, {} as SaltService, 30)
+    rec = new HistoryRecorder(opened.db, opened.schema, { subscribe: () => () => undefined }, 30)
   })
   afterAll(() => opened.close())
 

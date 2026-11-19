@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.40.0
+
+**Performance**
+
+- **Pages read the fleet from the database**: opening Minions, Map or Overview no longer asks the master for every minion's grains and pings every minion, for each user and each time. The server keeps the fleet in its own table, refreshed every five minutes and when a key changes, and a minion that returns a job or starts is marked up right away. **Refresh** still asks the master first.
+- **A slow master no longer slows everyone down**: calls to salt-api are given up on after `SALT_API_TIMEOUT` (120 s) instead of hanging. Users' calls and background work (schedules, presence checks, runbooks) wait in separate lines, limited by `SALT_API_CONCURRENCY` (8) and `SALT_API_BACKGROUND_CONCURRENCY` (2). Identical reads made at the same moment share one call. See [Configuration](https://pipozzz.github.io/salt-shaker/reference/configuration/).
+- **One event stream for all tabs**: the server holds a single connection to salt-api's `/events` and fans it out to the job recorder and every browser, instead of one connection per open tab.
+- **Faster job lists**: a job's returned and failed counts are kept as returns come in, so job history, its CSV export and the failed-jobs filter on Overview no longer add them up on every read. While a job runs, the master is asked for it every 15 seconds instead of every 3; returns arrive over the event stream.
+- **Smaller first load**: pages other than Login and Overview load when opened, so the first load carries 416 KB of JavaScript instead of 942 KB (135 KB instead of 274 KB gzipped). The server gzips responses for setups without a compressing proxy.
+- A Salt event no longer re-renders the whole app.
+
+**Fixes**
+
+- On **Keys**, a minion id with keys in two lists (an accepted key and a newer denied one after a reinstall) showed the same fingerprint on both rows. Each list now shows its own.
+- The server no longer logs `Error: aborted` every time a browser tab closes or reloads.
+
+**Monitoring**
+
+- `/metrics` reports calls to salt-api running and waiting per lane (`salt_shaker_salt_api_calls_running`, `salt_shaker_salt_api_calls_waiting`). See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/).
+
+**Upgrading**
+
+- Two database migrations run on start: one adds the `minion` table, the other adds `returned` and `failed` columns to `job` and fills them in for jobs already recorded. Each minion's latest compliance check and patch scan are filled in once from history.
+- `GET /api/minions` and `POST /api/minions/refresh` replace `/api/fleet`, which only the UI used.
+- With `PRESENCE_CHECK_MINUTES=0`, who responds is still checked every 5 minutes for Minions, Map and Overview; only the alert and the last-answered dates are off.
+- Dependencies are updated, among them better-auth 1.7.25, better-sqlite3 13.2.0, hono 4.13.18 and nodemailer 10.5.0.
+
 ## 1.39.0
 
 **States & Pillar**

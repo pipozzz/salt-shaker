@@ -48,7 +48,7 @@ export interface StepState extends ResolvedStep {
 }
 
 type RunRow = Schema['runbookRun']['$inferSelect']
-type SaltAs = (user: SessionUser, input: unknown, ip: string | null, opts?: { approved?: boolean }) => Promise<{ status: number; body: { return?: unknown; error?: string } }>
+type SaltAs = (user: SessionUser, input: unknown, ip: string | null, opts?: { approved?: boolean; background?: boolean }) => Promise<{ status: number; body: { return?: unknown; error?: string } }>
 
 /** A step has had this long for its minions to return; the ones that didn't count as failed. */
 export const STEP_DEADLINE_MS = 15 * 60_000
@@ -196,7 +196,7 @@ export class RunbookRunner {
     const claimed = { ...r, version: r.version + 1 }
     const user = await this.d.loadUser(r.startedById)
     if (!user) return failStep(claimed, `${r.startedBy} can no longer run commands`)
-    const res = await this.d.saltAs(user, { client: 'local_async', tgt: next.join(','), tgt_type: 'list', fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy })
+    const res = await this.d.saltAs(user, { client: 'local_async', tgt: next.join(','), tgt_type: 'list', fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy, background: true })
     if (res.status !== 200) return failStep(claimed, `Batch ${batches.length + 1}: ${res.body.error ?? 'salt-api refused it'}`)
     const started = res.body.return as { jid?: string } | null
     if (!started?.jid) return failStep(claimed, `None of batch ${batches.length + 1} answered (${next.join(', ')})`)
@@ -244,7 +244,7 @@ export class RunbookRunner {
         await this.save(claimed, { steps: JSON.stringify(steps) })
         return
       }
-      const res = await this.d.saltAs(user, { client: 'local_async', tgt: step.target, tgt_type: step.targetType, fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy })
+      const res = await this.d.saltAs(user, { client: 'local_async', tgt: step.target, tgt_type: step.targetType, fun: step.fun, arg: step.arg, kwarg: step.kwarg }, null, { approved: !!r.decidedBy, background: true })
       if (res.status !== 200) return fail(res.body.error ?? 'salt-api refused it')
       // salt.call hands back the first return: {jid, minions} for local_async
       const started = res.body.return as { jid?: string; minions?: string[] } | null

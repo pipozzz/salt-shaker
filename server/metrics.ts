@@ -48,7 +48,7 @@ const seconds = (d: Date | null | undefined) => (d ? Math.round(d.getTime() / 10
  * Everything /metrics reports: the master's keys (one cheap wheel call), the latest compliance
  * check, recent job failures and the schedules, all read from what the server already records.
  */
-export async function collectMetrics(deps: { db: Db; schema: Schema; salt: SaltService; version: string; isLeader: boolean; now?: Date }): Promise<Gauge[]> {
+export async function collectMetrics(deps: { db: Db; schema: Schema; salt: Pick<SaltService, 'call'> & Partial<Pick<SaltService, 'stats'>>; version: string; isLeader: boolean; now?: Date }): Promise<Gauge[]> {
   const { db, schema, salt } = deps
   const now = deps.now ?? new Date()
   const gauges: Gauge[] = [
@@ -64,6 +64,12 @@ export async function collectMetrics(deps: { db: Db; schema: Schema; salt: SaltS
   }
   gauges.push({ name: 'salt_shaker_master_up', help: 'Whether salt-api answered the last call.', samples: [{ value: keys ? 1 : 0 }] })
   if (keys) gauges.push({ name: 'salt_shaker_minion_keys', help: 'Minion keys on the master by status.', samples: keys })
+
+  if (salt.stats) {
+    const lanes = Object.entries(salt.stats)
+    gauges.push({ name: 'salt_shaker_salt_api_calls_running', help: 'Calls to salt-api being made now, by lane.', samples: lanes.map(([lane, s]) => ({ labels: { lane }, value: s.active })) })
+    gauges.push({ name: 'salt_shaker_salt_api_calls_waiting', help: 'Calls waiting for a free slot to salt-api, by lane.', samples: lanes.map(([lane, s]) => ({ labels: { lane }, value: s.waiting })) })
+  }
 
   // latest compliance check (a dry-run highstate)
   const j = schema.job

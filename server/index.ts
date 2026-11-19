@@ -46,7 +46,8 @@ import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
 import { canFor, isRole, ROLE_PERMS } from './roles'
 import pkg from '../package.json' with { type: 'json' }
-import { SaltService, UpstreamError, endQuietly } from './salt'
+import { EventHub } from './events'
+import { SaltService, UpstreamError } from './salt'
 import type { AuditRow, Env, SessionUser } from './types'
 
 const config = loadConfig()
@@ -76,6 +77,14 @@ if (config.oidc) {
   }
 }
 const salt = new SaltService(config.saltApi)
+// for work nobody waits for, so a busy scheduler never takes a user's turn at salt-api
+const saltBackground = salt.background()
+// one connection to the master's event bus for the recorder and every open tab
+const events = new EventHub(salt)
+// a key came, went or changed: the key lists kept for a moment are out of date
+events.tap((e) => {
+  if (e.tag === 'salt/key' || e.tag === 'salt/auth') salt.forget('key.')
+})
 // accepted minion ids, so minions whose key was deleted drop out of the vulnerability report
 let keysCache: { at: number; ids: string[]; pending: number } | null = null
 /** The master's keys, kept for a minute: accepted minion ids, and how many wait for approval. */
@@ -90,13 +99,13 @@ const keyList = async () => {
 }
 const acceptedMinions = async () => (await keyList())?.ids ?? null
 const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions })
-const history = new HistoryRecorder(db, schema, salt, config.historyDays, config.auditDays)
+const history = new HistoryRecorder(db, schema, events, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 if (config.smtpUrl) notifier.mail = smtpMailer(config.smtpUrl, config.smtpFrom)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))
 history.onReturn((r) => notifier.onReturn(r))
 const weeklyReport = new WeeklyReport({ db, schema, accepted: acceptedMinions, send: (m) => notifier.emit('report', m) })
-const presence = new PresenceWatcher(salt, notifier, config.presenceMinutes * 60_000, 2, (up) => recordSeen(db, schema, up))
+const presence = new PresenceWatcher(saltBackground, notifier, config.presenceMinutes * 60_000, 2, (up) => recordSeen(db, schema, up))
 // with several instances on one database, only the lease holder follows the event bus and watches
 // for minions going down, so jobs are recorded once and alerts aren't duplicated
 const eventsLeader = new Leader(db, schema, 'events', {
@@ -152,7 +161,7 @@ app.get('/metrics', async (c) => {
   const given = Buffer.from(c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? '')
   const want = Buffer.from(config.metricsToken)
   if (given.length !== want.length || !timingSafeEqual(given, want)) return c.text('Unauthorized\n', 401, { 'WWW-Authenticate': 'Bearer' })
-  const gauges = await collectMetrics({ db, schema, salt, version: pkg.version, isLeader: eventsLeader.isLeader })
+  const gauges = await collectMetrics({ db, schema, salt: { call: saltBackground.call, stats: salt.stats }, version: pkg.version, isLeader: eventsLeader.isLeader })
   return c.text(formatMetrics(gauges), 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
 })
 
@@ -247,7 +256,7 @@ app.get('/api/me', async (c) => {
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
 
 // enrollment windows accept matching new keys; the event bus is followed by one instance only
-const keyAutoAccept = new KeyAutoAccept({ db, schema, salt, notify: (m) => notifier.emit('pending_key', m), audit })
+const keyAutoAccept = new KeyAutoAccept({ db, schema, salt: saltBackground, notify: (m) => notifier.emit('pending_key', m), audit })
 history.onEvent((tag, data) => void keyAutoAccept.onEvent(tag, data).catch((e) => console.warn('keys: auto-accept failed', e)))
 
 /** Which minions a target matches, from the master's grains cache, for scoped users' calls. */
@@ -257,7 +266,7 @@ const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await sa
  * One salt-api call on a user's behalf, with every check the console's calls get: the role's
  * permissions, the user's scope, approvals, and the audit log. Used by /api/salt and Slack.
  */
-async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts: { approved?: boolean } = {}): Promise<{ status: number; body: { return?: unknown; error?: string; needsApproval?: boolean } }> {
+async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts: { approved?: boolean; background?: boolean } = {}): Promise<{ status: number; body: { return?: unknown; error?: string; needsApproval?: boolean } }> {
   const username = user.username ?? user.name
   const decision = authorize(user.role, username, input)
   if (!decision.ok) {
@@ -297,7 +306,7 @@ async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts
     ip,
   }
   try {
-    const ret = await salt.call(low)
+    const ret = await salt.call(low, { lane: opts.background ? 'background' : 'interactive' })
     if (audited) await audit({ ...base, jid: jidOf(ret), outcome: 'ok' })
     return { status: 200, body: { return: ret } }
   } catch (e) {
@@ -317,8 +326,7 @@ app.post('/api/salt', async (c) => {
 app.get('/api/salt/events', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   try {
-    const body = endQuietly(await salt.events(c.req.raw.signal))
-    return new Response(body, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+    return new Response(await events.open(c.req.raw.signal), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'events failed' }, 502)
   }
@@ -363,7 +371,7 @@ app.get('/api/fleet', async (c) => {
   const fresh = c.req.query('fresh') === '1'
   if (fresh || !fleetCache || Date.now() - fleetCache.at > FLEET_TTL_MS) {
     fleetLoading ??= salt
-      .call({ client: 'runner', fun: 'cache.grains', tgt: '*', tgt_type: 'glob' })
+      .call({ client: 'runner', fun: 'cache.grains', tgt: '*', tgt_type: 'glob' }, { fresh })
       .then((all) => trimFleet(all as Record<string, unknown>))
       .finally(() => (fleetLoading = null))
     try {
@@ -424,7 +432,7 @@ app.get('/api/system', async (c) => {
   const user = c.get('user')
   if (!user) return c.json({ error: 'Not signed in' }, 401)
   if (user.role !== 'admin') return c.json({ error: 'Admins only' }, 403)
-  return c.json(await systemStatus({ db, schema, salt, config, version: pkg.version, instance: INSTANCE_ID, startedAt, leader: eventsLeader, stream: history.stream, ssoActive }))
+  return c.json(await systemStatus({ db, schema, salt, config, version: pkg.version, instance: INSTANCE_ID, startedAt, leader: eventsLeader, stream: events.status, ssoActive }))
 })
 
 /** Each minion's pending upgrades from the latest patch scan that it answered. */
@@ -454,11 +462,11 @@ app.get('/api/history/compliance', async (c) => {
   return c.json({ runs })
 })
 
-const scheduler = new Scheduler(db, schema, salt, notifier, (row) => audit({ ...row, role: 'system' }))
+const scheduler = new Scheduler(db, schema, saltBackground, notifier, (row) => audit({ ...row, role: 'system' }))
 scheduler.vulns = vulns
 scheduler.start()
 // batched rollouts and approved changes; claims each step in the database, so every instance can run it
-const changeRunner = new ChangeRunner({ db, schema, salt, notifier, audit, expand: expandTarget })
+const changeRunner = new ChangeRunner({ db, schema, salt: saltBackground, notifier, audit, expand: expandTarget })
 changeRunner.start()
 
 /** Who a runbook run acts as: its starter, while their account still may run commands. */
@@ -527,6 +535,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.once(sig, async () => {
     scheduler.stop()
     await eventsLeader.stop()
+    events.stop()
     server.close()
     process.exit(0)
   })

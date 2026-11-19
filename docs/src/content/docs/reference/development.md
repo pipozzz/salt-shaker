@@ -37,6 +37,7 @@ cd docs && npm install && npm run dev
 A few salt-api behaviours (seen on Salt 3007) that the client handles:
 
 - `/events` rejects `?token=`, so the UI reads the SSE stream with `fetch` and an `X-Auth-Token` header.
+- `/events` keeps one of salt-api's threads busy per client, and slow runners (`manage.status`, `jobs.list_jobs`) keep a master worker each. So the server holds a single `/events` connection and fans it out to browsers (`server/events.ts`), and every call goes through `SaltService.call`, which limits how many run at once, gives up after `SALT_API_TIMEOUT` and shares identical runner and wheel reads (`server/salt.ts`).
 - `jobs.lookup_jid` wraps state returns in `{outputter, data}`. Runner jobs come back under `<master>_master`.
 - jids use the master's local time. The UI learns the offset from wheel replies (`_stamp` is UTC).
 - `key.gen_accept` replies `success: true` with an empty dict when the key already exists.

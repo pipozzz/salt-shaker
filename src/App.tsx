@@ -1,41 +1,44 @@
-import { useEffect, useRef } from 'react'
+import { lazy, useEffect, useRef } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/Toasts'
 import { useTheme } from './lib/hooks'
 import { SessionProvider, useSession } from './lib/session'
-import { CompliancePage } from './pages/Compliance'
-import { EventsPage } from './pages/Events'
-import { FilesPage } from './pages/Files'
-import { JobDetailPage } from './pages/JobDetail'
-import { JobComparePage } from './pages/JobCompare'
-import { JobHistoryPage } from './pages/JobHistory'
-import { JobsPage } from './pages/Jobs'
-import { KeysPage } from './pages/Keys'
 import { LoginPage } from './pages/Login'
-import { MinionDetailPage } from './pages/MinionDetail'
-import { MinionsPage } from './pages/Minions'
 import { OverviewPage } from './pages/Overview'
-import { HardeningPage } from './pages/Hardening'
-import { SlackLinkPage } from './pages/SlackLink'
-import { MapPage } from './pages/Map'
-import { ReportPage } from './pages/Report'
-import { RunbooksPage } from './pages/Runbooks'
-import { RunbookRunPage } from './pages/RunbookRun'
-import { BranchPreviewPage } from './pages/BranchPreview'
-import { TokensPage } from './pages/Tokens'
-import { ComparePage } from './pages/Compare'
-import { ChangeDetailPage, ChangesPage } from './pages/Changes'
-import { OrchestratePage } from './pages/Orchestrate'
-import { PatchesPage } from './pages/Patches'
-import { RunPage } from './pages/Run'
-import { QueryPage } from './pages/Query'
-import { AuditPage } from './pages/Audit'
-import { UsersPage } from './pages/Users'
-import { NotificationsPage } from './pages/Notifications'
-import { SystemPage } from './pages/System'
-import { SchedulesPage } from './pages/Schedules'
-import { VulnerabilitiesPage } from './pages/Vulnerabilities'
+
+// pages load on first visit, so the first paint only carries the shell, the login and the overview
+const CompliancePage = lazy(() => import('./pages/Compliance').then((m) => ({ default: m.CompliancePage })))
+const EventsPage = lazy(() => import('./pages/Events').then((m) => ({ default: m.EventsPage })))
+const FilesPage = lazy(() => import('./pages/Files').then((m) => ({ default: m.FilesPage })))
+const JobDetailPage = lazy(() => import('./pages/JobDetail').then((m) => ({ default: m.JobDetailPage })))
+const JobComparePage = lazy(() => import('./pages/JobCompare').then((m) => ({ default: m.JobComparePage })))
+const JobHistoryPage = lazy(() => import('./pages/JobHistory').then((m) => ({ default: m.JobHistoryPage })))
+const JobsPage = lazy(() => import('./pages/Jobs').then((m) => ({ default: m.JobsPage })))
+const KeysPage = lazy(() => import('./pages/Keys').then((m) => ({ default: m.KeysPage })))
+const MinionDetailPage = lazy(() => import('./pages/MinionDetail').then((m) => ({ default: m.MinionDetailPage })))
+const MinionsPage = lazy(() => import('./pages/Minions').then((m) => ({ default: m.MinionsPage })))
+const HardeningPage = lazy(() => import('./pages/Hardening').then((m) => ({ default: m.HardeningPage })))
+const SlackLinkPage = lazy(() => import('./pages/SlackLink').then((m) => ({ default: m.SlackLinkPage })))
+const MapPage = lazy(() => import('./pages/Map').then((m) => ({ default: m.MapPage })))
+const ReportPage = lazy(() => import('./pages/Report').then((m) => ({ default: m.ReportPage })))
+const RunbooksPage = lazy(() => import('./pages/Runbooks').then((m) => ({ default: m.RunbooksPage })))
+const RunbookRunPage = lazy(() => import('./pages/RunbookRun').then((m) => ({ default: m.RunbookRunPage })))
+const BranchPreviewPage = lazy(() => import('./pages/BranchPreview').then((m) => ({ default: m.BranchPreviewPage })))
+const TokensPage = lazy(() => import('./pages/Tokens').then((m) => ({ default: m.TokensPage })))
+const ComparePage = lazy(() => import('./pages/Compare').then((m) => ({ default: m.ComparePage })))
+const ChangeDetailPage = lazy(() => import('./pages/Changes').then((m) => ({ default: m.ChangeDetailPage })))
+const ChangesPage = lazy(() => import('./pages/Changes').then((m) => ({ default: m.ChangesPage })))
+const OrchestratePage = lazy(() => import('./pages/Orchestrate').then((m) => ({ default: m.OrchestratePage })))
+const PatchesPage = lazy(() => import('./pages/Patches').then((m) => ({ default: m.PatchesPage })))
+const RunPage = lazy(() => import('./pages/Run').then((m) => ({ default: m.RunPage })))
+const QueryPage = lazy(() => import('./pages/Query').then((m) => ({ default: m.QueryPage })))
+const AuditPage = lazy(() => import('./pages/Audit').then((m) => ({ default: m.AuditPage })))
+const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })))
+const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })))
+const SystemPage = lazy(() => import('./pages/System').then((m) => ({ default: m.SystemPage })))
+const SchedulesPage = lazy(() => import('./pages/Schedules').then((m) => ({ default: m.SchedulesPage })))
+const VulnerabilitiesPage = lazy(() => import('./pages/Vulnerabilities').then((m) => ({ default: m.VulnerabilitiesPage })))
 
 // the minions list used to be the home page; its filters in an old link still lead there
 const MINION_FILTERS = ['q', 'status', 'facet']

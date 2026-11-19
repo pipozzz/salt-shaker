@@ -1,16 +1,16 @@
 import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
 import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
-import { useSalt, useSession } from '../lib/session'
+import { useKeyEvents, useSalt, useSession } from '../lib/session'
 import { LICENSE_NAME, SOURCE_URL, VERSION } from '../lib/about'
 import { AccountModal } from './AccountModal'
 import { CommandPalette } from './CommandPalette'
 import { Logo } from './Logo'
 import { EventNotifications } from './Toasts'
-import { StatusDot } from './ui'
+import { Spinner, StatusDot } from './ui'
 
 const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -29,9 +29,8 @@ const nav = [
 
 function usePendingKeys() {
   const salt = useSalt()
-  const { events } = useSession()
+  const keyEvents = useKeyEvents()
   const [count, setCount] = useState(0)
-  const lastKeyEvent = events.find((e) => e.tag === 'salt/key' || e.tag === 'salt/auth')
   useEffect(() => {
     let alive = true
     const load = () => salt.keys().then((k) => alive && setCount(k.minions_pre.length)).catch(() => undefined)
@@ -41,7 +40,7 @@ function usePendingKeys() {
       alive = false
       clearInterval(t)
     }
-  }, [salt, lastKeyEvent])
+  }, [salt, keyEvents])
   return count
 }
 
@@ -217,7 +216,9 @@ export function Layout() {
 
       <main className="lg:pl-60 print:pl-0">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
-          <Outlet />
+          <Suspense fallback={<Spinner />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>

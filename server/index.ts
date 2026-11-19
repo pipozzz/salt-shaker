@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { compress } from 'hono/compress'
 import { secureHeaders } from 'hono/secure-headers'
 import { timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -45,7 +46,7 @@ import { trimFleet } from '../src/lib/fleet'
 import { authorize, jidOf } from './policy'
 import { canFor, isRole, ROLE_PERMS } from './roles'
 import pkg from '../package.json' with { type: 'json' }
-import { SaltService, UpstreamError } from './salt'
+import { SaltService, UpstreamError, endQuietly } from './salt'
 import type { AuditRow, Env, SessionUser } from './types'
 
 const config = loadConfig()
@@ -122,6 +123,10 @@ function clientIp(c: Context<Env>) {
   }
   return c.env.incoming?.socket?.remoteAddress ?? null
 }
+
+// gzip for the UI bundle and JSON answers (fleet grains, history) when no proxy in front compresses
+// them; the event stream is left alone (its content type isn't compressible, so it keeps flushing)
+app.use('*', compress())
 
 app.use(
   '*',
@@ -312,7 +317,7 @@ app.post('/api/salt', async (c) => {
 app.get('/api/salt/events', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   try {
-    const body = await salt.events(c.req.raw.signal)
+    const body = endQuietly(await salt.events(c.req.raw.signal))
     return new Response(body, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'events failed' }, 502)

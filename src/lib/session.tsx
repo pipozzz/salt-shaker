@@ -23,9 +23,7 @@ interface SessionCtx {
   salt: SaltApi | null
   login(opts: { mode: Mode; apiUrl: string; username: string; password: string; eauth: string }): Promise<void>
   logout(): void
-  events: SaltEvent[]
   eventsConnected: boolean
-  clearEvents(): void
   /** Get every event as it arrives (the events list may batch several into one render). */
   subscribe(fn: (e: SaltEvent) => void): () => void
   /** Whether the logged-in user's eauth perms allow a call (UI hint only). */
@@ -33,6 +31,15 @@ interface SessionCtx {
 }
 
 const Ctx = createContext<SessionCtx | null>(null)
+
+interface EventsCtx {
+  /** The latest events, newest first. */
+  events: SaltEvent[]
+  clearEvents(): void
+}
+
+// apart from the session, so an event only re-renders what shows the list, not every useSalt() caller
+const EventsCtx = createContext<EventsCtx | null>(null)
 const KEY = 'salt-shaker.session'
 const MAX_EVENTS = 500
 
@@ -106,17 +113,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     )
   }, [salt])
 
-  const login: SessionCtx['login'] = async ({ mode, apiUrl, username, password, eauth }) => {
+  const login = useCallback<SessionCtx['login']>(async ({ mode, apiUrl, username, password, eauth }) => {
     const s = await transportFor(mode, apiUrl).login(username, password, eauth)
     const stored = { ...s, mode, apiUrl }
     if (mode === 'server') storage.remove(KEY)
     else storage.set(KEY, stored)
     setSession(stored)
-  }
+  }, [])
+
+  const value = useMemo<SessionCtx>(
+    () => ({ server, refreshServer, session, salt, login, logout, eventsConnected, subscribe, can }),
+    [server, refreshServer, session, salt, login, logout, eventsConnected, subscribe, can],
+  )
+  const clearEvents = useCallback(() => setEvents([]), [])
+  const eventsValue = useMemo(() => ({ events, clearEvents }), [events, clearEvents])
 
   return (
-    <Ctx.Provider value={{ server, refreshServer, session, salt, login, logout, events, eventsConnected, clearEvents: () => setEvents([]), subscribe, can }}>
-      {children}
+    <Ctx.Provider value={value}>
+      <EventsCtx.Provider value={eventsValue}>{children}</EventsCtx.Provider>
     </Ctx.Provider>
   )
 }
@@ -136,4 +150,43 @@ export function useSalt() {
 
 export function useCan() {
   return useSession().can
+}
+
+/** The event list (re-renders on every event; use subscribe() or useKeyEvents() to only react to some). */
+export function useEvents() {
+  const ctx = useContext(EventsCtx)
+  if (!ctx) throw new Error('useEvents outside SessionProvider')
+  return ctx
+}
+
+const KEY_EVENT_GAP_MS = 2000
+
+/**
+ * Counts key events (a minion knocking on salt/auth, a key change on salt/key), starting at 0, for
+ * effects that reload the key lists. A burst (many minions starting at once, or a pending minion
+ * retrying every few seconds) counts once right away and once more when it has settled.
+ */
+export function useKeyEvents() {
+  const { subscribe } = useSession()
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    let last = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const bump = () => {
+      last = Date.now()
+      timer = undefined
+      setCount((n) => n + 1)
+    }
+    const unsubscribe = subscribe((e) => {
+      if (e.tag !== 'salt/auth' && e.tag !== 'salt/key') return
+      const wait = last + KEY_EVENT_GAP_MS - Date.now()
+      if (wait <= 0) bump()
+      else timer ??= setTimeout(bump, wait)
+    })
+    return () => {
+      unsubscribe()
+      clearTimeout(timer)
+    }
+  }, [subscribe])
+  return count
 }

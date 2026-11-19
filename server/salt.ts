@@ -30,6 +30,27 @@ function reason(url: string, err: unknown) {
 export const unreachable = (url: string, err: unknown) => new UpstreamError(`Cannot reach salt-api at ${url}: ${reason(url, err)}`, 502)
 
 /**
+ * Relays an upstream stream but ends it quietly instead of erroring. When a browser closes the
+ * live event stream, the abort reaches the upstream fetch and its body fails with that reason;
+ * passed on as-is, @hono/node-server logs a bare "Error: aborted". EventSource reconnects on its own.
+ */
+export const endQuietly = (upstream: ReadableStream<Uint8Array>) => {
+  const reader = upstream.getReader()
+  return new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      try {
+        const { done, value } = await reader.read()
+        if (done) ctrl.close()
+        else ctrl.enqueue(value)
+      } catch {
+        ctrl.close()
+      }
+    },
+    cancel: (reason) => reader.cancel(reason).catch(() => {}),
+  })
+}
+
+/**
  * salt-api client for the server's service account. Users never see this token; the server
  * checks their role, then calls salt-api on their behalf.
  */

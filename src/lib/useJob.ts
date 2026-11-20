@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TargetType } from '../api/types'
+import { jobReturns } from './job-detail'
 import { useSalt, useSession } from './session'
 
 export interface JobRun {
@@ -16,7 +17,7 @@ export interface JobRun {
 
 const TIMEOUT_MS = 120_000
 // returns arrive over the event bus; polling only catches what the stream missed, so while the
-// stream is up it can be rare (each poll is a runner call on the master)
+// stream is up it can be rare (without the server's history, each poll is a runner call on the master)
 const POLL_MS = 3000
 const POLL_CONNECTED_MS = 15_000
 // like the salt CLI: after a while, ask missing minions whether they still run the job
@@ -25,15 +26,18 @@ const FIND_JOB_EVERY_MS = 10_000
 
 /**
  * Starts an async job and collects returns live from salt/job/<jid>/ret/* events,
- * with lookup_jid polling as a fallback (e.g. when the event stream is down).
+ * with polling as a fallback (e.g. when the event stream is down): the server's job history, or
+ * lookup_jid on the master when there is no server or it has not recorded the job.
  */
 export function useJob() {
   const salt = useSalt()
-  const { subscribe, eventsConnected } = useSession()
+  const { subscribe, eventsConnected, session } = useSession()
   const connected = useRef(eventsConnected)
+  const fromServer = useRef(session?.mode === 'server')
   useEffect(() => {
     connected.current = eventsConnected
-  }, [eventsConnected])
+    fromServer.current = session?.mode === 'server'
+  }, [eventsConnected, session?.mode])
   const [run, setRun] = useState<JobRun | null>(null)
   const cleanup = useRef<() => void>(() => undefined)
 
@@ -65,7 +69,7 @@ export function useJob() {
       const tick = async () => {
         let results: Record<string, unknown> = {}
         try {
-          results = await salt.lookupJid(jid)
+          results = await jobReturns(salt, fromServer.current, jid)
           merge(jid, results)
         } catch {
           // keep waiting for events
@@ -88,7 +92,7 @@ export function useJob() {
               // no answer = offline; an empty answer = finished but its return never reached the master
               const gone = missing.filter((m) => !running[m] || Object.keys(running[m]).length === 0)
               // re-check returns first so a minion that just finished is not counted as gone
-              const latest = await salt.lookupJid(jid)
+              const latest = await jobReturns(salt, fromServer.current, jid)
               const gaveUp = gone.filter((m) => !(m in latest))
               setRun((r) => {
                 if (!r || r.jid !== jid || r.done) return r

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.41.0
 
 **Users**
 
@@ -10,6 +10,27 @@
 **Compliance**
 
 - **Failures** lists what fails in the recent state runs (highstates, `state.apply`, `state.sls`, real or dry) across the fleet, grouped by state and error, so a broken repository on 40 minions is one line. A failure drops off once a later run gets that state through. Open a line for each minion's own message and job. **Dry run** and **Run again on N** apply the state's SLS to just those minions. See [Failures](https://pipozzz.github.io/salt-shaker/guide/compliance/#failures).
+
+**Keys**
+
+- **Whole fingerprints**: click a key's fingerprint to see it in full, or copy it with the button next to it, to compare it with `salt-call --local key.finger` on the minion. A row used to show only the first 8 bytes.
+- **A reinstalled minion's two keys together**: a denied key whose id also has an accepted key shows both fingerprints, labelled "new" and "accepted". Its Accept button reads **Replace accepted key** and shows both fingerprints before it does.
+
+**Performance**
+
+- **Watching a running job no longer asks the master**: while a job runs, the browser reads its returns from the server's job history instead of calling `jobs.lookup_jid` on the master every few seconds, once per open tab. The master is still asked for jobs the history doesn't keep, such as `test.ping`.
+- **Job returns are written in batches**: a job returning from thousands of minions is recorded with a handful of database statements instead of several per minion. On Postgres the history no longer falls tens of seconds behind on big jobs, and recording takes a fraction of the CPU it did.
+- **The event stream stays open behind proxies**: when the event bus is quiet, each browser's stream gets a keepalive every 20 seconds, so a proxy or load balancer doesn't close it as idle.
+
+**Deployment**
+
+- **Web and worker**: `ROLE=web` serves the UI and the API from the database and does no background work; `ROLE=worker` records jobs, runs schedules, runbooks and changes, checks who responds and keeps the fleet table, and answers only `/healthz` and `/metrics`. The default, `ROLE=all`, does both as before. `deploy/compose.worker.yml` adds a worker next to the web container. Run at least one instance that is not `web`, or nothing gets recorded. See [Web and worker](https://pipozzz.github.io/salt-shaker/deploy/docker/#web-and-worker).
+- The vulnerability report is built by the instance doing the background work as soon as new inventories arrive, instead of on the first visit to **Vulnerabilities**.
+
+**Upgrading**
+
+- No database migrations.
+- An empty `DATABASE_URL` now counts as unset (SQLite in `DATA_DIR`), as it does for the other settings.
 
 ## 1.40.1
 

@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { HistoryRecorder, isDryRun, parseJobEvent, takeSseData } from './history'
 import { openTestDatabase, testDialects } from './testdb'
 
@@ -149,6 +149,68 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
     expect(j.startedAt.toISOString()).toBe('2026-11-18T12:49:14.123Z')
     const [r] = await returns(jid)
     expect(r.returnedAt.toISOString()).toBe('2026-11-18T12:49:15.500Z')
+  })
+
+  it('writes a batch of events as they would be written one by one', async () => {
+    const jid = '20261120090000000001'
+    const missed = '20261120090000000002'
+    const minions = Array.from({ length: 1200 }, (_, i) => `app-${String(i).padStart(4, '0')}`)
+    const seen: string[] = []
+    const batchRec = new HistoryRecorder(opened.db, opened.schema, { subscribe: () => () => undefined }, 30)
+    batchRec.onReturn((r) => seen.push(`${r.jid}/${r.minion}`))
+    const early = '20261120090000000004'
+    await batchRec.record(`salt/job/${jid}/new`, { ...newEvent, jid, minions, tgt: 'app-*' })
+    await batchRec.record(`salt/job/${jid}/ret/app-0000`, { ...retEvent, jid, id: 'app-0000' })
+    await batchRec.recordAll([
+      [`salt/job/${jid}/ret/app-0001`, { ...retEvent, jid, id: 'app-0001', retcode: 1 }],
+      // a return before its job's "new" in the same batch: the "new" still describes the job
+      [`salt/job/${early}/ret/db-02`, { ...retEvent, jid: early, id: 'db-02' }],
+      [`salt/job/${early}/new`, { ...newEvent, jid: early, minions: ['db-02'], tgt: 'db-*' }],
+      ...minions.slice(2).map((m, i): [string, Record<string, unknown>] => [`salt/job/${jid}/ret/${m}`, { ...retEvent, jid, id: m, success: i % 100 !== 0 }]),
+      // app-0000 again (already stored, now failing) and app-0001 twice in the batch (the last wins)
+      [`salt/job/${jid}/ret/app-0000`, { ...retEvent, jid, id: 'app-0000', retcode: 3 }],
+      [`salt/job/${jid}/ret/app-0001`, { ...retEvent, jid, id: 'app-0001' }],
+      [`salt/job/${missed}/ret/db-01`, { ...retEvent, jid: missed, id: 'db-01', metadata: {} }],
+      ['salt/job/20261120090000000003/new', { ...newEvent, fun: 'test.ping' }],
+    ])
+    const [j] = await jobs(jid)
+    // 1198 returns failing every 100th (12), app-0000 failing, app-0001 not
+    expect(j).toMatchObject({ target: 'app-*', returned: 1200, failed: 13, shakerUser: 'otto' })
+    const stored = await returns(jid)
+    expect(stored).toHaveLength(1200)
+    expect(stored.find((r) => r.minion === 'app-0000')).toMatchObject({ retcode: 3 })
+    expect(stored.find((r) => r.minion === 'app-0001')).toMatchObject({ retcode: 0 })
+    expect(await jobs(missed)).toMatchObject([{ minions: '["db-01"]', returned: 1, shakerUser: null }])
+    expect(await jobs(early)).toMatchObject([{ target: 'db-*', returned: 1 }])
+    // app-0000 alone, then every distinct return of the batch once
+    expect(seen).toHaveLength(1 + 1200 + 2)
+  })
+
+  it('records events that arrive while a write is under way together, and the rest of a batch that fails', async () => {
+    let listener: (e: { tag: string; data: Record<string, unknown> }) => void = () => undefined
+    const busRec = new HistoryRecorder(opened.db, opened.schema, { subscribe: (fn) => ((listener = fn as typeof listener), () => undefined) }, 30)
+    const batches: number[] = []
+    const write = busRec.recordAll.bind(busRec)
+    let failOnce = true
+    busRec.recordAll = async (events, notify) => {
+      batches.push(events.length)
+      if (failOnce && events.length > 1) {
+        failOnce = false
+        throw new Error('the database blinked')
+      }
+      return write(events, notify)
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    busRec.start()
+    const jid = '20261120090000000010'
+    listener({ tag: `salt/job/${jid}/new`, data: { ...newEvent, jid } })
+    for (let i = 0; i < 50; i++) listener({ tag: `salt/job/${jid}/ret/m-${i}`, data: { ...retEvent, jid, id: `m-${i}` } })
+    await vi.waitFor(async () => expect((await jobs(jid))[0]?.returned).toBe(50))
+    busRec.stop()
+    warn.mockRestore()
+    // the first event alone, the 50 that came meanwhile in one batch, which failed and was redone one by one
+    expect(batches.slice(0, 2)).toEqual([1, 50])
+    expect(batches.length).toBe(2 + 50)
   })
 
   it('prunes jobs past the retention window with their returns', async () => {

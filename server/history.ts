@@ -130,6 +130,15 @@ export interface StreamStatus {
 
 // events waiting to be written; past this (the database is far behind) new ones are dropped
 const MAX_QUEUED = 50_000
+// events written together at most
+const MAX_BATCH = 2000
+
+// what a repeated return replaces
+const RETURN_COLUMNS = ['ret', 'retcode', 'success', 'summary', 'returnedAt'] as const
+
+function* chunks<T>(list: T[], size: number) {
+  for (let i = 0; i < list.length; i += size) yield list.slice(i, i + size)
+}
 
 export class HistoryRecorder {
   private db: Db
@@ -180,8 +189,10 @@ export class HistoryRecorder {
   }
 
   /**
-   * Events are written one after another, in the order they came (a job's "new" before its
-   * returns), without making the stream wait for the database: browsers read the same stream.
+   * Events are written in the order they came (a job's "new" before its returns), without making
+   * the stream wait for the database: browsers read the same stream. What arrives while a write is
+   * under way goes into the next one together, so a job returning from hundreds of minions takes a
+   * handful of statements instead of several for every minion.
    */
   private enqueue(tag: string, data: Record<string, unknown>) {
     if (this.queue.length >= MAX_QUEUED) {
@@ -195,11 +206,20 @@ export class HistoryRecorder {
   private async drain() {
     this.draining = true
     try {
-      for (let next = this.queue.shift(); next; next = this.queue.shift()) {
+      while (this.queue.length) {
+        const batch = this.queue.splice(0, MAX_BATCH)
         try {
-          await this.record(next[0], next[1])
+          await this.recordAll(batch)
         } catch (err) {
-          console.warn('history: could not record event', err)
+          // one bad event must not lose the others: write them one by one to find it
+          for (const [tag, data] of batch) {
+            try {
+              await this.recordAll([[tag, data]], false)
+            } catch (e) {
+              console.warn('history: could not record event', e)
+            }
+          }
+          if (batch.length > 1) console.warn('history: a batch of events failed, recorded them one by one', err)
         }
       }
     } finally {
@@ -208,32 +228,75 @@ export class HistoryRecorder {
   }
 
   async record(tag: string, data: Record<string, unknown>) {
-    for (const l of this.eventListeners) l(tag, data)
-    const parsed = parseJobEvent(tag, data)
-    if (!parsed) return
-    const { job, jobReturn } = this.schema
-    if (parsed.kind === 'new') {
-      await this.db.insert(job).values(parsed.job).onConflictDoNothing()
-      return
+    await this.recordAll([[tag, data]])
+  }
+
+  /** Writes events in one go. `notify` is false when retrying a batch whose listeners already ran. */
+  async recordAll(events: Array<[string, Record<string, unknown>]>, notify = true) {
+    const jobs = new Map<string, NewJob>()
+    // the last return of a minion wins, as it would one after another
+    const rets = new Map<string, JobRet>()
+    for (const [tag, data] of events) {
+      if (notify) for (const l of this.eventListeners) l(tag, data)
+      const parsed = parseJobEvent(tag, data)
+      if (parsed?.kind === 'new') {
+        if (!jobs.has(parsed.job.jid)) jobs.set(parsed.job.jid, parsed.job)
+      } else if (parsed) {
+        const key = `${parsed.ret.jid}\0${parsed.ret.minion}`
+        rets.delete(key)
+        rets.set(key, parsed.ret)
+      }
     }
-    const r = parsed.ret
-    // the "new" event may have been missed (server restarted mid-job): create the job from the return
+    const { job, jobReturn } = this.schema
+    if (jobs.size) await this.db.insert(job).values([...jobs.values()]).onConflictDoNothing()
+    if (!rets.size) return
+    const returns = [...rets.values()]
+
+    // the "new" event may have been missed (server restarted mid-job): create the job from a return
+    const firstOf = new Map<string, JobRet>()
+    for (const r of returns) if (!firstOf.has(r.jid)) firstOf.set(r.jid, r)
     await this.db
       .insert(job)
-      .values({ jid: r.jid, fun: r.fun, args: r.args, saltUser: r.saltUser, shakerUser: r.shakerUser, minions: JSON.stringify([r.minion]), dryRun: isDryRun(JSON.parse(r.args)), startedAt: r.returnedAt })
+      .values([...firstOf.values()].map((r) => ({ jid: r.jid, fun: r.fun, args: r.args, saltUser: r.saltUser, shakerUser: r.shakerUser, minions: JSON.stringify([r.minion]), dryRun: isDryRun(JSON.parse(r.args)), startedAt: r.returnedAt })))
       .onConflictDoNothing()
-    if (r.shakerUser) await this.db.update(job).set({ shakerUser: r.shakerUser }).where(and(eq(job.jid, r.jid), isNull(job.shakerUser)))
-    const row = { jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode, success: r.success, summary: r.summary, returnedAt: r.returnedAt }
+    const startedBy = new Map<string, string>()
+    for (const r of returns) if (r.shakerUser && !startedBy.has(r.jid)) startedBy.set(r.jid, r.shakerUser)
+    for (const [jid, who] of startedBy) await this.db.update(job).set({ shakerUser: who }).where(and(eq(job.jid, jid), isNull(job.shakerUser)))
+
     // a return can come twice (a minion that retried); the job's counts follow what is stored
-    const [before] = await this.db.select({ retcode: jobReturn.retcode, success: jobReturn.success }).from(jobReturn).where(and(eq(jobReturn.jid, r.jid), eq(jobReturn.minion, r.minion))).limit(1)
-    await this.db
-      .insert(jobReturn)
-      .values(row)
-      .onConflictDoUpdate({ target: [jobReturn.jid, jobReturn.minion], set: row })
-    const returned = before ? 0 : 1
-    const failed = Number(returnFailed(r)) - Number(!!before && returnFailed(before))
-    if (returned || failed) await this.db.update(job).set({ returned: sql`${job.returned} + ${returned}`, failed: sql`${job.failed} + ${failed}` }).where(eq(job.jid, r.jid))
-    for (const l of this.returnListeners) l(r)
+    const before = new Map<string, { retcode: number | null; success: boolean | null }>()
+    const jids = [...firstOf.keys()]
+    const minions = [...new Set(returns.map((r) => r.minion))]
+    for (const part of chunks(minions, 1000)) {
+      const rows = await this.db
+        .select({ jid: jobReturn.jid, minion: jobReturn.minion, retcode: jobReturn.retcode, success: jobReturn.success })
+        .from(jobReturn)
+        .where(and(inArray(jobReturn.jid, jids), inArray(jobReturn.minion, part)))
+      for (const b of rows) before.set(`${b.jid}\0${b.minion}`, b)
+    }
+
+    const fresh = Object.fromEntries(RETURN_COLUMNS.map((k) => [k, sql`excluded.${sql.identifier(jobReturn[k].name)}`]))
+    for (const [i, part] of [...chunks(returns, 250)].entries()) {
+      // SQLite writes without letting go of the event loop: give requests a turn between chunks
+      if (i) await new Promise((r) => setImmediate(r))
+      await this.db
+        .insert(jobReturn)
+        .values(part.map((r) => ({ jid: r.jid, minion: r.minion, ret: r.ret, retcode: r.retcode, success: r.success, summary: r.summary, returnedAt: r.returnedAt })))
+        .onConflictDoUpdate({ target: [jobReturn.jid, jobReturn.minion], set: fresh })
+    }
+
+    const counts = new Map<string, { returned: number; failed: number }>()
+    for (const [key, r] of rets) {
+      const b = before.get(key)
+      const c = counts.get(r.jid) ?? { returned: 0, failed: 0 }
+      c.returned += b ? 0 : 1
+      c.failed += Number(returnFailed(r)) - Number(!!b && returnFailed(b))
+      counts.set(r.jid, c)
+    }
+    for (const [jid, c] of counts) {
+      if (c.returned || c.failed) await this.db.update(job).set({ returned: sql`${job.returned} + ${c.returned}`, failed: sql`${job.failed} + ${c.failed}` }).where(eq(job.jid, jid))
+    }
+    for (const r of returns) for (const l of this.returnListeners) l(r)
   }
 
   /** Old jobs, and old audit entries when AUDIT_RETENTION_DAYS is set. Runs on the leader only. */

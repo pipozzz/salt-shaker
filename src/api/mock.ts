@@ -37,6 +37,7 @@ function makeGrains(id: string, os: string, osrelease: string, cpus: number, mem
     num_cpus: cpus,
     mem_total: mem,
     ipv4: ['127.0.0.1', ip],
+    ip4_interfaces: { lo: ['127.0.0.1'], eth0: [ip] },
     saltversion: '3007.1',
     pythonversion: [3, 10, 14, 'final', 0],
     virtual: 'kvm',

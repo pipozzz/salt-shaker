@@ -25,6 +25,18 @@ it('groups minions by what they share', () => {
   expect(layout(fleet, 'os', 'os')[0]).toMatchObject({ key: 'Ubuntu 24', groups: [{ key: '' }] })
 })
 
+it('takes the network from a real interface, not a VPN or container bridge', () => {
+  // Salt sorts ipv4, so the WireGuard address comes first
+  const vpnGateway = { ipv4: ['10.250.0.1', '127.0.0.1', '172.31.5.20'], ip4_interfaces: { lo: ['127.0.0.1'], wg0: ['10.250.0.1'], eth0: ['172.31.5.20'] } }
+  expect(subnetOf(vpnGateway)).toBe('172.31.5.0/24')
+  const dockerHost = { ipv4: ['127.0.0.1', '172.17.0.1', '192.168.1.40'], ip4_interfaces: { lo: ['127.0.0.1'], docker0: ['172.17.0.1'], 'br-3f2a': ['172.18.0.1'], ens18: ['192.168.1.40'] } }
+  expect(subnetOf(dockerHost)).toBe('192.168.1.0/24')
+  // only virtual interfaces: still a network rather than none
+  expect(subnetOf({ ipv4: ['172.17.0.1'], ip4_interfaces: { docker0: ['172.17.0.1'] } })).toBe('172.17.0.0/24')
+  // a link-local address isn't a network
+  expect(subnetOf({ ipv4: ['169.254.3.4', '10.1.2.3'] })).toBe('10.1.2.0/24')
+})
+
 it('colours a minion by the chosen state', () => {
   const s = {
     up: new Set(['web-10', 'db-01']),

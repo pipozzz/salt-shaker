@@ -14,9 +14,21 @@ export const GROUPINGS = {
 } as const
 export type Grouping = keyof typeof GROUPINGS
 
-/** The first address that isn't loopback, as its /24. */
+// interfaces a host makes for containers, VMs and tunnels: their addresses don't say which network it's on
+const VIRTUAL_IF = /^(lo|docker|br-|veth|virbr|vnet|cni|flannel|cali|vxlan|kube|weave|cilium|lxc|lxd|incus|podman|tun|tap|wg|tailscale|zt|ppp|ipsec)/
+const usable = (a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a) && !a.startsWith('127.') && !a.startsWith('169.254.')
+
+/**
+ * The network a minion is on, as the /24 of its address on a real interface. Salt sorts ipv4
+ * alphabetically, so its first entry is often a VPN or the Docker bridge rather than the LAN.
+ */
 export function subnetOf(g: Grains) {
-  const ip = (g.ipv4 ?? []).find((a) => !a.startsWith('127.') && /^\d+\.\d+\.\d+\.\d+$/.test(a))
+  const byIf = g.ip4_interfaces && typeof g.ip4_interfaces === 'object' ? Object.entries(g.ip4_interfaces) : []
+  const real = byIf
+    .filter(([name]) => !VIRTUAL_IF.test(name))
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .flatMap(([, ips]) => (Array.isArray(ips) ? ips : []))
+  const ip = [...real, ...(g.ipv4 ?? [])].find((a) => typeof a === 'string' && usable(a))
   return ip ? `${ip.split('.').slice(0, 3).join('.')}.0/24` : 'no address'
 }
 

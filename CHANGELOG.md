@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.42.0
+
+**Monitoring**
+
+- **A missing worker is noticed**: when no instance follows the event bus, so jobs aren't recorded and schedules don't run, a `ROLE=web` instance logs a warning after two minutes and again once a worker is back. **System** shows the instance's role and says what to start. `/metrics` reports `salt_shaker_events_followed`, which a web instance can alert on. See [Monitoring](https://pipozzz.github.io/salt-shaker/deploy/monitoring/).
+- `/metrics` reports `salt_shaker_event_loop_delay_max_seconds`: the longest the process kept every request and the event stream waiting since the last scrape. The monitoring page has an example alert.
+
+**Minions**
+
+- Under **Responding**, Minions shows when the server last asked the master who answers ("checked 15s ago").
+
+**Fixes**
+
+- After an event, a quiet event stream could go up to about 40 seconds without a keepalive. It now gets one about every 20 seconds of silence, so proxies with a 30 second idle timeout don't close it.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.41.0
 
 **Users**

@@ -53,6 +53,8 @@ If the provider can't be reached when the server starts, SSO stays off. The serv
 
 ## Trying it
 
+A local account whose username is the same email address as an SSO user's blocks that user's SSO sign-in: Salt Shaker never merges the two. Delete the local account, or don't create one, for people who sign in through SSO.
+
 The [local lab](/salt-shaker/start/quickstart/#full-local-lab) includes a mock provider. Click **Sign in with Lab SSO**, type any username, and add claims such as:
 
 ```json

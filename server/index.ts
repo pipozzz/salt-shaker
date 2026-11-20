@@ -9,7 +9,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from 'hono'
 import { auditCsv, auditFilter, auditWhere } from './audit'
-import { CLIENT_IP_HEADER, createAuth, emailFor, USERNAME } from './auth'
+import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
+import { isUsername, USERNAME_RULE } from '../src/lib/username'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
@@ -248,7 +249,7 @@ app.post('/api/setup', async (c) => {
   try {
     const body = await c.req.json<{ username?: string; name?: string; password?: string }>()
     const username = body.username?.trim().toLowerCase() ?? ''
-    if (!USERNAME.test(username)) return c.json({ error: 'Username: 3–32 characters, letters, digits, . _ -' }, 400)
+    if (!isUsername(username)) return c.json({ error: `Username: ${USERNAME_RULE}` }, 400)
     if (!body.password || body.password.length < 10) return c.json({ error: 'Password must be at least 10 characters' }, 400)
     await auth.api.createUser({ body: { email: emailFor(username), password: body.password, name: body.name?.trim() || username, role: 'admin', data: { username } } })
     return c.json({ ok: true })

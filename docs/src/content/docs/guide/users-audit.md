@@ -10,6 +10,8 @@ Admins create and manage accounts on the **Users** page. Each account has one [r
 
 ![Users](../../../../screenshots/users.png)
 
+A username is a short name (3–32 characters: letters, digits, `.`, `_`, `-`) or an email address. Existing accounts keep their names; usernames can't be changed, so to switch someone to an address, add a new account and delete the old one. The audit log keeps the old name on past entries.
+
 With [single sign-on](/salt-shaker/deploy/sso/), users are created on their first sign-in and marked with the provider's name. They have no password here. When roles come from the provider's groups, they can't be changed on this page.
 
 To stop someone from signing in, give them the *none* role, disable them, or delete them.

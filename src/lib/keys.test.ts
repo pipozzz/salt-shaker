@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SaltApi } from '../api/salt'
 import type { Transport } from '../api/types'
-import { fingersOf, listOf, noKeysPicked, pickKeys, type KeyFingers } from './keys'
+import { fingersOf, listOf, noKeysPicked, pickKeys, replacesAccepted, shortFinger, type KeyFingers } from './keys'
 
 // web-01 was reinstalled: its old key is still accepted, the new one is denied
 const fingers: KeyFingers = {
@@ -37,6 +37,26 @@ describe('SaltApi.fingerprints', () => {
     const got = await new SaltApi(transport, 'token', () => {}).fingerprints()
     expect(got.minions?.['web-01']).toBe('aa:aa')
     expect(got.minions_denied?.['web-01']).toBe('bb:bb')
+  })
+})
+
+describe('replacesAccepted', () => {
+  it('is a denied key whose id also has an accepted one', () => {
+    expect(replacesAccepted('web-01', { minions: ['web-01'], minions_denied: ['web-01'] })).toBe(true)
+  })
+  it('is not a denied key alone, nor an accepted one alone', () => {
+    expect(replacesAccepted('web-01', { minions: [], minions_denied: ['web-01'] })).toBe(false)
+    expect(replacesAccepted('web-01', { minions: ['web-01'], minions_denied: [] })).toBe(false)
+  })
+})
+
+describe('shortFinger', () => {
+  const sha256 = '04:09:82:7b:80:60:ae:f5:db:90:6a:f7:dd:aa:e9:d5:d3:17:53:22:db:29:40:29:b5:a5:b8:39:e8:93:5b:2c'
+  it('shows the first 8 bytes of a longer one', () => {
+    expect(shortFinger(sha256)).toBe('04:09:82:7b:80:60:ae:f5…')
+  })
+  it('leaves a short one whole', () => {
+    expect(shortFinger('04:09:82')).toBe('04:09:82')
   })
 })
 

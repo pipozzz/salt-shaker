@@ -170,7 +170,7 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
   )
 }
 
-export function CopyButton({ text, label }: { text: string; label?: string }) {
+export function CopyButton({ text, label, ariaLabel, iconOnly }: { text: string; label?: string; ariaLabel?: string; iconOnly?: boolean }) {
   const [done, setDone] = useState(false)
   useEffect(() => {
     if (!done) return
@@ -183,8 +183,10 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
       variant="ghost"
       icon={done ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
       onClick={() => navigator.clipboard.writeText(text).then(() => setDone(true))}
+      aria-label={ariaLabel}
+      title={iconOnly ? (done ? 'Copied' : 'Copy') : undefined}
     >
-      {label ?? (done ? 'Copied' : 'Copy')}
+      {iconOnly ? null : (label ?? (done ? 'Copied' : 'Copy'))}
     </Button>
   )
 }

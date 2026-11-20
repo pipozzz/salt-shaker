@@ -14,6 +14,15 @@ export function listOf(section: KeySection, id: string, denied: readonly string[
   return denied.includes(id) ? 'minions_denied' : 'minions_rejected'
 }
 
+/**
+ * A denied key whose id also has an accepted one: the same minion with a new key, usually after a
+ * reinstall. Accepting it replaces the accepted key.
+ */
+export const replacesAccepted = (id: string, keys: { minions: readonly string[]; minions_denied: readonly string[] }) => keys.minions_denied.includes(id) && keys.minions.includes(id)
+
+/** How much of a fingerprint a row shows before it's opened: the first 8 bytes. */
+export const shortFinger = (finger: string) => (finger.length > 23 ? `${finger.slice(0, 23)}…` : finger)
+
 export type PickedKeys = Record<KeySection, ReadonlySet<string>>
 
 export const noKeysPicked = (): PickedKeys => ({ pending: new Set(), accepted: new Set(), refused: new Set() })

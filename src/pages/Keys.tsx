@@ -1,13 +1,14 @@
 import { EnrollmentWindows } from '../components/EnrollmentWindows'
 import { QuietKeys } from '../components/QuietKeys'
 import clsx from 'clsx'
-import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
+import { Ban, Check, CheckCheck, KeyRound, Plus, RefreshCw, Replace, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { SaltApi } from '../api/salt'
 import type { KeyList, KeyStatus } from '../api/types'
 import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
-import { fingersOf, listOf, noKeysPicked, pickKeys, type KeyFingers, type KeySection, type PickedKeys } from '../lib/keys'
+import { KeyFingerprint } from '../components/KeyFingerprint'
+import { fingersOf, listOf, noKeysPicked, pickKeys, replacesAccepted, type KeyFingers, type KeySection, type PickedKeys } from '../lib/keys'
 import { masterHostFrom } from '../lib/master'
 import { useCan, useKeyEvents, useSalt, useSession } from '../lib/session'
 
@@ -23,6 +24,7 @@ export function KeysPage() {
   const [actionError, setActionError] = useState<Error | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; from: KeyStatus } | null>(null)
+  const [confirmReplace, setConfirmReplace] = useState<string | null>(null)
   // keys picked for a bulk action, per card: an id can have an accepted key and a denied one at once
   const [selected, setSelected] = useState<PickedKeys>(noKeysPicked)
   const toggle = (section: KeySection, ids: string[], on: boolean) => setSelected((prev) => pickKeys(prev, section, ids, on))
@@ -181,8 +183,24 @@ export function KeysPage() {
                 }
                 subtitle="Denied keys belong to a minion id that already has a different accepted key."
               />
-              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={fingersOf(data?.fingers, 'minions_rejected', 'minions_denied')} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick('refused')} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
-                {(id) => (
+              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={fingersOf(data?.fingers, 'minions_rejected', 'minions_denied')} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick('refused')}
+                tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}
+                note={(id) => {
+                  const old = replacesAccepted(id, k) ? data?.fingers.minions?.[id] : undefined
+                  return old ? <KeyFingerprint id={id} finger={old} label="accepted" /> : null
+                }}
+              >
+                {(id) =>
+                  replacesAccepted(id, k) ? (
+                    <>
+                      <Button size="sm" variant="ghost" icon={<Replace className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => setConfirmReplace(id)}>
+                        Replace accepted key
+                      </Button>
+                      <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setConfirmDelete({ id, from: 'minions_denied' })}>
+                        Delete
+                      </Button>
+                    </>
+                  ) : (
                   <>
                     <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id, listOf('refused', id, k.minions_denied))}>
                       Accept
@@ -191,12 +209,52 @@ export function KeysPage() {
                       Delete
                     </Button>
                   </>
-                )}
+                  )
+                }
               </KeyRows>
             </Card>
           )}
         </div>
       )}
+
+      <Modal open={!!confirmReplace} onClose={() => setConfirmReplace(null)} title="Replace the accepted key?">
+        {confirmReplace && (
+          <div className="space-y-4 text-sm">
+            <p className="text-zinc-600 dark:text-zinc-400">
+              <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{confirmReplace}</span> has a new key, denied because the master already accepted another one for it, usually
+              after a reinstall. Accepting the new key removes the old one: a machine still using the old key can no longer reach the master. Compare the new fingerprint with{' '}
+              <code>salt-call --local key.finger</code> on the minion first.
+            </p>
+            <dl className="space-y-1.5 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" aria-label="Fingerprints">
+              {(
+                [
+                  ['New (denied)', data?.fingers.minions_denied?.[confirmReplace]],
+                  ['Old (accepted)', data?.fingers.minions?.[confirmReplace]],
+                ] as const
+              ).map(([name, finger]) => (
+                <div key={name}>
+                  <dt className="text-xs text-zinc-500 dark:text-zinc-400">{name}</dt>
+                  <dd className="break-all font-mono text-xs">{finger ?? 'unknown'}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setConfirmReplace(null)}>Cancel</Button>
+              <Button
+                variant="success"
+                icon={<Replace className="size-4" />}
+                loading={busy === `accept:${confirmReplace}`}
+                onClick={async () => {
+                  await act('accept', confirmReplace, 'minions_denied')
+                  setConfirmReplace(null)
+                }}
+              >
+                Replace key
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete key?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -225,6 +283,7 @@ export function KeysPage() {
           ids={bulk.ids}
           fingers={bulk.fingers}
           from={(id) => listOf(bulk.section, id, k?.minions_denied ?? [])}
+          replaces={(id) => bulk.section === 'refused' && !!k && replacesAccepted(id, k)}
           onClose={() => setBulk(null)}
           onDone={(done) => {
             toggle(bulk.section, done, false)
@@ -260,6 +319,7 @@ function KeyRows({
   fingers,
   children,
   tag,
+  note,
   pageKey = '',
   label,
   bulkActions,
@@ -271,6 +331,8 @@ function KeyRows({
   fingers: Record<string, string>
   children: (id: string) => ReactNode
   tag?: (id: string) => ReactNode
+  /** a second line under the row, such as the accepted key a denied one would replace */
+  note?: (id: string) => ReactNode
   pageKey?: string
   /** what the list holds, for the select-all box */
   label: string
@@ -312,13 +374,9 @@ function KeyRows({
             {canManage && <RowCheck label={`Select ${id}`} checked={selected.has(id)} onChange={(on) => onToggle([id], on)} />}
             <span className="font-mono text-sm font-medium">{id}</span>
             {tag?.(id)}
-            {fingers[id] && (
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400" title={fingers[id]}>
-                <Fingerprint className="size-3.5 shrink-0" />
-                <span className="truncate font-mono">{fingers[id].slice(0, 23)}…</span>
-              </span>
-            )}
+            {fingers[id] && <KeyFingerprint id={id} finger={fingers[id]} label={note?.(id) ? 'new' : undefined} />}
             {canManage && <span className="ml-auto flex gap-1.5">{children(id)}</span>}
+            {note?.(id) && <div className="basis-full pl-7">{note(id)}</div>}
           </li>
         ))}
       </ul>
@@ -336,6 +394,7 @@ function BulkKeysModal({
   ids,
   fingers,
   from,
+  replaces,
   onClose,
   onDone,
 }: {
@@ -344,6 +403,8 @@ function BulkKeysModal({
   fingers: Record<string, string>
   /** the list each key is in, so only that key is touched and not another key of the same id */
   from: (id: string) => KeyStatus
+  /** a denied key that, accepted, replaces the accepted key of the same id */
+  replaces: (id: string) => boolean
   onClose: () => void
   onDone: (done: string[]) => void
 }) {
@@ -383,6 +444,7 @@ function BulkKeysModal({
             return (
               <li key={id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5">
                 <span className="font-mono font-medium">{id}</span>
+                {action === 'accept' && replaces(id) && <Badge tone="amber">replaces the accepted key</Badge>}
                 {action === 'accept' && fingers[id] && <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{fingers[id]}</span>}
                 {progress?.done.includes(id) && <Badge tone="green" className="ml-auto">{verb.done}</Badge>}
                 {failed && (

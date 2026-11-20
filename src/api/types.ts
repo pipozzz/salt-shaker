@@ -37,7 +37,8 @@ export interface Transport {
   /** Optional shortcut for fleet grains (the server caches and trims them). */
   fleet?(fresh: boolean): Promise<Record<string, Grains>>
   /** Optional shortcut for who answers (the server keeps it; `fresh` asks the master now). */
-  status?(fresh: boolean): Promise<{ up: string[]; down: string[] }>
+  /** who answers; `checkedAt` is when that was asked, when the transport keeps it */
+  status?(fresh: boolean): Promise<{ up: string[]; down: string[]; checkedAt?: string | null }>
   /** Subscribes to the master event bus; returns an unsubscribe function. */
   events(token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void): () => void
 }

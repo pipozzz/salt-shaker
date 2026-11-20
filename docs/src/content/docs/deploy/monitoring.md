@@ -42,6 +42,8 @@ All are gauges.
 | `salt_shaker_schedule_last_run_failed_minions` | `schedule`, `kind` | failed returns in its last run |
 | `salt_shaker_schedule_last_run_error` | `schedule`, `kind` | 1 if the last run couldn't start |
 | `salt_shaker_events_leader` | | 1 on the instance that records job history |
+| `salt_shaker_events_followed` | | 1 when some instance records job history, as seen from this one; 0 on a `ROLE=web` instance means no worker is running |
+| `salt_shaker_event_loop_delay_max_seconds` | | the longest this process kept everything waiting since the previous scrape; above a few tenths of a second, requests and the event stream stall |
 | `salt_shaker_salt_api_calls_running` | `lane`: interactive, background | calls to salt-api being made now |
 | `salt_shaker_salt_api_calls_waiting` | `lane`: interactive, background | calls waiting for a free slot (see `SALT_API_CONCURRENCY`); a number that stays above 0 means the master is slow or the limit is too low |
 
@@ -68,4 +70,7 @@ groups:
       - alert: SaltNoHistoryRecorder
         expr: max(salt_shaker_events_leader) == 0
         for: 5m
+      - alert: SaltShakerStalls
+        expr: salt_shaker_event_loop_delay_max_seconds > 1
+        for: 10m
 ```

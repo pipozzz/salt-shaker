@@ -9,7 +9,7 @@ export interface SystemDeps {
   db: Db
   schema: Schema
   salt: Pick<SaltService, 'call'>
-  config: Pick<Config, 'publicUrl' | 'trustedOrigins' | 'dialect' | 'saltApi' | 'historyDays' | 'auditDays' | 'presenceMinutes' | 'trustProxy' | 'passwordLogin' | 'oidc' | 'metricsToken'>
+  config: Pick<Config, 'role' | 'publicUrl' | 'trustedOrigins' | 'dialect' | 'saltApi' | 'historyDays' | 'auditDays' | 'presenceMinutes' | 'trustProxy' | 'passwordLogin' | 'oidc' | 'metricsToken'>
   version: string
   instance: string
   startedAt: Date
@@ -47,6 +47,7 @@ export async function systemStatus(d: SystemDeps) {
   return {
     version: d.version,
     instance: d.instance,
+    role: config.role,
     startedAt: d.startedAt,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     saltApi: { url: config.saltApi.url, username: config.saltApi.username, eauth: config.saltApi.eauth, ...saltApi },

@@ -112,6 +112,8 @@ export class EventHub {
     let out!: ReadableStreamDefaultController<Uint8Array>
     let leave = () => {}
     let beat: ReturnType<typeof setInterval> | undefined
+    // when this browser was last sent anything
+    let wrote = performance.now()
     const close = () => {
       clearInterval(beat)
       leave()
@@ -125,7 +127,10 @@ export class EventHub {
     leave = this.subscribe((e) => {
       // a tab that stopped reading must not make the server keep everything for it
       if ((out.desiredSize ?? 0) <= 0) close()
-      else out.enqueue(e.frame)
+      else {
+        out.enqueue(e.frame)
+        wrote = performance.now()
+      }
     }, close)
     signal.addEventListener('abort', close, { once: true })
     if (!(await this.ready(waitMs)) || signal.aborted) {
@@ -134,17 +139,15 @@ export class EventHub {
     }
     // something to send right away, so the response starts and the browser knows it is connected
     out.enqueue(enc.encode(': connected\n\n'))
-    let sent = this.status.lastEventAt?.getTime() ?? 0
+    wrote = performance.now()
+    // checked a few times per period, so the stream is never quiet much longer than keepaliveMs;
+    // a busy bus keeps it alive by itself
     beat = setInterval(() => {
-      // only when nothing else went out lately; a busy bus keeps the stream alive by itself
-      const last = this.status.lastEventAt?.getTime() ?? 0
-      if (last > sent) {
-        sent = last
-        return
-      }
-      if ((out.desiredSize ?? 0) <= 0) close()
-      else out.enqueue(KEEPALIVE)
-    }, this.keepaliveMs)
+      if (performance.now() - wrote < this.keepaliveMs) return
+      if ((out.desiredSize ?? 0) <= 0) return close()
+      out.enqueue(KEEPALIVE)
+      wrote = performance.now()
+    }, this.keepaliveMs / 4)
     beat.unref?.()
     return body
   }

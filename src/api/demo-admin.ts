@@ -63,6 +63,7 @@ export const demoSystem: typeof system = () =>
   delay<SystemStatus>({
     version: __APP_VERSION__,
     instance: 'demo:1:a1b2c3',
+    role: 'all',
     startedAt: started,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     saltApi: { url: 'https://salt-master.lab.internal:8000', username: 'salt-shaker', eauth: 'pam', ok: true, ms: 38, error: null, keys: { accepted: 6, pending: 2, rejected: 0, denied: 0 } },

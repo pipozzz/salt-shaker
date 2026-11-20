@@ -936,17 +936,42 @@ test('picked keys are accepted, rejected or deleted together after a look at the
   await page.getByRole('button', { name: 'Reject 2 keys' }).click()
   await expect(page.getByText(/These minions will be refused/)).toBeVisible()
   await page.getByRole('button', { name: 'Reject 2 keys' }).last().click()
-  await expect(page.getByRole('heading', { name: /Rejected & denied\s*3/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Rejected & denied\s*4/ })).toBeVisible()
   await expect(page.getByRole('heading', { name: /Accepted\s*6/ })).toBeVisible()
 
   // and deleted from there; cancelling first changes nothing
-  await page.getByRole('checkbox', { name: 'Select all 3 rejected and denied keys' }).check()
-  await page.getByRole('button', { name: 'Delete 3 keys' }).click()
+  await page.getByRole('checkbox', { name: 'Select all 4 rejected and denied keys' }).check()
+  await page.getByRole('button', { name: 'Delete 4 keys' }).click()
   await page.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByRole('heading', { name: /Rejected & denied\s*3/ })).toBeVisible()
-  await page.getByRole('button', { name: 'Delete 3 keys' }).click()
-  await page.getByRole('button', { name: 'Delete 3 keys' }).last().click()
+  await expect(page.getByRole('heading', { name: /Rejected & denied\s*4/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Delete 4 keys' }).click()
+  await page.getByRole('button', { name: 'Delete 4 keys' }).last().click()
   await expect(page.getByRole('heading', { name: /Rejected & denied/ })).toBeHidden()
+  // deleting mon-01's denied key left its accepted one
+  await expect(page.getByRole('heading', { name: /Accepted\s*6/ })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Select mon-01' })).toBeVisible()
+})
+
+test('a reinstalled minion shows both keys, and its new key replaces the old one', async ({ page }) => {
+  await openDemo(page, '/keys')
+  // mon-01's new key is denied; its row also shows the accepted key it would replace
+  const row = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Replace accepted key' }) })
+  await expect(row).toContainText('mon-01')
+  await expect(row.getByRole('button', { name: /^Show the whole new fingerprint of mon-01: ([0-9a-f]{2}:){7}[0-9a-f]{2}…$/ })).toBeVisible()
+  await row.getByRole('button', { name: /^Show the whole accepted fingerprint of mon-01/ }).click()
+  await expect(row.getByRole('button', { name: /^Hide the whole accepted fingerprint of mon-01: ([0-9a-f]{2}:){31}[0-9a-f]{2}$/ })).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Copy the new fingerprint of mon-01' })).toBeVisible()
+
+  await row.getByRole('button', { name: 'Replace accepted key' }).click()
+  const fingers = page.getByRole('definition')
+  await expect(fingers).toHaveCount(2)
+  const [newer, older] = [await fingers.nth(0).textContent(), await fingers.nth(1).textContent()]
+  expect(newer).not.toBe(older)
+  await page.getByRole('button', { name: 'Replace key' }).click()
+  await expect(page.getByRole('heading', { name: /Rejected & denied\s*1/ })).toBeVisible()
+  // mon-01 stays accepted, now with the new key
+  await expect(page.getByRole('heading', { name: /Accepted\s*6/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Replace accepted key' })).toBeHidden()
 })
 
 test('an enrollment window accepts the new keys that match it', async ({ page }) => {

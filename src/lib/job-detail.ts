@@ -30,5 +30,26 @@ export async function loadJobDetail(salt: { job: (jid: string) => Promise<JobDet
   return job
 }
 
+// the server stores this in place of a return too big to keep
+const isTruncated = (ret: unknown) => !!ret && typeof ret === 'object' && (ret as { _truncated?: unknown })._truncated === true
+
+/**
+ * The returns of a job that is still running, keyed by minion. With the server they come from
+ * its history, which records them from the event bus, so watching a job doesn't keep the master
+ * busy. The master's job cache answers when the server has not recorded the job (it skips some
+ * functions, such as test.ping) or kept only the size of a big return.
+ */
+export async function jobReturns(salt: { lookupJid: (jid: string) => Promise<Record<string, unknown>> }, fromServer: boolean, jid: string): Promise<Record<string, unknown>> {
+  if (fromServer) {
+    try {
+      const { returns } = await history.job(jid)
+      if (!returns.some((r) => isTruncated(r.ret))) return Object.fromEntries(returns.map((r) => [r.minion, r.ret]))
+    } catch (e) {
+      if (!(e instanceof SaltError && e.status === 404)) throw e
+    }
+  }
+  return salt.lookupJid(jid)
+}
+
 /** Each minion's return, keyed by minion. */
 export const jobResults = (job: JobDetail | null | undefined) => Object.fromEntries(Object.entries(job?.Result ?? {}).map(([id, r]) => [id, r.return]))

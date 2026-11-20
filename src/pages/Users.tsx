@@ -8,6 +8,7 @@ import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, 
 import { useAsync } from '../lib/hooks'
 import { useSession } from '../lib/session'
 import { relTime } from '../lib/format'
+import { isLocalAccount, isUsername, USERNAME_RULE } from '../lib/username'
 
 const ROLE_INFO: Record<Role, { tone: Tone; text: string }> = {
   admin: { tone: 'accent', text: 'Everything, including keys and users' },
@@ -30,7 +31,7 @@ function useScopesApi() {
 
 const scopeText = (s: UserScope) => `${s.targetType === 'glob' ? '' : `${s.targetType}:`}${s.target}`
 
-const isSso = (u: UserRow) => !u.email.endsWith('@users.salt-shaker.invalid')
+const isSso = (u: UserRow) => !isLocalAccount(u)
 
 export function UsersPage() {
   const users = useUsersApi()
@@ -245,6 +246,7 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!isUsername(username)) return setError(new Error(`Username: ${USERNAME_RULE}`))
     setBusy(true)
     setError(null)
     try {
@@ -265,8 +267,8 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
     <Modal open={open} onClose={onClose} title="Add user">
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Username">
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,31}" required autoFocus />
+          <Field label="Username" hint="A short name, or an email address">
+            <Input value={username} onChange={(e) => setUsername(e.target.value.trim())} required autoFocus aria-invalid={!!username && !isUsername(username)} />
           </Field>
           <Field label="Full name (optional)">
             <Input value={name} onChange={(e) => setName(e.target.value)} />

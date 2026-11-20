@@ -13,6 +13,8 @@ function ssoErrorFromUrl(ssoName?: string) {
   const p = new URLSearchParams(window.location.search)
   if (!p.has('sso_error')) return null
   const code = p.get('error') ?? 'unknown_error'
+  if (code === 'account_not_linked')
+    return new SaltError(`There is already a local account with your email address here, so ${ssoName ?? 'SSO'} can't sign in to it. Sign in with its password, or ask an admin to remove it and then use ${ssoName ?? 'SSO'} again.`)
   return new SaltError(
     /session/i.test(code)
       ? `Signed in with ${ssoName ?? 'SSO'}, but your account has no access to Salt Shaker. Ask an admin to grant you a role.`
@@ -219,7 +221,7 @@ function SetupForm({ onDemo }: { onDemo: () => void }) {
         <h2 className="font-semibold">Welcome! Create the first admin</h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">This server has no users yet. The account you create here can add everyone else.</p>
       </div>
-      <Field label="Username">
+      <Field label="Username" hint="A short name, or an email address.">
         <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required autoFocus />
       </Field>
       <Field label="Password" hint="At least 10 characters.">

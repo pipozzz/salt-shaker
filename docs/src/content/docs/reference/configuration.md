@@ -18,6 +18,7 @@ The server is configured with environment variables.
 | `INSTANCE_NAME` | the host of `PUBLIC_URL` | this instance's name among [several masters](/salt-shaker/deploy/masters/), e.g. `prod-eu` |
 | `PORT` | `8080` | port the server listens on |
 | `DATABASE_URL` | SQLite in `DATA_DIR` | set `postgres://user:pass@host/db` to use Postgres |
+| `ROLE` | `all` | what this instance does: `web` serves the UI and API, `worker` does the background work (job history, schedules, runbooks, presence, the vulnerability report), `all` both. See [Web and worker](/salt-shaker/deploy/docker/#web-and-worker) |
 | `DATA_DIR` | `/data` in the image | SQLite database and the generated auth secret |
 | `BETTER_AUTH_SECRET` | generated into `DATA_DIR` | set it explicitly when running on Postgres without a data volume |
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |

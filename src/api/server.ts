@@ -4,6 +4,7 @@ import type { MaintenanceWindow } from '../lib/windows'
 import type { ResolvedStep, RunbookInput } from '../lib/runbook'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
+import { emailFor } from '../lib/username'
 
 /** Talks to the Salt Shaker server (server/), which holds users and proxies salt-api. */
 
@@ -187,7 +188,7 @@ export interface UserRow {
 export const users = {
   list: () => request<{ users: UserRow[]; total: number }>('/api/auth/admin/list-users?limit=500&sortBy=createdAt&sortDirection=asc'),
   create: (u: { username: string; name: string; password: string; role: Role }) =>
-    post('/api/auth/admin/create-user', { email: `${u.username.toLowerCase()}@users.salt-shaker.invalid`, password: u.password, name: u.name || u.username, role: u.role, data: { username: u.username } }),
+    post('/api/auth/admin/create-user', { email: emailFor(u.username), password: u.password, name: u.name || u.username, role: u.role, data: { username: u.username } }),
   setRole: (userId: string, role: Role) => post('/api/auth/admin/set-role', { userId, role }),
   setPassword: (userId: string, newPassword: string) => post('/api/auth/admin/set-user-password', { userId, newPassword }),
   ban: (userId: string) => post('/api/auth/admin/ban-user', { userId }),

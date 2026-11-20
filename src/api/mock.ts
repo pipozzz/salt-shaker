@@ -92,7 +92,8 @@ const keys: KeyList = {
   minions: Object.keys(minions),
   minions_pre: ['worker-02', 'edge-lon-01'],
   minions_rejected: ['laptop-guest'],
-  minions_denied: [],
+  // mon-01 was reinstalled: its new key is denied while the old one is still accepted
+  minions_denied: ['mon-01'],
 }
 
 const files: Record<'file' | 'pillar', Record<string, string>> = {
@@ -786,7 +787,8 @@ export class MockTransport implements Transport {
         case 'key.finger': {
           const out: Record<string, Record<string, string>> = {}
           for (const l of ['minions', 'minions_pre', 'minions_rejected', 'minions_denied'] as const) {
-            out[l] = Object.fromEntries(keys[l].map((id) => [id, fingerprint(id)]))
+            // a denied key is a different key than the accepted one of the same id
+            out[l] = Object.fromEntries(keys[l].map((id) => [id, fingerprint(l === 'minions_denied' ? `${id}#new` : id)]))
           }
           return wheelOk(fun, out)
         }

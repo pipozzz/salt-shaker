@@ -9,7 +9,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from 'hono'
 import { auditCsv, auditFilter, auditWhere } from './audit'
-import { CLIENT_IP_HEADER, createAuth, emailFor, USERNAME } from './auth'
+import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
+import { isUsername, USERNAME_RULE } from '../src/lib/username'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
@@ -99,7 +100,9 @@ const keyList = async () => {
   return keysCache
 }
 const acceptedMinions = async () => (await keyList())?.ids ?? null
-const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions })
+// ROLE: a web instance leaves the background work to a worker, a worker doesn't serve the UI or API
+const background = config.role !== 'web'
+const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions, builds: background })
 const history = new HistoryRecorder(db, schema, events, config.historyDays, config.auditDays)
 const notifier = new Notifier(db, schema, config.publicUrl)
 if (config.smtpUrl) notifier.mail = smtpMailer(config.smtpUrl, config.smtpFrom)
@@ -119,15 +122,17 @@ const eventsLeader = new Leader(db, schema, 'events', {
     presence.start()
     minions.start()
     weeklyReport.start()
+    vulns.watch()
   },
   onLose: () => {
     history.stop()
     presence.stop()
     minions.stop()
     weeklyReport.stop()
+    vulns.unwatch()
   },
 })
-eventsLeader.start()
+if (background) eventsLeader.start()
 
 const app = new Hono<Env>()
 
@@ -171,6 +176,9 @@ app.get('/metrics', async (c) => {
   const gauges = await collectMetrics({ db, schema, salt: { call: saltBackground.call, stats: salt.stats }, version: pkg.version, isLeader: eventsLeader.isLeader })
   return c.text(formatMetrics(gauges), 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
 })
+
+// a worker answers health checks and metrics only
+if (config.role === 'worker') app.all('*', (c) => c.text('This instance is a worker (ROLE=worker); the UI and API are served by the web instances\n', 404))
 
 // The API is cookie-authenticated, so refuse state-changing requests from other origins.
 // Browsers always send Origin on POST; requests without one (curl, scripts) carry no cookies by accident.
@@ -242,7 +250,7 @@ app.post('/api/setup', async (c) => {
   try {
     const body = await c.req.json<{ username?: string; name?: string; password?: string }>()
     const username = body.username?.trim().toLowerCase() ?? ''
-    if (!USERNAME.test(username)) return c.json({ error: 'Username: 3–32 characters, letters, digits, . _ -' }, 400)
+    if (!isUsername(username)) return c.json({ error: `Username: ${USERNAME_RULE}` }, 400)
     if (!body.password || body.password.length < 10) return c.json({ error: 'Password must be at least 10 characters' }, 400)
     await auth.api.createUser({ body: { email: emailFor(username), password: body.password, name: body.name?.trim() || username, role: 'admin', data: { username } } })
     return c.json({ ok: true })
@@ -455,10 +463,10 @@ app.get('/api/history/compliance', async (c) => {
 
 const scheduler = new Scheduler(db, schema, saltBackground, notifier, (row) => audit({ ...row, role: 'system' }))
 scheduler.vulns = vulns
-scheduler.start()
+if (background) scheduler.start()
 // batched rollouts and approved changes; claims each step in the database, so every instance can run it
 const changeRunner = new ChangeRunner({ db, schema, salt: saltBackground, notifier, audit, expand: expandTarget })
-changeRunner.start()
+if (background) changeRunner.start()
 
 /** Who a runbook run acts as: its starter, while their account still may run commands. */
 async function activeUser(id: string): Promise<SessionUser | null> {
@@ -472,7 +480,7 @@ async function activeUser(id: string): Promise<SessionUser | null> {
   return { id: row.id, name: row.name, username: row.username, role: row.role }
 }
 const runbookRunner = new RunbookRunner({ db, schema, saltAs, loadUser: activeUser, notifier, expand: expandTarget })
-runbookRunner.start()
+if (background) runbookRunner.start()
 scheduler.runbooks = runbookScheduler({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval })
 // before automation: its admin-only middleware covers /api/* from where it's mounted
 // first: Slack signs its requests instead of signing in, and targetRoutes' guard covers every /api route after it
@@ -519,7 +527,7 @@ app.get('*', (c) => {
 })
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`salt-shaker ${pkg.version} listening on :${info.port} (${provider}, salt-api ${config.saltApi.url})`)
+  console.log(`salt-shaker ${pkg.version} listening on :${info.port} (role ${config.role}, ${provider}, salt-api ${config.saltApi.url})`)
 })
 
 // release the events lease on shutdown so another instance takes over without waiting for it to expire

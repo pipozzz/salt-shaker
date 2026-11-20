@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { masterHostFrom } from '../src/lib/master'
 
 export interface Config {
+  /** what this instance does: serve the UI and API (web), the background work (worker), or both */
+  role: 'all' | 'web' | 'worker'
   port: number
   publicUrl: string
   dataDir: string
@@ -105,9 +107,13 @@ function authSecret(dataDir: string) {
 export function loadConfig(): Config {
   const dataDir = process.env.DATA_DIR ?? './data'
   mkdirSync(dataDir, { recursive: true })
-  const databaseUrl = process.env.DATABASE_URL ?? `file:${join(dataDir, 'salt-shaker.db')}`
+  // an empty value (a compose file passing on an unset variable) is no value
+  const databaseUrl = process.env.DATABASE_URL || `file:${join(dataDir, 'salt-shaker.db')}`
   const dialect = /^postgres(ql)?:\/\//.test(databaseUrl) ? 'pg' : 'sqlite'
+  const role = (process.env.ROLE?.trim().toLowerCase() || 'all') as Config['role']
+  if (!['all', 'web', 'worker'].includes(role)) throw new Error('ROLE must be all, web or worker')
   return {
+    role,
     port: Number(process.env.PORT ?? 8080),
     publicUrl: (process.env.PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8080}`).replace(/\/+$/, ''),
     dataDir,

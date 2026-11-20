@@ -120,6 +120,27 @@ describe('EventHub', () => {
     hub.stop()
   })
 
+  it('sends a keepalive comment to a browser while the bus is quiet, and stops when it leaves', async () => {
+    const salt = fakeSalt()
+    const hub = new EventHub(salt, { keepaliveMs: 40 })
+    const browser = new AbortController()
+    const body = await hub.open(browser.signal)
+    const text = readText(body)
+    // busy: the events keep the stream alive, no comment needed
+    for (let i = 0; i < 4; i++) {
+      salt.conns[0].send(frame('salt/auth'))
+      await new Promise((r) => setTimeout(r, 5))
+    }
+    // quiet
+    await new Promise((r) => setTimeout(r, 130))
+    browser.abort()
+    const out = await text
+    expect(out.match(/data:/g)).toHaveLength(4)
+    expect(out.slice(out.lastIndexOf('data:')).match(/: keepalive\n\n/g)!.length).toBeGreaterThanOrEqual(2)
+    expect(out.slice(0, out.lastIndexOf('data:'))).not.toContain('keepalive')
+    hub.stop()
+  })
+
   it("ends a browser's stream when the connection to salt-api breaks", async () => {
     const salt = fakeSalt()
     const hub = new EventHub(salt, { retryMs: 1000 })

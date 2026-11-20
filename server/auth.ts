@@ -7,15 +7,14 @@ import type { Config } from './config'
 import type { Db, Schema } from './db'
 import { isRole } from './roles'
 import { emailFromProfile, roleFromClaims, SsoHandoff, usernameFrom } from './sso'
+import { isUsername, MAX_USERNAME } from '../src/lib/username'
 
 export const CLIENT_IP_HEADER = 'x-salt-shaker-client-ip'
 export const OIDC_PROVIDER_ID = 'oidc'
 
 /** Users sign in by username; Better Auth still wants a unique email, so derive one. */
-/** Usernames: 3–32 characters, letters, digits, . _ - (the setup page, the Users page and SSO all follow it). */
-export const USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/i
-
-export const emailFor = (name: string) => `${name.toLowerCase()}@users.salt-shaker.invalid`
+// usernames are a short name or an email address (the setup page and the Users page follow it)
+export { emailFor } from '../src/lib/username'
 
 export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sqlite' | 'pg') {
   const handoff = new SsoHandoff()
@@ -40,14 +39,16 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
     // accounts are created by admins, the first-run setup, or SSO, never by self sign-up
     emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 10 },
     session: { expiresIn: 60 * 60 * 12, updateAge: 60 * 60 },
+    // an SSO sign-in never takes over a local account that happens to have the same email address
+    account: { accountLinking: { disableImplicitLinking: true } },
     // read-only for clients; returned by the admin user list
     user: { additionalFields: { lastSignInAt: { type: 'date', required: false, input: false } } },
     rateLimit: { enabled: true, window: 60, max: 30 },
     // set by server/index.ts from the socket (or X-Forwarded-For when TRUST_PROXY is on), never by the client
     advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
     plugins: [
-      // Better Auth's own default allows no '-' and only 30 characters
-      username({ usernameValidator: (u) => USERNAME.test(u), maxUsernameLength: 32 }),
+      // Better Auth's own default allows no '-', no '@' and only 30 characters
+      username({ usernameValidator: isUsername, maxUsernameLength: MAX_USERNAME }),
       admin({
         roles: { admin: adminAc, operator: userAc, viewer: userAc, none: userAc },
         adminRoles: ['admin'],

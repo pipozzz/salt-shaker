@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Compliance**
+
+- **Failures** lists what fails in the recent state runs (highstates, `state.apply`, `state.sls`, real or dry) across the fleet, grouped by state and error, so a broken repository on 40 minions is one line. A failure drops off once a later run gets that state through. Open a line for each minion's own message and job. **Dry run** and **Run again on N** apply the state's SLS to just those minions. See [Failures](https://pipozzz.github.io/salt-shaker/guide/compliance/#failures).
+
 ## 1.40.1
 
 **Fixes**

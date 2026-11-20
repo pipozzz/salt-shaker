@@ -17,6 +17,18 @@ sidebar: { order: 2 }
 
 With the server, past checks are kept, so you can follow drift over time.
 
+## Failures
+
+**Failures** (next to Compliance in the menu) answers "what is broken right now?" across every state run, not only compliance checks. It reads the `state.apply`, `state.highstate` and `state.sls` runs the server recorded over the last day, 3 days or 7 days, real runs and dry runs alike, and groups what failed by state and error. The same broken repository on 40 minions is one line, `pkg.installed nginx` with its error and "on 40 minions", not 40 rows to read.
+
+- A failed state counts until a later run on that minion gets the same state through, whichever run that is.
+- A run that never got to its states (an SLS that doesn't render, `No matching sls found`) counts until the same run, or a highstate, gets through.
+- To compare errors, the minion's id, IP addresses, long numbers and hashes are taken out. Open a line to see each minion's own message, with its job and when it failed.
+
+The largest groups come first. Filter by minion, state or error. **Dry run** and **Run again on N** open [Run](/salt-shaker/guide/run/) with `state.apply` of the SLS the state is in prefilled for just those minions, so you can review it before starting it. **Copy list** copies the minion ids.
+
+Failures needs the server, which records the runs (the demo reads its simulated master). A look back reads the 500 most recent state runs at most.
+
 ## Preview a branch
 
 With [gitfs](https://docs.saltproject.io/en/latest/topics/tutorials/gitfs.html), every branch of your states repository is a salt environment (saltenv). **Preview a branch** shows what merging one would change before you merge it: it dry-runs the highstate from the branch and from `base` on the same minions (`state.apply test=True saltenv=…`, nothing changes) and keeps only the states whose outcome differs:

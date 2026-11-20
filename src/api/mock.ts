@@ -1,4 +1,5 @@
 import type { HistoryJob, MinionUpdates } from './server'
+import { STATE_FUNS, type RunReturn } from '../lib/failures'
 import { OSQUERY_INSTALL_MARKER } from '../lib/osquery'
 import { demoOsquery } from './demo-osquery'
 import { recordDemoAudit, saltArgs } from './demo-audit'
@@ -271,6 +272,9 @@ function stateResults(id: string, sls: string[], test: boolean, saltenv?: string
   }
   if (tls) states.splice(states.findIndex(([m, s]) => m === 'user' && s === 'ops'), 1)
 
+  // webserver.tls only exists on the nginx-tls branch
+  if (sls.includes('webserver.tls') && !tls) return ["No matching sls found for 'webserver.tls' in env 'base'"]
+
   const out: Record<string, unknown> = {}
   states.forEach(([mod, sid, name, changes], i) => {
     const fail = !test && id === 'web-02' && sid === 'nginx' && mod === 'service'
@@ -476,6 +480,7 @@ const jidTime = (jid: string) => new Date(+jid.slice(0, 4), +jid.slice(4, 6) - 1
 function failedReturn(ret: unknown) {
   return (
     (typeof ret === 'string' && ret.endsWith('is not available.')) ||
+    (Array.isArray(ret) && ret.some((x) => typeof x === 'string' && x.startsWith('No matching sls'))) ||
     (!!ret && typeof ret === 'object' && Object.values(ret).some((v) => v && typeof v === 'object' && (v as { result?: unknown }).result === false))
   )
 }
@@ -503,6 +508,20 @@ export function demoJobHistory(since: number): HistoryJob[] {
         returned: done.length,
         failed: done.filter((r) => failedReturn(r.ret)).length,
       }
+    })
+}
+
+/** Each minion's return from the demo's state runs since `since`, as the server reads them for Failures. */
+export function demoStateReturns(since: number): RunReturn[] {
+  const now = Date.now()
+  return jobs
+    .filter((j) => (STATE_FUNS as readonly string[]).includes(j.Function) && jidTime(j.jid) >= since)
+    .flatMap((j) => {
+      const kw = j.Arguments.find((a): a is Record<string, unknown> => !!a && typeof a === 'object' && '__kwarg__' in a)
+      const dryRun = kw?.test === true || kw?.test === 'True'
+      return Object.entries(j.results)
+        .filter(([, r]) => r.at <= now)
+        .map(([minion, r]) => ({ jid: j.jid, fun: j.Function, args: JSON.stringify(j.Arguments), dryRun, minion, ret: r.ret, at: r.at }))
     })
 }
 
@@ -549,6 +568,8 @@ export function demoJob(tgt: string, tgtType: string, fun: string, arg: unknown[
     [12, '*', 'glob', 'state.apply', ['common'], {}],
     // one that failed, for the overview and the failed-jobs filter to show
     [50, 'web-02', 'glob', 'service.restart', ['nginx'], {}],
+    // someone applied the TLS states before the branch was merged
+    [25, 'web-*', 'glob', 'state.apply', ['webserver.tls'], {}],
     [3, '*', 'glob', 'test.ping', [], {}],
   ]
   for (const [minsAgo, tgt, type, fun, arg, kwarg] of seed) {

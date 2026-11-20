@@ -1120,3 +1120,37 @@ test('a job can be stopped from its page', async ({ page }) => {
   await page.getByRole('button', { name: 'Stop on 2' }).click()
   await expect(page.getByText('No return from: web-01, web-02')).toBeVisible()
 })
+
+test('failures across the fleet are grouped by state and error, and run again on just those minions', async ({ page }) => {
+  await openDemo(page, '/')
+  await page.getByRole('link', { name: 'Failures' }).click()
+  await expect(page.getByRole('heading', { name: 'Failures' })).toBeVisible()
+
+  // web-* got the TLS states before the branch was merged; web-02's nginx doesn't start
+  const tls = page.getByRole('listitem', { name: /^state\.apply webserver\.tls: No matching sls found/ })
+  const nginx = page.getByRole('listitem', { name: /^service\.running nginx: Job for nginx\.service failed/ })
+  await expect(tls).toContainText('on 2 minions: web-01, web-02')
+  await expect(tls).toContainText('didn’t get to its states')
+  await expect(nginx).toContainText('on 1 minion: web-02')
+  await expect(nginx).toContainText('in webserver')
+
+  // a line opens to each minion's job
+  await tls.getByRole('button', { name: /state\.apply webserver\.tls/ }).click()
+  await expect(tls.getByRole('list', { name: 'Minions' }).getByRole('listitem')).toHaveCount(2)
+  await expect(tls.getByRole('link', { name: /^state\.apply · jid \d+$/ }).first()).toBeVisible()
+
+  // the filter finds minions, states and errors
+  await page.getByRole('textbox', { name: 'Filter failures' }).fill('nginx.service')
+  await expect(tls).toHaveCount(0)
+  await expect(nginx).toBeVisible()
+  await page.getByRole('textbox', { name: 'Filter failures' }).fill('mon-01')
+  await expect(page.getByText('No failure matches the filter')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Filter failures' }).fill('')
+
+  // run the state's SLS again on just that minion
+  await nginx.getByRole('button', { name: 'Run again on 1' }).click()
+  await expect(page).toHaveURL(/\/run\?tgt=web-02&tgt_type=list&fun=state\.apply&args=webserver$/)
+  await page.goBack()
+  await page.getByRole('listitem', { name: /^service\.running nginx/ }).getByRole('button', { name: 'Dry run' }).click()
+  await expect(page).toHaveURL(/args=webserver%20test%3DTrue$/)
+})

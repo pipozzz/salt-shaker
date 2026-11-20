@@ -16,6 +16,7 @@ import { HistoryRecorder } from './history'
 import { INSTANCE_ID, Leader } from './leader'
 import { JOB_RESULTS, jobHistory, jobsCsv } from './job-history'
 import { minionJobs } from './minion-jobs'
+import { fleetFailures } from './failures'
 import { MinionCollector, minionRoutes, minionState } from './minions'
 import { complianceCounts } from './summaries'
 import { collectMetrics, formatMetrics } from './metrics'
@@ -406,6 +407,14 @@ app.get('/api/history/compliance/minions', async (c) => {
   if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
   const { minions: all } = await minionState(db, schema)
   return c.json({ minions: Object.fromEntries(Object.entries(all).flatMap(([id, m]) => (m.compliance ? [[id, m.compliance]] : []))) })
+})
+
+/** What still fails in the recent state runs, grouped by state and error. */
+const FAILURE_HOURS = [24, 72, 168]
+app.get('/api/history/failures', async (c) => {
+  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const hours = FAILURE_HOURS.find((h) => h === Number(c.req.query('hours'))) ?? 24
+  return c.json({ ...(await fleetFailures(db, schema, { hours })), hours, retentionDays: config.historyDays })
 })
 
 /** For admins: whether salt-api, the event bus, the database and notifications work. */

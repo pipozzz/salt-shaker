@@ -181,6 +181,41 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     expect(osv.calls.vulns).toHaveLength(2)
   })
 
+  it('only shows what a worker built on an instance that does not build (ROLE=web)', async () => {
+    const { db, schema, scan } = await setup()
+    const osv = fakeOsv(affects, records)
+    const debian = inventory('debian\t12\t12 (bookworm)', 'openssl\t3.0.11-1~deb12u2\tlibssl3', 'bash\t5.2.15-2\tbash')
+    await scan('1', 0, { web: { ret: debian } })
+    let now = NOW
+    const web = new VulnService(db, schema, osv.client, { now: () => now, builds: false })
+    const worker = new VulnService(db, schema, osv.client, { now: () => now })
+
+    // inventories are there but nobody built a report yet: nothing to show, and OSV isn't asked
+    expect(await web.get()).toMatchObject({ report: null, updating: true })
+    expect(osv.calls.batch).toBe(0)
+
+    await worker.get()
+    now += 11_000
+    const first = await web.get()
+    expect(first.updating).toBe(false)
+    expect(first.report!.minions.map((m) => [m.minion, m.jid, m.findings.length])).toEqual([['web', '1', 2]])
+    // searching packages reads the inventories the saved report doesn't carry
+    expect((await web.packages('openssl')).packages.map((p) => [p.name, p.minions])).toEqual([['openssl', ['web']]])
+
+    // a newer scan: the old report stays up, marked as being updated, until the worker saved the next
+    await scan('2', 5, { web: { ret: debian }, db: { ret: debian } })
+    now += 11_000
+    expect(await web.get()).toMatchObject({ updating: true, report: { minions: [{ minion: 'web', jid: '1' }] } })
+    await worker.get()
+    now += 11_000
+    const next = await web.get()
+    expect(next.updating).toBe(false)
+    expect(next.report!.minions.map((m) => m.minion).sort()).toEqual(['db', 'web'])
+    expect(osv.calls.batch).toBe(1)
+    // the daily totals are the worker's to write
+    expect(await db.select().from(schema.vulnDaily)).toHaveLength(1)
+  })
+
   it('leaves out old inventories and minions whose key is gone', async () => {
     const { db, schema, scan } = await setup()
     const debian = inventory('debian\t12\t12', 'bash\t5.2.15-2\tbash')

@@ -1,0 +1,26 @@
+# Background work in a container of its own, so recording jobs, schedules and building the
+# vulnerability report never slow the UI down.
+#   COMPOSE_FILE=compose.yml:compose.worker.yml    in .env (list it after compose.postgres.yml)
+# With SQLite both containers share the data volume, which works on one host; for containers on
+# different hosts use Postgres.
+services:
+  salt-shaker:
+    environment:
+      ROLE: web
+
+  worker:
+    image: ghcr.io/pipozzz/salt-shaker:${SALT_SHAKER_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ROLE: worker
+      PUBLIC_URL: ${PUBLIC_URL}
+      SALT_API_URL: ${SALT_API_URL}
+      # the same database as the web container: Postgres with compose.postgres.yml, else SQLite in the volume
+      DATABASE_URL: ${POSTGRES_PASSWORD:+postgres://salt_shaker:${POSTGRES_PASSWORD}@postgres:5432/salt_shaker}
+    volumes:
+      - data:/data
+    depends_on:
+      # the web container starts first and brings the database up to date
+      salt-shaker:
+        condition: service_healthy

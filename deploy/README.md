@@ -15,6 +15,7 @@ Everything else is an add-on file, picked with one line in `.env`:
 | `compose.yml:compose.caddy.yml` | + [Caddy](https://caddyserver.com) with automatic HTTPS for the host in `PUBLIC_URL` |
 | `compose.yml:compose.traefik.yml` | behind the Traefik you already run (set `DOMAIN`) |
 | `…:compose.postgres.yml` | + Postgres instead of SQLite (set `POSTGRES_PASSWORD`) |
+| `…:compose.worker.yml` | + background work in a container of its own (`ROLE=worker`), the first one only serves the UI; list it last |
 
 With nginx or another proxy on the same host, keep `compose.yml`, set `LISTEN=127.0.0.1:8080` and `TRUST_PROXY=1`, and see [Behind a reverse proxy](https://pipozzz.github.io/salt-shaker/deploy/reverse-proxy/).
 

@@ -381,6 +381,11 @@ export interface VulnServiceOptions {
   /** the accepted minions; others (keys deleted since) are left out. Null when unknown. */
   minions?: () => Promise<string[] | null>
   now?: () => number
+  /**
+   * false on an instance that only serves the UI (ROLE=web): it never builds the report, it shows
+   * the one a worker saved and picks up each new one
+   */
+  builds?: boolean
 }
 
 /**
@@ -397,6 +402,7 @@ export class VulnService {
   private windowMs: number
   private minions: () => Promise<string[] | null>
   private now: () => number
+  private builds: boolean
   /** parsed inventories by `jid|minion`, so a rebuild only reads new ones */
   private parsed = new Map<string, Parsed>()
 
@@ -411,6 +417,25 @@ export class VulnService {
     this.windowMs = (opts.windowDays ?? 30) * 86400_000
     this.minions = opts.minions ?? (async () => null)
     this.now = opts.now ?? Date.now
+    this.builds = opts.builds ?? true
+  }
+
+  private watching: ReturnType<typeof setInterval> | null = null
+
+  /**
+   * Builds the report whenever new inventories came in, without waiting for someone to open a
+   * page: on the instance that follows the event bus, so there is a fresh one for the others.
+   */
+  watch(intervalMs = 60_000) {
+    if (this.watching || !this.builds) return
+    const look = () => void this.get(0).catch((e) => console.warn('vulns: checking the report failed', e))
+    look()
+    this.watching = setInterval(look, intervalMs)
+  }
+
+  unwatch() {
+    if (this.watching) clearInterval(this.watching)
+    this.watching = null
   }
 
   /** Acceptances that haven't expired, by vulnerability id. */
@@ -484,7 +509,8 @@ export class VulnService {
       const report = withoutAccepted(got.report, accepted)
       this.view = { key, source: got.report, report, totals: vulnTotals(report) }
     }
-    await this.record(this.view.report, this.view.totals).catch((e) => console.warn('vulns: recording the daily totals failed', e))
+    // the daily totals are written where the report is built
+    if (this.builds) await this.record(this.view.report, this.view.totals).catch((e) => console.warn('vulns: recording the daily totals failed', e))
     return { ...got, all: got.report, report: this.view.report, accepted }
   }
 
@@ -538,6 +564,9 @@ export class VulnService {
 
   async packages(q: string, limit = 200) {
     const got = await this.get(0)
+    // a report read from the database comes without the inventories: read the ones not here yet
+    const unread = (got.all?.minions ?? []).filter((m) => !this.parsed.has(`${m.jid}|${m.minion}`))
+    if (unread.length) for (const [k, p] of await loadInventories(this.db, this.schema, unread.map((m) => ({ minion: m.minion, jid: m.jid, startedAt: m.scannedAt, ok: true })))) this.parsed.set(k, p)
     const needle = q.toLowerCase()
     const groups = new Map<string, InstalledPackage>()
     for (const m of got.all?.minions ?? []) {
@@ -606,7 +635,25 @@ export class VulnService {
     await this.db.insert(t).values(row).onConflictDoUpdate({ target: t.id, set: row })
   }
 
+  private saved: { at: number; key: string | null } = { at: 0, key: null }
+
+  /** On an instance that doesn't build: the report a worker saved, read again when a newer one is there. */
+  private async reload() {
+    if (this.now() - this.saved.at < SCANS_TTL_MS) return
+    const t = this.schema.vulnReport
+    const [head] = await this.db.select({ key: t.key, builtAt: t.builtAt }).from(t).where(eq(t.id, 'current'))
+    this.saved = { at: this.now(), key: head?.key ?? null }
+    if (!head || (this.report && +this.report.builtAt === +head.builtAt)) return
+    const [row] = await this.db.select().from(t).where(eq(t.id, 'current'))
+    if (row) this.report = { key: `saved:${row.key}`, ...unpackReport(row.data) }
+  }
+
   private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {
+    if (!this.builds) {
+      const [scans] = await Promise.all([this.scans(), this.reload()])
+      // newer inventories than the saved report covers: a worker is building the next one
+      return { report: this.report, updating: scans.map((s) => `${s.minion}:${s.jid}`).sort().join(',') !== (this.saved.key ?? '') }
+    }
     const [scans] = await Promise.all([this.scans(), this.restore()])
     const key = scans.map((s) => `${s.minion}:${s.jid}`).sort().join(',')
     const fresh = this.report && this.report.key === key && this.now() - +this.report.builtAt < this.reportTtlMs

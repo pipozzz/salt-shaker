@@ -90,6 +90,22 @@ The auth secret is generated into `/data` on first start. When running on Postgr
 
 Several instances can share one Postgres database. Sessions, history and the audit log are shared, and each scheduled run starts exactly once. One instance, elected through a lease in the database, follows the event bus to record jobs and send event alerts. If it stops, another one takes over within about 30 seconds.
 
+## Web and worker
+
+By default one process does everything. On a large fleet the background work (recording every job return, schedules, runbooks, presence checks, building the vulnerability report) competes with people using the UI. `ROLE` splits them:
+
+- `ROLE=web` serves the UI and the API, and reads what the worker keeps in the database. It follows the master's event stream only to show it in the browser.
+- `ROLE=worker` does the background work and answers only `/healthz` and `/metrics`.
+- `ROLE=all` (the default) does both.
+
+Both use the same database and the same `SALT_API_*` settings. With Compose, add `compose.worker.yml` as the last file in `COMPOSE_FILE`: the existing container becomes `web` and a `worker` container is added next to it.
+
+```ini
+COMPOSE_FILE=compose.yml:compose.caddy.yml:compose.postgres.yml:compose.worker.yml
+```
+
+With SQLite the two containers share the data volume, which works on one host; on different hosts use Postgres. Run at least one worker: with only `web` instances nothing is recorded and schedules don't run. Several workers are fine, one of them follows the event stream at a time as with [several instances](#several-instances). Each instance has its own limit on calls to salt-api (`SALT_API_CONCURRENCY`).
+
 ## Health check
 
 **System** (admins only) checks salt-api with the service account, shows which instance follows the event bus and when it last heard from it, and lists notification channels whose last delivery failed. If the instance holding the event bus lease crashed, it says so and when another one takes over.

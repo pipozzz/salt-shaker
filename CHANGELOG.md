@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+**Users**
+
+- **Email addresses as usernames**: a local account's username can be an email address, besides a short name of letters, digits, `.`, `_` and `-`. The address becomes the account's email. Existing accounts keep their usernames.
+- An SSO sign-in never takes over a local account with the same email address; the login page now says so instead of a generic *account not linked*.
+
 ## 1.40.1
 
 **Fixes**

@@ -13,8 +13,8 @@ describe.each(testDialects)('usernames (%s)', (dialect) => {
     close = null
   })
 
-  // the rule the setup page, the Users page and SSO all use: 3–32 characters, letters, digits, . _ -
-  it.each(['john-doe', 'a.b_c', 'x'.repeat(32)])('accepts %s and lets it sign in', async (username) => {
+  // the rule the setup page and the Users page use: 3–32 characters (letters, digits, . _ -), or an email address
+  it.each(['john-doe', 'a.b_c', 'x'.repeat(32), 'peter@firefish.io', 'ops+salt@mail.example.co.uk'])('accepts %s and lets it sign in', async (username) => {
     const opened = await openTestDatabase(dialect)
     close = opened.close
     const auth = createAuth(config, opened.db, opened.schema, dialect === 'pg' ? 'pg' : 'sqlite')
@@ -22,6 +22,16 @@ describe.each(testDialects)('usernames (%s)', (dialect) => {
     await auth.api.createUser({ body: { email: emailFor(username), password, name: username, role: 'viewer', data: { username } } })
     const res = await auth.api.signInUsername({ body: { username, password } })
     expect(res?.user).toMatchObject({ username })
+    // an address is the account's real email; a short name gets a made-up one
+    expect(res?.user.email).toBe(username.includes('@') ? username : `${username}@users.salt-shaker.invalid`)
+  })
+
+  it('refuses names outside the rule', async () => {
+    const opened = await openTestDatabase(dialect)
+    close = opened.close
+    const auth = createAuth(config, opened.db, opened.schema, dialect === 'pg' ? 'pg' : 'sqlite')
+    for (const username of ['pam smith', 'peter@', 'x'.repeat(33)])
+      await expect(auth.api.createUser({ body: { email: emailFor(username.replace(/[@ ]/g, '')), password: 'correct-horse-battery', name: 'x', role: 'viewer', data: { username } } }), username).rejects.toThrow()
   })
 })
 

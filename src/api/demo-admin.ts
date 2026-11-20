@@ -1,3 +1,4 @@
+import { emailFor } from '../lib/username'
 import { recordDemoAudit } from './demo-audit'
 import type { Role, SystemStatus, UserRow, UserScope, scopes, system, users } from './server'
 
@@ -41,7 +42,7 @@ export const demoUsers: typeof users = {
   list: () => delay({ users: team.map((u) => ({ ...u })), total: team.length }),
   create: (u) => {
     if (team.some((x) => x.username === u.username)) return Promise.reject(new Error('Username is already taken'))
-    team.push({ id: `u${team.length + 1}-${Date.now()}`, name: u.name || u.username, email: `${u.username}@users.salt-shaker.invalid`, username: u.username, role: u.role, banned: false, createdAt: new Date().toISOString(), lastSignInAt: null })
+    team.push({ id: `u${team.length + 1}-${Date.now()}`, name: u.name || u.username, email: emailFor(u.username), username: u.username, role: u.role, banned: false, createdAt: new Date().toISOString(), lastSignInAt: null })
     // the password isn't kept anywhere in the demo
     recordDemoAudit({ username: 'demo', client: 'admin', fun: 'user.create', target: u.username, args: JSON.stringify({ role: u.role }), outcome: 'ok' })
     return delay({})

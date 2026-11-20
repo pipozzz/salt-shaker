@@ -3,9 +3,11 @@ import { QuietKeys } from '../components/QuietKeys'
 import clsx from 'clsx'
 import { Ban, Check, CheckCheck, Fingerprint, KeyRound, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { KeyList } from '../api/types'
+import type { SaltApi } from '../api/salt'
+import type { KeyList, KeyStatus } from '../api/types'
 import { Badge, Button, Card, CardHeader, CopyButton, Empty, ErrorBox, Field, Input, Modal, PageHeader, PermNote, RowCheck, ShowMore, Spinner, Tabs } from '../components/ui'
 import { useAsync, usePaged, useStoredState } from '../lib/hooks'
+import { fingersOf, listOf, noKeysPicked, pickKeys, type KeyFingers, type KeySection, type PickedKeys } from '../lib/keys'
 import { masterHostFrom } from '../lib/master'
 import { useCan, useKeyEvents, useSalt, useSession } from '../lib/session'
 
@@ -15,28 +17,24 @@ export function KeysPage() {
   const salt = useSalt()
   const keyEvents = useKeyEvents()
   const can = useCan()
-  const canManage = can('wheel', 'key.accept')
+  const canManage = can('wheel', 'key.accept_dict')
   const canEnroll = can('wheel', 'key.gen_accept')
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<Error | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  // keys picked for a bulk action; an id is in one list at a time, so one set serves them all
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const toggle = (ids: string[], on: boolean) =>
-    setSelected((prev) => {
-      const next = new Set(prev)
-      for (const id of ids) {
-        if (on) next.add(id)
-        else next.delete(id)
-      }
-      return next
-    })
-  const [bulk, setBulk] = useState<{ action: Action; ids: string[] } | null>(null)
-  const pick = { selected, onToggle: toggle, onBulk: (action: Action, ids: string[]) => setBulk({ action, ids }) }
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; from: KeyStatus } | null>(null)
+  // keys picked for a bulk action, per card: an id can have an accepted key and a denied one at once
+  const [selected, setSelected] = useState<PickedKeys>(noKeysPicked)
+  const toggle = (section: KeySection, ids: string[], on: boolean) => setSelected((prev) => pickKeys(prev, section, ids, on))
+  const [bulk, setBulk] = useState<{ section: KeySection; action: Action; ids: string[]; fingers: Record<string, string> } | null>(null)
+  const pick = (section: KeySection) => ({
+    selected: selected[section],
+    onToggle: (ids: string[], on: boolean) => toggle(section, ids, on),
+    onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => setBulk({ section, action, ids, fingers }),
+  })
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as Record<string, string>)])
+    const [keys, fingers] = await Promise.all([salt.keys(), salt.fingerprints().catch(() => ({}) as KeyFingers)])
     return { keys, fingers }
   }, [salt])
 
@@ -45,13 +43,11 @@ export function KeysPage() {
     if (keyEvents) void reload()
   }, [keyEvents, reload])
 
-  const act = async (action: Action, id: string) => {
+  const act = async (action: Action, id: string, from: KeyStatus) => {
     setBusy(`${action}:${id}`)
     setActionError(null)
     try {
-      if (action === 'accept') await salt.acceptKey(id)
-      if (action === 'reject') await salt.rejectKey(id)
-      if (action === 'delete') await salt.deleteKey(id)
+      await runKeyAction(salt, action, id, from)
       await reload()
     } catch (e) {
       setActionError(e as Error)
@@ -64,7 +60,7 @@ export function KeysPage() {
     if (!data) return
     setBusy('accept:*')
     try {
-      for (const id of data.keys.minions_pre) await salt.acceptKey(id)
+      for (const id of data.keys.minions_pre) await salt.acceptKey(id, 'minions_pre')
       await reload()
     } catch (e) {
       setActionError(e as Error)
@@ -133,13 +129,13 @@ export function KeysPage() {
                 New minions show up here as soon as they contact the master.
               </Empty>
             ) : (
-              <KeyRows ids={k.minions_pre} fingers={data?.fingers ?? {}} label="pending" bulkActions={['accept', 'reject']} {...pick}>
+              <KeyRows ids={k.minions_pre} fingers={fingersOf(data?.fingers, 'minions_pre')} label="pending" bulkActions={['accept', 'reject']} {...pick('pending')}>
                 {(id) => (
                   <>
-                    <Button size="sm" variant="success" icon={<Check className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
+                    <Button size="sm" variant="success" icon={<Check className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id, 'minions_pre')}>
                       Accept
                     </Button>
-                    <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
+                    <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id, 'minions_pre')}>
                       Reject
                     </Button>
                   </>
@@ -160,13 +156,13 @@ export function KeysPage() {
             {k.minions.length === 0 ? (
               <Empty icon={<KeyRound />} title="No accepted keys" />
             ) : (
-              <KeyRows ids={acceptedShown} fingers={data?.fingers ?? {}} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick}>
+              <KeyRows ids={acceptedShown} fingers={fingersOf(data?.fingers, 'minions')} pageKey={keyQuery} label="accepted" bulkActions={['reject', 'delete']} {...pick('accepted')}>
                 {(id) => (
                   <>
-                    <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id)}>
+                    <Button size="sm" variant="ghost" icon={<Ban className="size-3.5" />} loading={busy === `reject:${id}`} onClick={() => act('reject', id, 'minions')}>
                       Reject
                     </Button>
-                    <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setConfirmDelete(id)}>
+                    <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setConfirmDelete({ id, from: 'minions' })}>
                       Delete
                     </Button>
                   </>
@@ -185,13 +181,13 @@ export function KeysPage() {
                 }
                 subtitle="Denied keys belong to a minion id that already has a different accepted key."
               />
-              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={data?.fingers ?? {}} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
+              <KeyRows ids={[...k.minions_rejected, ...k.minions_denied]} fingers={fingersOf(data?.fingers, 'minions_rejected', 'minions_denied')} label="rejected and denied" bulkActions={['accept', 'delete']} {...pick('refused')} tag={(id) => (k.minions_denied.includes(id) ? <Badge tone="red">denied</Badge> : null)}>
                 {(id) => (
                   <>
-                    <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id)}>
+                    <Button size="sm" variant="ghost" icon={<Undo2 className="size-3.5" />} loading={busy === `accept:${id}`} onClick={() => act('accept', id, listOf('refused', id, k.minions_denied))}>
                       Accept
                     </Button>
-                    <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setConfirmDelete(id)}>
+                    <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setConfirmDelete({ id, from: listOf('refused', id, k.minions_denied) })}>
                       Delete
                     </Button>
                   </>
@@ -204,7 +200,7 @@ export function KeysPage() {
 
       <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete key?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          The key for <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{confirmDelete}</span> will be removed from the master. If the minion is still running it
+          The {confirmDelete && KEY_NOUN[confirmDelete.from]} for <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{confirmDelete?.id}</span> will be removed from the master. If the minion is still running it
           will re-submit its key and land in <em>Pending</em> again.
         </p>
         <div className="mt-5 flex justify-end gap-2">
@@ -212,9 +208,9 @@ export function KeysPage() {
           <Button
             variant="danger"
             icon={<Trash2 className="size-4" />}
-            loading={busy === `delete:${confirmDelete}`}
+            loading={busy === `delete:${confirmDelete?.id}`}
             onClick={async () => {
-              await act('delete', confirmDelete!)
+              await act('delete', confirmDelete!.id, confirmDelete!.from)
               setConfirmDelete(null)
             }}
           >
@@ -227,10 +223,11 @@ export function KeysPage() {
         <BulkKeysModal
           action={bulk.action}
           ids={bulk.ids}
-          fingers={data?.fingers ?? {}}
+          fingers={bulk.fingers}
+          from={(id) => listOf(bulk.section, id, k?.minions_denied ?? [])}
           onClose={() => setBulk(null)}
           onDone={(done) => {
-            toggle(done, false)
+            toggle(bulk.section, done, false)
             void reload()
           }}
         />
@@ -245,6 +242,15 @@ const VERB: Record<Action, { label: string; doing: string; done: string; variant
   accept: { label: 'Accept', doing: 'Accepting', done: 'accepted', variant: 'success', icon: <Check className="size-3.5" /> },
   reject: { label: 'Reject', doing: 'Rejecting', done: 'rejected', variant: 'danger', icon: <Ban className="size-3.5" /> },
   delete: { label: 'Delete', doing: 'Deleting', done: 'deleted', variant: 'danger', icon: <Trash2 className="size-3.5" /> },
+}
+
+/** What the single-delete dialog calls the key, so a denied one isn't mistaken for the accepted one. */
+const KEY_NOUN: Record<KeyStatus, string> = { minions: 'accepted key', minions_pre: 'pending key', minions_rejected: 'rejected key', minions_denied: 'denied key' }
+
+function runKeyAction(salt: SaltApi, action: Action, id: string, from: KeyStatus) {
+  if (action === 'accept') return salt.acceptKey(id, from)
+  if (action === 'reject') return salt.rejectKey(id, from)
+  return salt.deleteKey(id, from)
 }
 
 const keysWord = (n: number) => (n === 1 ? '1 key' : `${n} keys`)
@@ -269,11 +275,11 @@ function KeyRows({
   /** what the list holds, for the select-all box */
   label: string
   bulkActions: Action[]
-  selected: Set<string>
+  selected: ReadonlySet<string>
   onToggle: (ids: string[], on: boolean) => void
-  onBulk: (action: Action, ids: string[]) => void
+  onBulk: (action: Action, ids: string[], fingers: Record<string, string>) => void
 }) {
-  const canManage = useCan()('wheel', 'key.accept')
+  const canManage = useCan()('wheel', 'key.accept_dict')
   const sorted = useMemo(() => [...ids].sort(), [ids])
   const paged = usePaged(sorted, pageKey)
   const picked = sorted.filter((id) => selected.has(id))
@@ -289,7 +295,7 @@ function KeyRows({
           {picked.length > 0 && (
             <span className="flex flex-wrap gap-1.5">
               {bulkActions.map((a) => (
-                <Button key={a} size="sm" variant={VERB[a].variant} icon={VERB[a].icon} onClick={() => onBulk(a, picked)}>
+                <Button key={a} size="sm" variant={VERB[a].variant} icon={VERB[a].icon} onClick={() => onBulk(a, picked, fingers)}>
                   {VERB[a].label} {keysWord(picked.length)}
                 </Button>
               ))}
@@ -325,7 +331,22 @@ function KeyRows({
  * Accepts, rejects or deletes several keys after one look at them: one call per key, so one that
  * fails doesn't stop the rest, and each is its own line in the audit log.
  */
-function BulkKeysModal({ action, ids, fingers, onClose, onDone }: { action: Action; ids: string[]; fingers: Record<string, string>; onClose: () => void; onDone: (done: string[]) => void }) {
+function BulkKeysModal({
+  action,
+  ids,
+  fingers,
+  from,
+  onClose,
+  onDone,
+}: {
+  action: Action
+  ids: string[]
+  fingers: Record<string, string>
+  /** the list each key is in, so only that key is touched and not another key of the same id */
+  from: (id: string) => KeyStatus
+  onClose: () => void
+  onDone: (done: string[]) => void
+}) {
   const salt = useSalt()
   const verb = VERB[action]
   const [progress, setProgress] = useState<{ at: number; done: string[]; failed: Array<{ id: string; error: string }> } | null>(null)
@@ -337,9 +358,7 @@ function BulkKeysModal({ action, ids, fingers, onClose, onDone }: { action: Acti
     for (const [i, id] of ids.entries()) {
       setProgress({ at: i, done: [...done], failed: [...failed] })
       try {
-        if (action === 'accept') await salt.acceptKey(id)
-        if (action === 'reject') await salt.rejectKey(id)
-        if (action === 'delete') await salt.deleteKey(id)
+        await runKeyAction(salt, action, id, from(id))
         done.push(id)
       } catch (e) {
         failed.push({ id, error: e instanceof Error ? e.message : String(e) })

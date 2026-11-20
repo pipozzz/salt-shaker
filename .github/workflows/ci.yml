@@ -1,14 +1,15 @@
 name: CI
 
 on:
-  # docs-only changes are handled by docs.yml; path filters don't apply to tag pushes,
+  # docs-only pushes to main are handled by docs.yml; path filters don't apply to tag pushes,
   # so releases always build
   push:
     branches: [main]
     tags: ['v*']
     paths-ignore: ['docs/**', '.github/workflows/docs.yml', '**.md']
+  # every pull request runs, docs-only ones too: check and e2e are required to merge into main,
+  # and a required check that never starts would hold the pull request forever
   pull_request:
-    paths-ignore: ['docs/**', '.github/workflows/docs.yml', '**.md']
 
 jobs:
   check:

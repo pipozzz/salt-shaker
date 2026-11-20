@@ -4,7 +4,7 @@ import { demoOsquery } from './demo-osquery'
 import { recordDemoAudit, saltArgs } from './demo-audit'
 import { isAudited } from '../lib/readonly'
 import { buildTree } from '../lib/filetree'
-import { SaltError, type Grains, type JobSummary, type KeyList, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
+import { SaltError, type Grains, type JobSummary, type KeyList, type KeyStatus, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
 
 /**
  * An in-browser fake Salt master for demo mode. It answers the same lowstate calls
@@ -793,6 +793,31 @@ export class MockTransport implements Transport {
             emit('salt/key', { id, act: 'delete', result: true })
           })
           return wheelOk(fun, {})
+        }
+        // by list, as the UI calls them: only the named key moves, not other keys of the same id
+        case 'key.accept_dict':
+        case 'key.reject_dict':
+        case 'key.delete_dict': {
+          const act = fun === 'key.accept_dict' ? 'accept' : fun === 'key.reject_dict' ? 'reject' : 'delete'
+          const allowed: Record<string, KeyStatus[]> = {
+            accept: ['minions_pre', ...(kw.include_rejected ? (['minions_rejected'] as const) : []), ...(kw.include_denied ? (['minions_denied'] as const) : [])],
+            reject: ['minions_pre', ...(kw.include_accepted ? (['minions'] as const) : []), ...(kw.include_denied ? (['minions_denied'] as const) : [])],
+            delete: ['minions', 'minions_pre', 'minions_rejected', 'minions_denied'],
+          }
+          const to = act === 'accept' ? 'minions' : act === 'reject' ? 'minions_rejected' : null
+          const match = (kw.match ?? {}) as Partial<Record<KeyStatus, string[]>>
+          const moved: string[] = []
+          for (const from of allowed[act]) {
+            for (const id of match[from] ?? []) {
+              if (!keys[from].includes(id)) continue
+              keys[from] = keys[from].filter((x) => x !== id)
+              if (to && !keys[to].includes(id)) keys[to].push(id)
+              if (act === 'accept') ensureMinion(id)
+              moved.push(id)
+              emit('salt/key', { id, act, result: true })
+            }
+          }
+          return wheelOk(fun, to ? { [to]: moved } : {})
         }
         case 'key.gen_accept': {
           const id = String(kw.id_)

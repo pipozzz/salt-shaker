@@ -296,7 +296,9 @@ export const demoRunbooks: typeof runbooks = {
     }
     return delay({ created, replaced: read.length - created })
   },
-  remove: (id) => {
+  remove: async (id) => {
+    // the schedules register what they run when their module loads, which pages load lazily
+    await import('./demo-automation')
     const schedule = usedBy(id)
     if (schedule) return fail(`The schedule "${schedule}" runs it; delete that schedule or pick another runbook for it first`)
     const hook = hooks.find((h) => h.runbookId === id)

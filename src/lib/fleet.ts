@@ -15,6 +15,7 @@ export const FLEET_GRAINS = [
   'num_cpus',
   'mem_total',
   'ipv4',
+  'ip4_interfaces',
   'saltversion',
   'roles',
   'virtual',

@@ -64,6 +64,8 @@ export type Grains = Record<string, unknown> & {
   num_cpus?: number
   mem_total?: number
   ipv4?: string[]
+  /** {eth0: ['10.0.0.5'], docker0: ['172.17.0.1']} */
+  ip4_interfaces?: Record<string, string[]>
   saltversion?: string
   roles?: string[]
   virtual?: string

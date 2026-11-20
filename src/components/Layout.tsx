@@ -1,6 +1,6 @@
 import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
-import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, OctagonX, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -68,7 +68,9 @@ export function Layout() {
   const items = [
     // the vulnerability report is built by the server (the demo has a made-up one)
     ...nav.flatMap((n) =>
-      session && session.mode !== 'live' && n.to === '/patches'
+      session && session.mode !== 'live' && n.to === '/compliance'
+        ? [n, { to: '/failures', label: 'Failures', icon: OctagonX }]
+        : session && session.mode !== 'live' && n.to === '/patches'
         ? [n, { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert }]
         : session && session.mode !== 'live' && n.to === '/run'
           ? [n, { to: '/changes', label: 'Changes', icon: GitPullRequestArrow }]

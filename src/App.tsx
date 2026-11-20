@@ -10,6 +10,7 @@ import { OverviewPage } from './pages/Overview'
 // pages load on first visit, so the first paint only carries the shell, the login and the overview
 const CompliancePage = lazy(() => import('./pages/Compliance').then((m) => ({ default: m.CompliancePage })))
 const EventsPage = lazy(() => import('./pages/Events').then((m) => ({ default: m.EventsPage })))
+const FailuresPage = lazy(() => import('./pages/Failures').then((m) => ({ default: m.FailuresPage })))
 const FilesPage = lazy(() => import('./pages/Files').then((m) => ({ default: m.FilesPage })))
 const JobDetailPage = lazy(() => import('./pages/JobDetail').then((m) => ({ default: m.JobDetailPage })))
 const JobComparePage = lazy(() => import('./pages/JobCompare').then((m) => ({ default: m.JobComparePage })))
@@ -77,6 +78,7 @@ function Gate() {
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="compliance/preview" element={<BranchPreviewPage />} />
         <Route path="compliance/hardening" element={<HardeningPage />} />
+        {session.mode !== 'live' && <Route path="failures" element={<FailuresPage />} />}
         <Route path="slack/link" element={<SlackLinkPage />} />
         <Route path="map" element={<MapPage />} />
         <Route path="patches" element={<PatchesPage />} />

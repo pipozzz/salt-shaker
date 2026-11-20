@@ -1,3 +1,4 @@
+import type { FailureGroup } from '../lib/failures'
 import type { ReportMessage, ReportStats } from '../lib/report'
 import type { MaintenanceWindow } from '../lib/windows'
 import type { ResolvedStep, RunbookInput } from '../lib/runbook'
@@ -344,6 +345,18 @@ export const history = {
   minionUpdates: async () => ({ minions: pick(await fleetState(), 'updates') }),
   job: (jid: string) => request<{ job: HistoryJob; returns: HistoryReturn[] }>(`/api/history/jobs/${encodeURIComponent(jid)}`),
   compliance: (limit = 30) => request<{ runs: ComplianceRun[] }>(`/api/history/compliance?limit=${limit}`),
+  /** What still fails in the state runs of the last `hours`, grouped by state and error. */
+  failures: (hours = 24) => request<FleetFailures>(`/api/history/failures?hours=${hours}`),
+}
+
+export interface FleetFailures {
+  groups: FailureGroup[]
+  /** state runs read; capped when there were more than the server reads at once */
+  runs: number
+  capped: boolean
+  since: string
+  hours: number
+  retentionDays?: number
 }
 
 /** Job arguments as stored by the master: positional args plus a trailing {__kwarg__: true, ...}. */

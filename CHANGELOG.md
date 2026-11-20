@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.42.1
+
+**Fixes**
+
+- **Map networks**: the map's **Network (/24)** grouping used the first address in the `ipv4` grain. Salt sorts that list alphabetically, so a VPN gateway was grouped under its WireGuard network and a Docker host under `172.17.0.0/24`. The grouping now uses the address of a real interface from `ip4_interfaces`, skipping loopback, container bridges, tunnels and link-local addresses. A minion with only virtual interfaces falls back to `ipv4`. Minions keep their old grouping until their grains are next read into the fleet.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.42.0
 
 **Monitoring**

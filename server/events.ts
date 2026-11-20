@@ -13,7 +13,11 @@ type Listener = (e: BusEvent) => void
 // events a browser may fall behind by before it is dropped (it reconnects on its own)
 const MAX_BUFFERED = 2000
 
+// proxies and load balancers close a response that sends nothing for a while (often 60 s)
+const KEEPALIVE_MS = 20_000
+
 const enc = new TextEncoder()
+const KEEPALIVE = enc.encode(': keepalive\n\n')
 
 /**
  * This server's one connection to the master's event bus. salt-api keeps a thread busy for every
@@ -24,6 +28,7 @@ export class EventHub {
   private salt: Pick<SaltService, 'events'>
   private idleMs: number
   private retryMs: number
+  private keepaliveMs: number
   private listeners = new Map<Listener, (() => void) | undefined>()
   private taps = new Set<Listener>()
   private ctrl: AbortController | null = null
@@ -32,10 +37,11 @@ export class EventHub {
   /** How following the event bus is going, for the System page. */
   status: StreamStatus = { state: 'stopped', since: null, lastEventAt: null, lastError: null }
 
-  constructor(salt: Pick<SaltService, 'events'>, opts: { idleMs?: number; retryMs?: number } = {}) {
+  constructor(salt: Pick<SaltService, 'events'>, opts: { idleMs?: number; retryMs?: number; keepaliveMs?: number } = {}) {
     this.salt = salt
     this.idleMs = opts.idleMs ?? 60_000
     this.retryMs = opts.retryMs ?? 5000
+    this.keepaliveMs = opts.keepaliveMs ?? KEEPALIVE_MS
   }
 
   /** How many listeners follow the stream (the recorder and open tabs). */
@@ -100,11 +106,14 @@ export class EventHub {
   /**
    * The stream for one browser, as SSE. Fails when salt-api can't be reached, and ends when the
    * connection to it breaks or the browser stops reading, so the browser shows it and reconnects.
+   * A comment goes out when the bus is quiet, so proxies don't take the stream for a dead one.
    */
   async open(signal: AbortSignal, waitMs = 5000): Promise<ReadableStream<Uint8Array>> {
     let out!: ReadableStreamDefaultController<Uint8Array>
     let leave = () => {}
+    let beat: ReturnType<typeof setInterval> | undefined
     const close = () => {
+      clearInterval(beat)
       leave()
       try {
         out.close()
@@ -112,7 +121,7 @@ export class EventHub {
         // closed already
       }
     }
-    const body = new ReadableStream<Uint8Array>({ start: (c) => void (out = c), cancel: () => leave() }, { highWaterMark: MAX_BUFFERED })
+    const body = new ReadableStream<Uint8Array>({ start: (c) => void (out = c), cancel: () => (clearInterval(beat), leave()) }, { highWaterMark: MAX_BUFFERED })
     leave = this.subscribe((e) => {
       // a tab that stopped reading must not make the server keep everything for it
       if ((out.desiredSize ?? 0) <= 0) close()
@@ -125,6 +134,18 @@ export class EventHub {
     }
     // something to send right away, so the response starts and the browser knows it is connected
     out.enqueue(enc.encode(': connected\n\n'))
+    let sent = this.status.lastEventAt?.getTime() ?? 0
+    beat = setInterval(() => {
+      // only when nothing else went out lately; a busy bus keeps the stream alive by itself
+      const last = this.status.lastEventAt?.getTime() ?? 0
+      if (last > sent) {
+        sent = last
+        return
+      }
+      if ((out.desiredSize ?? 0) <= 0) close()
+      else out.enqueue(KEEPALIVE)
+    }, this.keepaliveMs)
+    beat.unref?.()
     return body
   }
 

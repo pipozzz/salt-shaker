@@ -182,7 +182,7 @@ export function MinionsPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Accepted" value={data?.keys.minions.length ?? '—'} icon={<Server />} tone="accent" />
-        <Stat label="Responding" value={status.data?.up.length ?? '—'} icon={<Wifi />} tone="green" hint={status.loading && !status.data ? 'Pinging minions…' : undefined} />
+        <Stat label="Responding" value={status.data?.up.length ?? '—'} icon={<Wifi />} tone="green" hint={status.loading && !status.data ? 'Pinging minions…' : <Checked at={status.data?.checkedAt} />} />
         <Stat label="Not responding" value={status.data?.down.length ?? '—'} icon={<CircleOff />} tone={status.data?.down.length ? 'red' : 'zinc'} />
         <Link to="/keys" className="rounded-xl transition hover:ring-2 hover:ring-amber-500/30">
           <Stat
@@ -634,4 +634,11 @@ function Breakdown({
       {rows.length > shown.length && <p className="mt-2 px-2 text-xs text-zinc-500 dark:text-zinc-400">+{rows.length - shown.length} more</p>}
     </Card>
   )
+}
+
+/** When the server last asked the master who answers; it does so every few minutes, and on Refresh. */
+function Checked({ at }: { at: string | null | undefined }) {
+  if (!at) return null
+  const d = new Date(at)
+  return <span title={d.toLocaleString()}>checked {relTime(d)}</span>
 }

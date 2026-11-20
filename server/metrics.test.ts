@@ -85,9 +85,12 @@ describe.each(testDialects)('collectMetrics (%s)', (dialect) => {
   it('still answers when salt-api is down', async () => {
     const { db, schema } = await setup()
     const salt = { call: async () => Promise.reject(new Error('down')) } as unknown as SaltService
-    const text = formatMetrics(await collectMetrics({ db, schema, salt, version: '1', isLeader: false, now }))
+    const text = formatMetrics(await collectMetrics({ db, schema, salt, version: '1', isLeader: false, followed: false, loopDelay: 0.25, now }))
     expect(value(text, 'salt_shaker_master_up')).toBe('0')
     expect(value(text, 'salt_shaker_events_leader')).toBe('0')
+    // a web instance with no worker: nobody records jobs
+    expect(value(text, 'salt_shaker_events_followed')).toBe('0')
+    expect(value(text, 'salt_shaker_event_loop_delay_max_seconds')).toBe('0.25')
     expect(text).not.toContain('salt_shaker_minion_keys')
     expect(value(text, 'salt_shaker_jobs_24h')).toBe('2')
   })

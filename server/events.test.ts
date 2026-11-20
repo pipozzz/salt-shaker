@@ -141,6 +141,26 @@ describe('EventHub', () => {
     hub.stop()
   })
 
+  it('keeps a browser from going quiet much longer than the keepalive period after an event', async () => {
+    const salt = fakeSalt()
+    const hub = new EventHub(salt, { keepaliveMs: 80 })
+    const browser = new AbortController()
+    const reader = (await hub.open(browser.signal)).getReader()
+    await reader.read() // ": connected"
+    await new Promise((r) => setTimeout(r, 60))
+    salt.conns[0].send(frame('salt/auth'))
+    await reader.read()
+    const eventAt = performance.now()
+    const next = await reader.read()
+    const gap = performance.now() - eventAt
+    browser.abort()
+    expect(new TextDecoder().decode(next.value)).toBe(': keepalive\n\n')
+    // a period after the event, give or take one check (a quarter period) and timer slack
+    expect(gap).toBeGreaterThanOrEqual(75)
+    expect(gap).toBeLessThan(80 * 1.25 + 40)
+    hub.stop()
+  })
+
   it("ends a browser's stream when the connection to salt-api breaks", async () => {
     const salt = fakeSalt()
     const hub = new EventHub(salt, { retryMs: 1000 })

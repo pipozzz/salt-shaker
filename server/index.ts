@@ -15,6 +15,7 @@ import { loadConfig } from './config'
 import { openDatabase } from './db'
 import { HistoryRecorder } from './history'
 import { INSTANCE_ID, Leader } from './leader'
+import { LoopDelay } from './loop'
 import { JOB_RESULTS, jobHistory, jobsCsv } from './job-history'
 import { minionJobs } from './minion-jobs'
 import { fleetFailures } from './failures'
@@ -134,6 +135,34 @@ const eventsLeader = new Leader(db, schema, 'events', {
 })
 if (background) eventsLeader.start()
 
+const loopDelay = new LoopDelay()
+loopDelay.start()
+
+// a web instance records nothing itself: say so when no worker has held the lease for a while
+if (config.role === 'web') {
+  let unfollowedSince: number | null = null
+  let warned = false
+  setInterval(() => {
+    void eventsLeader
+      .holderNow()
+      .then((holder) => {
+        if (holder) {
+          if (warned) console.log('events: a worker follows the event bus again')
+          unfollowedSince = null
+          warned = false
+          return
+        }
+        unfollowedSince ??= Date.now()
+        // once per outage, after two minutes without a worker (one may just be restarting)
+        if (!warned && Date.now() - unfollowedSince >= 120_000) {
+          warned = true
+          console.warn('events: no instance follows the event bus, so jobs are not recorded and schedules do not run; start one with ROLE=worker or ROLE=all')
+        }
+      })
+      .catch(() => undefined)
+  }, 60_000).unref()
+}
+
 const app = new Hono<Env>()
 
 /** The caller's IP: the socket peer, or the first X-Forwarded-For hop when behind a trusted proxy. */
@@ -173,7 +202,7 @@ app.get('/metrics', async (c) => {
   const given = Buffer.from(c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? '')
   const want = Buffer.from(config.metricsToken)
   if (given.length !== want.length || !timingSafeEqual(given, want)) return c.text('Unauthorized\n', 401, { 'WWW-Authenticate': 'Bearer' })
-  const gauges = await collectMetrics({ db, schema, salt: { call: saltBackground.call, stats: salt.stats }, version: pkg.version, isLeader: eventsLeader.isLeader })
+  const gauges = await collectMetrics({ db, schema, salt: { call: saltBackground.call, stats: salt.stats }, version: pkg.version, isLeader: eventsLeader.isLeader, followed: !!(await eventsLeader.holderNow().catch(() => null)), loopDelay: loopDelay.takeMax() })
   return c.text(formatMetrics(gauges), 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
 })
 
@@ -534,6 +563,7 @@ const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.once(sig, async () => {
     scheduler.stop()
+    loopDelay.stop()
     await eventsLeader.stop()
     events.stop()
     server.close()

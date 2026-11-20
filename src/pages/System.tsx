@@ -122,7 +122,10 @@ function EventBus({ s }: { s: SystemStatus }) {
             {e.thisInstance && <span className="text-zinc-500 dark:text-zinc-400"> (this instance)</span>}
           </>
         ) : (
-          <span className="text-red-700 dark:text-red-400">no instance; job history and alerts are paused</span>
+          <span className="text-red-700 dark:text-red-400">
+            no instance; job history, schedules and alerts are paused
+            {s.role === 'web' && '. This instance only serves the UI (ROLE=web): start one with ROLE=worker or ROLE=all'}
+          </span>
         )}
       </Row>
       {e.stream ? (
@@ -150,6 +153,7 @@ function EventBus({ s }: { s: SystemStatus }) {
       {!e.thisInstance && (
         <Row k="This instance">
           <span className="font-mono text-xs">{s.instance}</span>
+          {s.role === 'web' && <span className="text-zinc-500 dark:text-zinc-400"> (web: serves the UI and API, does no background work)</span>}
         </Row>
       )}
     </Section>

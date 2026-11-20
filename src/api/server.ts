@@ -161,10 +161,10 @@ export class ServerTransport implements Transport {
   }
 
   async status(fresh: boolean) {
-    const { minions } = await fleetState(fresh)
+    const { minions, statusAt } = await fleetState(fresh)
     // a minion nobody has checked yet (its key was just accepted) is in neither list
     const ids = (up: boolean) => Object.keys(minions).filter((id) => minions[id].up === up).sort()
-    return { up: ids(true), down: ids(false) }
+    return { up: ids(true), down: ids(false), checkedAt: statusAt }
   }
 
   events(_token: string, onEvent: (e: SaltEvent) => void, onStatus: (connected: boolean) => void) {
@@ -521,6 +521,8 @@ export const automation = {
 export interface SystemStatus {
   version: string
   instance: string
+  /** what this instance does: everything, the UI and API only, or the background work only */
+  role: 'all' | 'web' | 'worker'
   startedAt: string
   timeZone: string
   saltApi: { url: string; username: string; eauth: string; ok: boolean; ms: number; error: string | null; keys: Record<'accepted' | 'pending' | 'rejected' | 'denied', number> | null }

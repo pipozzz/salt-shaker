@@ -48,13 +48,30 @@ const seconds = (d: Date | null | undefined) => (d ? Math.round(d.getTime() / 10
  * Everything /metrics reports: the master's keys (one cheap wheel call), the latest compliance
  * check, recent job failures and the schedules, all read from what the server already records.
  */
-export async function collectMetrics(deps: { db: Db; schema: Schema; salt: Pick<SaltService, 'call'> & Partial<Pick<SaltService, 'stats'>>; version: string; isLeader: boolean; now?: Date }): Promise<Gauge[]> {
+export async function collectMetrics(deps: {
+  db: Db
+  schema: Schema
+  salt: Pick<SaltService, 'call'> & Partial<Pick<SaltService, 'stats'>>
+  version: string
+  isLeader: boolean
+  /** whether any instance holds the lease to follow the event bus */
+  followed?: boolean
+  /** the longest event loop delay since the last scrape, in seconds */
+  loopDelay?: number
+  now?: Date
+}): Promise<Gauge[]> {
   const { db, schema, salt } = deps
   const now = deps.now ?? new Date()
   const gauges: Gauge[] = [
     { name: 'salt_shaker_info', help: 'Salt Shaker version.', samples: [{ labels: { version: deps.version }, value: 1 }] },
     { name: 'salt_shaker_events_leader', help: 'Whether this instance follows the event bus and records job history.', samples: [{ value: deps.isLeader ? 1 : 0 }] },
   ]
+  if (deps.followed !== undefined) {
+    gauges.push({ name: 'salt_shaker_events_followed', help: 'Whether some instance follows the event bus and records job history; 0 means no worker is running.', samples: [{ value: deps.followed ? 1 : 0 }] })
+  }
+  if (deps.loopDelay !== undefined) {
+    gauges.push({ name: 'salt_shaker_event_loop_delay_max_seconds', help: 'The longest this process kept everything waiting since the last scrape.', samples: [{ value: deps.loopDelay }] })
+  }
 
   let keys: Gauge['samples'] | null = null
   try {

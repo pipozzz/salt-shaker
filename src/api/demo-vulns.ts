@@ -222,6 +222,12 @@ export const demoVulns = {
     return delay<PackageSearch>({ updating: false, total: list.length, minions: new Set(list.flatMap((g) => g.minions)).size, packages: list.slice(0, 200) })
   },
   trend: (days = 90) => delay({ days: demoTrendDays(days) }),
+  // the demo's schedules import this module, so they're loaded when asked
+  scheduled: async () => {
+    const { demoAutomation } = await import('./demo-automation')
+    const { schedules } = await demoAutomation.schedules()
+    return { scheduled: schedules.some((s) => s.kind === 'vulns' && s.enabled) }
+  },
   accept: (id: string, note: string, days: number | null) => {
     const at = new Date()
     const a = { note, acceptedBy: 'demo', acceptedAt: at.toISOString(), expiresAt: days ? new Date(+at + days * 86400_000).toISOString() : null }

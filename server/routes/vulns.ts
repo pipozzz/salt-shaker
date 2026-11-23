@@ -168,6 +168,9 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
     return c.json({ days: await vulns.trend(days) })
   })
 
+  /** Whether a schedule keeps the inventories current, so the page can say when none does. */
+  r.get('/vulns/scheduled', async (c) => c.json({ scheduled: await vulns.scheduled() }))
+
   /** What was found on one minion. */
   r.get('/vulns/minions/:id', async (c) => {
     const got = await vulns.get(3000)

@@ -932,6 +932,8 @@ export const vulns = {
   /** where packages whose name contains `q` are installed */
   packages: (q: string) => request<PackageSearch>(`/api/vulns/packages?q=${encodeURIComponent(q)}`),
   trend: (days = 90) => request<{ days: VulnDay[] }>(`/api/vulns/trend?days=${days}`),
+  /** whether an enabled schedule of kind vulns keeps the inventories current */
+  scheduled: () => request<{ scheduled: boolean }>('/api/vulns/scheduled'),
   unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */
   fixes: (wait = 0) => request<VulnStatus & { minions: VulnFixes }>(`/api/vulns/fixes?wait=${wait}`),

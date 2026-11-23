@@ -308,6 +308,11 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     )
     // its packages are read on demand, the inventories aren't in the saved report
     expect((await svc.minionPackages('web'))!.packages.map((p) => [p.name, p.vulns])).toEqual([['openssl', 1]])
+    // a page doesn't wait for the build when there is a report to show
+    const t0 = Date.now()
+    const shown = await svc.get(60_000, { stale: true })
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(shown).toMatchObject({ updating: true, report: { builtAt: first.builtAt } })
     release()
     expect((await svc.get()).updating).toBe(false)
   })

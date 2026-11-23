@@ -191,7 +191,7 @@ export function VulnerabilitiesPage() {
   // the server keeps building in the background; ask again until it's done
   useEffect(() => {
     if (!data?.updating) return
-    const t = setTimeout(() => setReloads((n) => n + 1), 3000)
+    const t = setTimeout(() => setReloads((n) => n + 1), 1500)
     return () => clearTimeout(t)
   }, [data])
 

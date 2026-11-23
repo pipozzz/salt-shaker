@@ -498,10 +498,11 @@ export class VulnService {
 
   /**
    * The current report without the accepted vulnerabilities (`all` has them too), rebuilt when new
-   * inventories came in or it's old, waiting at most `waitMs`.
+   * inventories came in or it's old, waiting at most `waitMs`. With `stale`, a report that's
+   * already there is returned right away while the next one is built: pages show it and ask again.
    */
-  async get(waitMs = 20_000): Promise<{ report: VulnReport | null; all: VulnReport | null; accepted: Map<string, Acceptance>; updating: boolean }> {
-    const [got, accepted] = await Promise.all([this.current(waitMs), this.accepted()])
+  async get(waitMs = 20_000, { stale = false } = {}): Promise<{ report: VulnReport | null; all: VulnReport | null; accepted: Map<string, Acceptance>; updating: boolean }> {
+    const [got, accepted] = await Promise.all([this.current(waitMs, stale), this.accepted()])
     if (!got.report) return { ...got, all: null, accepted }
     // the filtered report and its totals are reused until the report or the acceptances change
     const key = `${+got.report.builtAt}|${[...accepted.keys()].sort().join(',')}`
@@ -658,7 +659,7 @@ export class VulnService {
     if (row) this.report = { key: `saved:${row.key}`, ...unpackReport(row.data) }
   }
 
-  private async current(waitMs: number): Promise<{ report: VulnReport | null; updating: boolean }> {
+  private async current(waitMs: number, stale = false): Promise<{ report: VulnReport | null; updating: boolean }> {
     if (!this.builds) {
       const [scans] = await Promise.all([this.scans(), this.reload()])
       // newer inventories than the saved report covers: a worker is building the next one
@@ -676,6 +677,7 @@ export class VulnService {
       this.building.catch((e) => console.warn('vulns: building the report failed', e))
     }
     if (this.building) {
+      if (stale && this.report) return { report: this.report, updating: true }
       const done = await Promise.race([this.building.then(() => true, () => true), new Promise<false>((r) => setTimeout(() => r(false), waitMs))])
       return { report: this.report, updating: !done }
     }

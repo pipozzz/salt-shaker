@@ -30,6 +30,17 @@ Invitations are in the audit log: `user.invite`, `user.renew_invite`, `user.revo
 
 With single sign-on and `PASSWORD_LOGIN=admins`, only admins can be invited: everyone else has no password here and comes in through the provider.
 
+### Two-step verification and passkeys
+
+Everyone sets these up for themselves under **Sign-in security**:
+
+- **Two-step verification** asks for a 6-digit code from an authenticator app (TOTP) after the password. Setting it up shows a QR code and ten one-time backup codes; nothing is asked at sign-in until a first code from the app was confirmed. On the sign-in page, **Don't ask on this browser for 30 days** skips the code on that browser, and **Use a backup code** signs in without the app. Turning it off or making new backup codes takes the password again.
+- **Passkeys** sign in with a fingerprint, face, device PIN or a security key instead of the password: **Sign in with a passkey** on the sign-in page. A passkey sign-in asks for no code. Passkeys need HTTPS (or localhost) and are bound to the host name in `PUBLIC_URL`, so they stop working if that host name changes.
+
+Accounts that come in through single sign-on have no password here; their second step is the identity provider's.
+
+On the **Users** page, *2-step* and a passkey count mark the accounts that have them. For a lost phone or key, **Reset sign-in** removes a user's two-step verification and passkeys and signs them out everywhere; their password still works and they can set both up again (`user.reset_sign_in` in the audit log).
+
 ## Audit log
 
 The **Audit log** records every change, plus every denied attempt (the demo has one too, of what you do in it), with who, what, where (client IP) and the resulting jid.

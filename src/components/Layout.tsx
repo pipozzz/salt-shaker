@@ -1,6 +1,6 @@
 import { InstanceSwitcher } from './Instances'
 import clsx from 'clsx'
-import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, OctagonX, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
+import { Activity, BellRing, BookOpen, FileText, CalendarClock, Database, Fingerprint, GitPullRequestArrow, KeySquare, LayoutDashboard, FolderTree, Gauge, History, KeyRound, LogOut, Menu, Monitor, Moon, Network, OctagonX, Package, ScrollText, Search, Server, ShieldAlert, ShieldCheck, Sun, Terminal, Users, Workflow, X } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTheme } from '../lib/hooks'
@@ -98,6 +98,8 @@ export function Layout() {
         : []),
     // everyone with the server (and the demo) can make API tokens for their scripts
     ...(role && role !== 'none') || session?.mode === 'demo' ? [{ to: '/tokens', label: 'API tokens', icon: KeySquare }] : [],
+    // your own second step and passkeys; the server keeps them
+    ...(session?.mode === 'server' ? [{ to: '/security', label: 'Sign-in security', icon: Fingerprint }] : []),
   ]
   const pending = usePendingKeys()
 

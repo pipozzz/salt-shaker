@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin, genericOAuth, username } from 'better-auth/plugins'
+import { passkey } from '@better-auth/passkey'
+import { admin, genericOAuth, twoFactor, username } from 'better-auth/plugins'
 import { adminAc, userAc } from 'better-auth/plugins/admin/access'
 import { eq } from 'drizzle-orm'
 import type { Config } from './config'
@@ -54,6 +55,11 @@ export function createAuth(config: Config, db: Db, schema: Schema, provider: 'sq
         adminRoles: ['admin'],
         defaultRole: 'viewer',
       }),
+      // a second step after the password: a code from an authenticator app, or a backup code.
+      // SSO sign-ins don't pass through it: their second factor is the identity provider's
+      twoFactor({ issuer: 'Salt Shaker' }),
+      // sign-in with a passkey instead of the password; it goes through the same session hook below
+      passkey({ rpID: new URL(config.publicUrl).hostname, rpName: 'Salt Shaker', origin: [config.publicUrl, ...config.trustedOrigins] }),
       ...(oidc
         ? [
             genericOAuth({

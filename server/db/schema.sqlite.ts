@@ -17,6 +17,8 @@ export const user = sqliteTable('user', {
   banExpires: integer('ban_expires', { mode: 'timestamp_ms' }),
   /** set by Salt Shaker on every successful sign-in, for access reviews */
   lastSignInAt: integer('last_sign_in_at', { mode: 'timestamp_ms' }),
+  /** two-factor plugin: a second step (authenticator app) is asked for after the password */
+  twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).default(false),
 })
 
 export const session = sqliteTable('session', {
@@ -59,6 +61,44 @@ export const verification = sqliteTable('verification', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+// Better Auth's two-factor plugin: the authenticator app's secret and the backup codes, both encrypted.
+export const twoFactor = sqliteTable(
+  'two_factor',
+  {
+    id: text('id').primaryKey(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    verified: integer('verified', { mode: 'boolean' }).default(true),
+    failedVerificationCount: integer('failed_verification_count').default(0),
+    lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('two_factor_user_id_idx').on(t.userId), index('two_factor_secret_idx').on(t.secret)],
+)
+
+// Better Auth's passkey plugin: one row per registered passkey (WebAuthn credential).
+export const passkey = sqliteTable(
+  'passkey',
+  {
+    id: text('id').primaryKey(),
+    name: text('name'),
+    publicKey: text('public_key').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    credentialID: text('credential_id').notNull(),
+    counter: integer('counter').notNull(),
+    deviceType: text('device_type').notNull(),
+    backedUp: integer('backed_up', { mode: 'boolean' }).notNull(),
+    transports: text('transports'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    aaguid: text('aaguid'),
+  },
+  (t) => [index('passkey_user_id_idx').on(t.userId), index('passkey_credential_id_idx').on(t.credentialID)],
+)
 
 /** Every call that could change something, who made it, and how it ended. */
 export const auditLog = sqliteTable(

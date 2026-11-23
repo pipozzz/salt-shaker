@@ -18,6 +18,8 @@ export const user = pgTable('user', {
   banExpires: timestamp('ban_expires', { withTimezone: true }),
   /** set by Salt Shaker on every successful sign-in, for access reviews */
   lastSignInAt: timestamp('last_sign_in_at', { withTimezone: true }),
+  /** two-factor plugin: a second step (authenticator app) is asked for after the password */
+  twoFactorEnabled: boolean('two_factor_enabled').default(false),
 })
 
 export const session = pgTable('session', {
@@ -60,6 +62,44 @@ export const verification = pgTable('verification', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 })
+
+// Better Auth's two-factor plugin: the authenticator app's secret and the backup codes, both encrypted.
+export const twoFactor = pgTable(
+  'two_factor',
+  {
+    id: text('id').primaryKey(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    verified: boolean('verified').default(true),
+    failedVerificationCount: integer('failed_verification_count').default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  },
+  (t) => [index('two_factor_user_id_idx').on(t.userId), index('two_factor_secret_idx').on(t.secret)],
+)
+
+// Better Auth's passkey plugin: one row per registered passkey (WebAuthn credential).
+export const passkey = pgTable(
+  'passkey',
+  {
+    id: text('id').primaryKey(),
+    name: text('name'),
+    publicKey: text('public_key').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    credentialID: text('credential_id').notNull(),
+    counter: integer('counter').notNull(),
+    deviceType: text('device_type').notNull(),
+    backedUp: boolean('backed_up').notNull(),
+    transports: text('transports'),
+    createdAt: timestamp('created_at', { withTimezone: true }),
+    aaguid: text('aaguid'),
+  },
+  (t) => [index('passkey_user_id_idx').on(t.userId), index('passkey_credential_id_idx').on(t.credentialID)],
+)
 
 /** Every call that could change something, who made it, and how it ended. */
 export const auditLog = pgTable(

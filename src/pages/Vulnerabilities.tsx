@@ -1,6 +1,6 @@
 import { useVulnApi } from '../lib/vulnapi'
 import clsx from 'clsx'
-import { ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, ShieldOff, Undo2, Wrench } from 'lucide-react'
+import { CalendarClock, ChevronRight, Download, ExternalLink, Play, RefreshCw, Search, Server, ShieldAlert, ShieldCheck, ShieldOff, Undo2, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { demoVulns } from '../api/demo-vulns'
@@ -10,6 +10,7 @@ import { TargetField } from '../components/TargetField'
 import { VulnTrend } from '../components/VulnTrend'
 import { Badge, Button, ButtonLink, Card, CardHeader, Empty, ErrorBox, Input, Modal, PageHeader, PermNote, Select, Spinner, Stat, Tabs, type Tone } from '../components/ui'
 import { relTime } from '../lib/format'
+import { useAutomationApi, useCanSchedule } from '../lib/automation'
 import { useAsync } from '../lib/hooks'
 import { download, findingsCsv } from '../lib/export'
 import { INVENTORY_KWARG, INVENTORY_SCRIPT } from '../lib/inventory'
@@ -81,6 +82,74 @@ function exportDemo(f: { severity?: string; fix: boolean; q?: string }) {
   download(`vulnerabilities-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', findingsCsv(rows))
 }
 
+/** the schedule the notice offers: every minion, every night */
+const NIGHTLY_SCAN = { name: 'Nightly vulnerability scan', kind: 'vulns', target: '*', targetType: 'glob', cron: '0 2 * * *' } as const
+
+/**
+ * Says when no schedule keeps the inventories current: nothing scans again by itself, and the
+ * report empties once the inventories are a month old. Admins can add a nightly scan from here.
+ */
+function ScheduleNotice() {
+  const vulns = useVulnApi()
+  const automation = useAutomationApi()
+  const canSchedule = useCanSchedule()
+  const [checks, setChecks] = useState(0)
+  const scheduled = useAsync(() => vulns.scheduled(), [vulns, checks])
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [added, setAdded] = useState(false)
+  if (added)
+    return (
+      <p className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+        Every minion is scanned every night at 02:00 from now on. Change it on{' '}
+        <Link to="/schedules" className="underline underline-offset-2">
+          Schedules
+        </Link>
+        .
+      </p>
+    )
+  if (scheduled.data?.scheduled !== false) return null
+  const add = async () => {
+    setAdding(true)
+    setError(null)
+    try {
+      await automation.createSchedule({ ...NIGHTLY_SCAN })
+      setAdded(true)
+      setChecks((n) => n + 1)
+    } catch (e) {
+      setError(e as Error)
+    } finally {
+      setAdding(false)
+    }
+  }
+  return (
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="min-w-64 flex-1">
+          <strong>No scheduled scan.</strong> Packages are only listed when someone scans, so new installs and upgrades don't show up here, and an inventory drops out of the report after 30 days.{' '}
+          {canSchedule ? (
+            <>
+              Scan every minion every night, or add your own{' '}
+              <Link to="/schedules" className="underline underline-offset-2">
+                schedule
+              </Link>{' '}
+              of kind <em>Vulnerability scan</em>.
+            </>
+          ) : (
+            <>Ask an admin to add a schedule of kind <em>Vulnerability scan</em>.</>
+          )}
+        </p>
+        {canSchedule && (
+          <Button size="sm" variant="primary" icon={<CalendarClock className="size-4" />} loading={adding} onClick={add}>
+            Scan every night
+          </Button>
+        )}
+      </div>
+      {error && <p className="mt-2 text-red-700 dark:text-red-400">{error.message}</p>}
+    </div>
+  )
+}
+
 export function VulnerabilitiesPage() {
   const vulns = useVulnApi()
   const { session } = useSession()
@@ -122,7 +191,7 @@ export function VulnerabilitiesPage() {
   // the server keeps building in the background; ask again until it's done
   useEffect(() => {
     if (!data?.updating) return
-    const t = setTimeout(() => setReloads((n) => n + 1), 3000)
+    const t = setTimeout(() => setReloads((n) => n + 1), 1500)
     return () => clearTimeout(t)
   }, [data])
 
@@ -229,6 +298,8 @@ export function VulnerabilitiesPage() {
           )}
         </p>
       </Card>
+
+      {data && !data.updating && <ScheduleNotice />}
 
       {(scanError || report.error) && (
         <div className="mb-6">

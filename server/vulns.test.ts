@@ -138,6 +138,26 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
   }
   const affects = { 'openssl@3.0.11-1~deb12u2': ['DEBIAN-CVE-2024-1', 'DSA-5000-1'], 'bash@5.2.15-2': ['DEBIAN-CVE-2024-2'] }
 
+  it('says whether an enabled schedule keeps the inventories current', async () => {
+    const { db, schema } = await setup()
+    const svc = new VulnService(db, schema, fakeOsv({}, {}).client, { now: () => NOW })
+    const app = new Hono<Env>()
+    app.use('*', async (c, next) => {
+      c.set('user', { id: 'ann', name: 'ann', username: 'ann', role: 'viewer' })
+      await next()
+    })
+    app.route('/api', vulnRoutes({ vulns: svc }))
+    const scheduled = async () => ((await (await app.request('/api/vulns/scheduled')).json()) as { scheduled: boolean }).scheduled
+
+    expect(await scheduled()).toBe(false)
+    const row = { kind: 'vulns', target: '*', targetType: 'glob', cron: '0 2 * * *', createdAt: new Date(NOW) }
+    // a patch scan, or a vulnerability scan that's switched off, doesn't count
+    await db.insert(schema.schedule).values([{ ...row, name: 'patches', kind: 'patches' }, { ...row, name: 'off', enabled: false }])
+    expect(await scheduled()).toBe(false)
+    await db.insert(schema.schedule).values({ ...row, name: 'nightly' })
+    expect(await scheduled()).toBe(true)
+  })
+
   it('matches the latest inventories against OSV.dev and caches the answers', async () => {
     const { db, schema, scan } = await setup()
     const osv = fakeOsv(affects, records)
@@ -288,6 +308,11 @@ describe.each(testDialects)('VulnService (%s)', (dialect) => {
     )
     // its packages are read on demand, the inventories aren't in the saved report
     expect((await svc.minionPackages('web'))!.packages.map((p) => [p.name, p.vulns])).toEqual([['openssl', 1]])
+    // a page doesn't wait for the build when there is a report to show
+    const t0 = Date.now()
+    const shown = await svc.get(60_000, { stale: true })
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(shown).toMatchObject({ updating: true, report: { builtAt: first.builtAt } })
     release()
     expect((await svc.get()).updating).toBe(false)
   })

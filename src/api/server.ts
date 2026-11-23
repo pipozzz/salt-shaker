@@ -1017,8 +1017,8 @@ export interface VulnAccepted extends VulnAcceptance {
 export type VulnDay = Record<Severity, number> & { day: string; fixable: number; minions: number; affected: number }
 
 export const vulns = {
-  // a short wait: while the server is still building, the page polls and shows the progress
-  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[]; accepted: VulnAccepted[] }>('/api/vulns?wait=3000'),
+  // no waiting: the server sends the report it has; while it builds the next one the page asks again
+  report: () => request<VulnStatus & { minions: VulnMinion[]; vulns: VulnSummary[]; accepted: VulnAccepted[] }>('/api/vulns?wait=0'),
   /** per-minion counts only, without waiting for a report that's being built */
   minions: () => request<VulnStatus & { minions: VulnMinion[] }>('/api/vulns?only=minions&wait=0'),
   minion: (id: string) => request<VulnStatus & { minion: VulnMinion; findings: VulnFinding[] }>(`/api/vulns/minions/${encodeURIComponent(id)}`),
@@ -1038,6 +1038,8 @@ export const vulns = {
   /** where packages whose name contains `q` are installed */
   packages: (q: string) => request<PackageSearch>(`/api/vulns/packages?q=${encodeURIComponent(q)}`),
   trend: (days = 90) => request<{ days: VulnDay[] }>(`/api/vulns/trend?days=${days}`),
+  /** whether an enabled schedule of kind vulns keeps the inventories current */
+  scheduled: () => request<{ scheduled: boolean }>('/api/vulns/scheduled'),
   unaccept: (id: string) => request<{ ok: true }>(`/api/vulns/accepted/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** per minion, the installed packages with a fixed version for a known vulnerability */
   fixes: (wait = 0) => request<VulnStatus & { minions: VulnFixes }>(`/api/vulns/fixes?wait=${wait}`),

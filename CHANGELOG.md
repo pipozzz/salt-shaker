@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.44.0
+
+**Users**
+
+- **Invite links** replace made-up initial passwords: **Invite user** on the Users page takes a username, a role and, for an operator, the minions they're limited to, and gives you a link to pass on. Whoever opens it chooses their own password and is signed in. A link works once, for 1, 7 or 30 days, and only its hash is stored. Pending invitations are listed with **New link** and **Revoke**.
+- **Two-step verification**: under **Sign-in security**, add an authenticator app. Sign-in then asks for a code after the password, with backup codes and an option to trust the browser for 30 days.
+- **Passkeys**: register a fingerprint, face, device PIN or security key under **Sign-in security** and use **Sign in with a passkey** instead of the password. The passkey is tied to the host name of `PUBLIC_URL`.
+- Admins see who has either on the Users page, and **Reset sign-in** removes them for someone who lost their device.
+
+**Vulnerabilities**
+
+- **Vulnerabilities** and **Overview** open right away while the vulnerability report is being rebuilt: the server sends the saved report at once and builds the next one in the background.
+
+**Dependencies**
+
+- `@hono/node-server` 2.1.11 (security fixes for WebSocket upgrades), Better Auth 1.7.27, Hono 4.13.19, nodemailer 10.6.1 and smaller updates; the docs use Starlight 0.43 and the lab's mock OAuth server 7.0.1.
+
+**Upgrading**
+
+- Adds the `user_invite`, `two_factor` and `passkey` tables and a `user.two_factor_enabled` column; the migrations run on start.
+
 ## 1.43.0
 
 **Vulnerabilities**

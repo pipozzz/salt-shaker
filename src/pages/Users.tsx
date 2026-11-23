@@ -1,10 +1,10 @@
-import { Ban, KeyRound, Pencil, Plus, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
+import { Ban, Check, Copy, KeyRound, Link2, MailPlus, Pencil, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { demoScopes, demoUsers } from '../api/demo-admin'
-import { ROLES, scopes as serverScopes, users as serverUsers, type Role, type UserRow, type UserScope } from '../api/server'
+import { demoInvites, demoScopes, demoUsers } from '../api/demo-admin'
+import { inviteLink, invites as serverInvites, ROLES, scopes as serverScopes, users as serverUsers, type Invite, type Role, type UserRow, type UserScope } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
-import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
+import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
 import { useAsync } from '../lib/hooks'
 import { useSession } from '../lib/session'
 import { relTime } from '../lib/format'
@@ -29,6 +29,11 @@ function useScopesApi() {
   return session?.mode === 'demo' ? demoScopes : serverScopes
 }
 
+function useInvitesApi() {
+  const { session } = useSession()
+  return session?.mode === 'demo' ? demoInvites : serverInvites
+}
+
 const scopeText = (s: UserScope) => `${s.targetType === 'glob' ? '' : `${s.targetType}:`}${s.target}`
 
 const isSso = (u: UserRow) => !isLocalAccount(u)
@@ -41,7 +46,12 @@ export function UsersPage() {
   const scopesApi = useScopesApi()
   const scopeList = useAsync(() => scopesApi.list().then((r) => new Map(r.scopes.map((s) => [s.userId, s]))), [])
   const [limiting, setLimiting] = useState<UserRow | null>(null)
-  const [creating, setCreating] = useState(false)
+  const invitesApi = useInvitesApi()
+  const inviteList = useAsync(() => invitesApi.list(), [])
+  const [inviting, setInviting] = useState(false)
+  // an invitation's link, right after it was made or replaced: it can't be read back later
+  const [link, setLink] = useState<(Invite & { token: string }) | null>(null)
+  const [revoking, setRevoking] = useState<Invite | null>(null)
   const [resetFor, setResetFor] = useState<UserRow | null>(null)
   const [removing, setRemoving] = useState<UserRow | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -52,7 +62,7 @@ export function UsersPage() {
     setError(null)
     try {
       await fn()
-      await Promise.all([list.reload(), scopeList.reload()])
+      await Promise.all([list.reload(), scopeList.reload(), inviteList.reload()])
     } catch (e) {
       setError(e as Error)
     } finally {
@@ -69,11 +79,17 @@ export function UsersPage() {
         description="Who can sign in to Salt Shaker and what their role allows. The master is reached through one service account; roles decide what each user may do through it."
         actions={
           <>
-            <Button icon={<RefreshCw className="size-4" />} onClick={list.reload}>
+            <Button
+              icon={<RefreshCw className="size-4" />}
+              onClick={() => {
+                list.reload()
+                inviteList.reload()
+              }}
+            >
               Refresh
             </Button>
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-              Add user
+            <Button variant="primary" icon={<MailPlus className="size-4" />} onClick={() => setInviting(true)}>
+              Invite user
             </Button>
           </>
         }
@@ -201,7 +217,76 @@ export function UsersPage() {
         )}
       </Card>
 
-      <CreateUserModal open={creating} onClose={() => setCreating(false)} onCreated={list.reload} />
+      {!!inviteList.data?.invites.length && (
+        <Card className="mt-6">
+          <CardHeader title="Invitations" />
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+            {inviteList.data.invites.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
+                <div className="min-w-40 flex-1">
+                  <p className="font-mono font-medium">{i.username}</p>
+                  {i.name && <p className="text-xs text-zinc-500 dark:text-zinc-400">{i.name}</p>}
+                </div>
+                <span className="flex w-56 items-center gap-2">
+                  <Badge tone={ROLE_INFO[i.role].tone}>{i.role}</Badge>
+                  {i.scopeTarget && (
+                    <Badge tone="amber" className="font-mono">
+                      {scopeText({ target: i.scopeTarget, targetType: (i.scopeTargetType ?? 'glob') as TargetType })}
+                    </Badge>
+                  )}
+                </span>
+                <span className="w-56 text-xs text-zinc-500 dark:text-zinc-400">
+                  {i.createdBy ? `by ${i.createdBy} · ` : ''}
+                  {i.expired ? <Badge tone="red">expired</Badge> : <span title={new Date(i.expiresAt).toLocaleString()}>link valid until {new Date(i.expiresAt).toLocaleDateString()}</span>}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<Link2 className="size-3.5" />}
+                    loading={busy === `renew:${i.id}`}
+                    title="The link can't be shown again: this makes a new one and the old one stops working"
+                    onClick={() => act(`renew:${i.id}`, async () => setLink(await invitesApi.renew(i.id, 7)))}
+                  >
+                    New link
+                  </Button>
+                  <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setRevoking(i)}>
+                    Revoke
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <InviteModal
+        open={inviting}
+        onClose={() => setInviting(false)}
+        onInvited={(made) => {
+          setLink(made)
+          inviteList.reload()
+        }}
+      />
+      {link && <InviteLinkModal invite={link} onClose={() => setLink(null)} />}
+      <Modal open={!!revoking} onClose={() => setRevoking(null)} title="Revoke this invitation?">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          The link for <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{revoking?.username}</span> stops working and no account is created.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setRevoking(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={busy === `revoke:${revoking?.id}`}
+            onClick={async () => {
+              await act(`revoke:${revoking!.id}`, () => invitesApi.revoke(revoking!.id))
+              setRevoking(null)
+            }}
+          >
+            Revoke
+          </Button>
+        </div>
+      </Modal>
       <ResetPasswordModal user={resetFor} onClose={() => setResetFor(null)} />
       {limiting && (
         <ScopeModal
@@ -235,14 +320,28 @@ export function UsersPage() {
   )
 }
 
-function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
-  const users = useUsersApi()
+const INVITE_DAYS = [
+  { days: 1, label: '1 day' },
+  { days: 7, label: '7 days' },
+  { days: 30, label: '30 days' },
+]
+
+/** Who to invite and as what; the password is theirs to choose when they open the link. */
+function InviteModal({ open, onClose, onInvited }: { open: boolean; onClose: () => void; onInvited: (made: Invite & { token: string }) => void }) {
+  const invites = useInvitesApi()
+  const { server } = useSession()
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('viewer')
+  const [days, setDays] = useState(7)
+  const [limited, setLimited] = useState(false)
+  const [tgt, setTgt] = useState('')
+  const [tgtType, setTgtType] = useState<TargetType>('glob')
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
+  // with PASSWORD_LOGIN=admins, everyone else comes in through SSO and needs no invitation
+  const adminsOnly = !!server?.sso && server.passwordLogin === 'admins'
+  const scoped = role === 'operator' && limited
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -250,12 +349,13 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
     setBusy(true)
     setError(null)
     try {
-      await users.create({ username: username.trim().toLowerCase(), name: name.trim(), password, role })
-      onCreated()
+      const made = await invites.create({ username: username.trim().toLowerCase(), name: name.trim(), role, days, scope: scoped ? { target: tgt.trim(), targetType: tgtType } : null })
       onClose()
+      onInvited(made)
       setUsername('')
       setName('')
-      setPassword('')
+      setLimited(false)
+      setTgt('')
     } catch (err) {
       setError(err as Error)
     } finally {
@@ -264,36 +364,101 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add user">
+    <Modal open={open} onClose={onClose} title="Invite user">
       <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">You get a link to send them. They open it, choose their own password and are signed in; nobody else ever knows it.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Username" hint="A short name, or an email address">
             <Input value={username} onChange={(e) => setUsername(e.target.value.trim())} required autoFocus aria-invalid={!!username && !isUsername(username)} />
           </Field>
           <Field label="Full name (optional)">
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
           </Field>
         </div>
-        <Field label="Initial password" hint="At least 10 characters. Share it privately; the user can change it after signing in.">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} autoComplete="new-password" required />
-        </Field>
-        <Field label="Role" hint={ROLE_INFO[role].text}>
-          <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            {ROLES.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </Select>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Role" hint={adminsOnly && role !== 'admin' ? `Only admins sign in with a password here; others use ${server?.sso?.name}.` : ROLE_INFO[role].text}>
+            <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              {ROLES.filter((r) => r !== 'none').map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Link valid for">
+            <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              {INVITE_DAYS.map((d) => (
+                <option key={d.days} value={d.days}>
+                  {d.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {role === 'operator' && (
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={limited} onChange={(e) => setLimited(e.target.checked)} className="size-4 rounded border-zinc-300 accent-accent-600" />
+              Limit what they can run on
+            </label>
+            {limited && (
+              <TargetField
+                tgt={tgt}
+                tgtType={tgtType}
+                onChange={(t, tt) => {
+                  setTgt(t)
+                  setTgtType(tt)
+                }}
+              />
+            )}
+          </div>
+        )}
         {error && <ErrorBox error={error} />}
         <div className="flex justify-end gap-2">
           <Button type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={busy}>
-            Create user
+          <Button type="submit" variant="primary" icon={<Link2 className="size-4" />} loading={busy} disabled={(adminsOnly && role !== 'admin') || (scoped && !tgt.trim())}>
+            Create invite link
           </Button>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+/** The link, once: only its hash is kept on the server. */
+function InviteLinkModal({ invite, onClose }: { invite: Invite & { token: string }; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const url = inviteLink(invite.token)
+  return (
+    <Modal open onClose={onClose} title={`Invite link for ${invite.username}`} wide>
+      <div className="space-y-3 text-sm">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          Send this link to {invite.name || invite.username} over a channel you trust. It works once, until {new Date(invite.expiresAt).toLocaleString()}, and isn't shown again: if it gets lost, make a new
+          link from the list of invitations.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 rounded-lg bg-zinc-100 px-3 py-2 font-mono text-xs break-all select-all dark:bg-zinc-800" aria-label="Invite link">
+            {url}
+          </code>
+          <Button
+            size="sm"
+            icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(url)
+                .then(() => setCopied(true))
+                .catch(() => undefined)
+            }
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </div>
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </div>
     </Modal>
   )
 }

@@ -1,6 +1,5 @@
-import { emailFor } from '../lib/username'
 import { recordDemoAudit } from './demo-audit'
-import type { Role, SystemStatus, UserRow, UserScope, scopes, system, users } from './server'
+import type { Invite, Role, SystemStatus, UserRow, UserScope, invites, scopes, system, users } from './server'
 
 /*
  * The demo's users and the System page: a made-up team with each role (kept in the browser) and
@@ -40,13 +39,6 @@ export const demoScopes: typeof scopes = {
 
 export const demoUsers: typeof users = {
   list: () => delay({ users: team.map((u) => ({ ...u })), total: team.length }),
-  create: (u) => {
-    if (team.some((x) => x.username === u.username)) return Promise.reject(new Error('Username is already taken'))
-    team.push({ id: `u${team.length + 1}-${Date.now()}`, name: u.name || u.username, email: emailFor(u.username), username: u.username, role: u.role, banned: false, createdAt: new Date().toISOString(), lastSignInAt: null })
-    // the password isn't kept anywhere in the demo
-    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'user.create', target: u.username, args: JSON.stringify({ role: u.role }), outcome: 'ok' })
-    return delay({})
-  },
   setRole: (id: string, role: Role) => change(id, 'user.set_role', (u) => (u.role = role), { role }),
   setPassword: (id: string) => change(id, 'user.set_password', () => undefined),
   ban: (id: string) => change(id, 'user.ban', (u) => (u.banned = true)),
@@ -55,6 +47,39 @@ export const demoUsers: typeof users = {
     change(id, 'user.remove', (u) => {
       team.splice(team.indexOf(u), 1)
     }),
+}
+
+// one invitation waiting to be accepted; the demo's links lead nowhere, there is no server to accept them
+const pending: Invite[] = [
+  { id: 1, username: 'ivan', name: 'Ivan Intern', role: 'operator', scopeTarget: 'db-*', scopeTargetType: 'glob', createdBy: 'pam', createdAt: at(2), expiresAt: at(-5), expired: false },
+]
+const demoToken = () => `inv_demo${Math.random().toString(36).slice(2, 12)}`
+const until = (days: number) => new Date(Date.now() + days * DAY).toISOString()
+
+export const demoInvites: typeof invites = {
+  list: () => delay({ invites: pending.map((i) => ({ ...i, expired: Date.parse(i.expiresAt) <= Date.now() })) }),
+  create: (i) => {
+    if (team.some((x) => x.username === i.username)) return Promise.reject(new Error('Username is already taken'))
+    if (pending.some((x) => x.username === i.username)) return Promise.reject(new Error('This username is already invited: make a new link for it, or revoke it first'))
+    const row: Invite = { id: Date.now(), username: i.username, name: i.name || null, role: i.role, scopeTarget: i.scope?.target ?? null, scopeTargetType: i.scope?.targetType ?? null, createdBy: 'demo', createdAt: new Date().toISOString(), expiresAt: until(i.days), expired: false }
+    pending.push(row)
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'user.invite', target: i.username, args: JSON.stringify({ role: i.role, days: i.days, ...(i.scope ? { scope: i.scope } : {}) }), outcome: 'ok' })
+    return delay({ ...row, token: demoToken() })
+  },
+  renew: (id, days) => {
+    const row = pending.find((x) => x.id === id)
+    if (!row) return Promise.reject(new Error('Not found'))
+    row.expiresAt = until(days)
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'user.renew_invite', target: row.username, args: JSON.stringify({ days }), outcome: 'ok' })
+    return delay({ ...row, expired: false, token: demoToken() })
+  },
+  revoke: (id) => {
+    const i = pending.findIndex((x) => x.id === id)
+    if (i < 0) return Promise.reject(new Error('Not found'))
+    const [row] = pending.splice(i, 1)
+    recordDemoAudit({ username: 'demo', client: 'admin', fun: 'user.revoke_invite', target: row.username, outcome: 'ok' })
+    return delay({ ok: true as const })
+  },
 }
 
 const started = new Date(Date.now() - 6 * DAY - 3 * 3600_000).toISOString()

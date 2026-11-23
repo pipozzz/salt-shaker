@@ -287,6 +287,23 @@ export const apiToken = sqliteTable('api_token', {
   lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
 })
 
+/**
+ * An invitation to create an account: the admin picks the username, role and limit, the invited
+ * person opens the link and sets their own password. Only a hash of the link's token is kept.
+ */
+export const userInvite = sqliteTable('user_invite', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username').notNull().unique(),
+  name: text('name'),
+  role: text('role').notNull(),
+  scopeTarget: text('scope_target'),
+  scopeTargetType: text('scope_target_type'),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
 /** A window in which new minions whose id matches are accepted without a click (at most maxAccepts). */
 export const keyRule = sqliteTable('key_rule', {
   id: integer('id').primaryKey({ autoIncrement: true }),

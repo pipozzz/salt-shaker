@@ -1,5 +1,5 @@
-import { lazy, useEffect, useRef } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/Toasts'
 import { useTheme } from './lib/hooks'
@@ -35,6 +35,7 @@ const PatchesPage = lazy(() => import('./pages/Patches').then((m) => ({ default:
 const RunPage = lazy(() => import('./pages/Run').then((m) => ({ default: m.RunPage })))
 const QueryPage = lazy(() => import('./pages/Query').then((m) => ({ default: m.QueryPage })))
 const AuditPage = lazy(() => import('./pages/Audit').then((m) => ({ default: m.AuditPage })))
+const InvitePage = lazy(() => import('./pages/Invite').then((m) => ({ default: m.InvitePage })))
 const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })))
 const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })))
 const SystemPage = lazy(() => import('./pages/System').then((m) => ({ default: m.SystemPage })))
@@ -56,6 +57,8 @@ function Home() {
 function Gate() {
   const { session, login, server } = useSession()
   useTheme()
+  const navigate = useNavigate()
+  const inviteToken = /^\/invite\/([^/]+)\/?$/.exec(useLocation().pathname)?.[1]
   // ?demo opens the simulated master straight away (handy for shareable demo links)
   const wantsDemo = !session && new URLSearchParams(window.location.search).has('demo')
   const started = useRef(false)
@@ -67,6 +70,8 @@ function Gate() {
   if (wantsDemo) return null
   // wait for the server probe so the right login form shows
   if (!session && server === undefined) return null
+  // an invitation link, opened by someone who has no account yet (or by anyone: it comes first)
+  if (server && inviteToken) return <Suspense fallback={null}><InvitePage token={inviteToken} onDone={() => navigate('/', { replace: true })} /></Suspense>
   if (!session) return <LoginPage />
   return (
     <Routes>

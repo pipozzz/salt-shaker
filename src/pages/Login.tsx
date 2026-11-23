@@ -167,7 +167,7 @@ export function LoginPage() {
   )
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(20_184_166/0.12),transparent_60%)]" />

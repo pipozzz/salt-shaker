@@ -116,3 +116,50 @@ describe('compareVersions', () => {
     expect(compareVersions('3007', '3007.0')).toBe(0)
   })
 })
+
+describe('git_pillar', () => {
+  const base = '/var/cache/salt/master/git_pillar'
+  const repo = `${base}/9b1c4e7d`
+  // a master with one git_pillar remote that remote_map.txt names; logs every salt.cmd it runs
+  const master = () => {
+    const calls: string[] = []
+    const api = new SaltApi(
+      fakeTransport((low: Lowstate) => {
+        if (low.fun === 'git_pillar.update') return true
+        const [fun, path] = low.arg as string[]
+        calls.push(`${fun} ${path}`)
+        if (fun === 'config.get') return path === 'cachedir' ? '/var/cache/salt/master' : [{ git: ['main git@github.com:acme/salt-pillar.git'] }]
+        if (fun === 'file.find') return path === base ? [`${repo}/.git`] : [`${repo}/top.sls`, `${repo}/users.sls`, `${repo}/.git/HEAD`]
+        if (path.endsWith('remote_map.txt')) return '9b1c4e7d = main git@github.com:acme/salt-pillar.git\n'
+        return `contents of ${path}`
+      }),
+      't',
+      () => undefined,
+    )
+    return { api, calls }
+  }
+
+  it('finds the checkouts while it reads ext_pillar, and skips git files remote_map.txt makes unneeded', async () => {
+    const { api, calls } = master()
+    const remotes = await api.gitPillarRemotes()
+    const [r] = await api.gitPillarRepos(remotes)
+    expect(r).toMatchObject({ branch: 'main', dir: repo })
+    expect(calls.filter((c) => c.includes('/.git/'))).toEqual([])
+  })
+
+  it('reads top.sls alongside the listing and keeps answers until Update', async () => {
+    const { api, calls } = master()
+    const [r] = await api.gitPillarRepos(await api.gitPillarRemotes())
+    expect(await api.gitPillarFiles(r)).toEqual(['top.sls', 'users.sls'])
+    expect(calls).toContain(`file.read ${repo}/top.sls`)
+    const before = calls.length
+    expect(await api.readGitPillar(r, 'top.sls')).toBe(`contents of ${repo}/top.sls`)
+    await api.gitPillarRepos(await api.gitPillarRemotes())
+    await api.gitPillarFiles(r)
+    expect(calls.length).toBe(before)
+
+    await api.updateGitPillar()
+    await api.gitPillarFiles(r)
+    expect(calls.length).toBeGreaterThan(before)
+  })
+})

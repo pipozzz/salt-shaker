@@ -23,7 +23,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.7.27",
     "@hono/node-server": "^2.1.11",
+    "@simplewebauthn/browser": "^13.3.0",
     "better-auth": "^1.7.27",
     "better-sqlite3": "^13.2.0",
     "croner": "^11.0.1",
@@ -31,6 +33,7 @@
     "hono": "^4.13.19",
     "nodemailer": "^10.6.1",
     "postgres": "^4.1.1",
+    "qrcode-generator": "^2.0.4",
     "yaml": "^2.9.1"
   },
   "devDependencies": {

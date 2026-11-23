@@ -26,6 +26,8 @@ export interface Me {
   /** the master's address for minions (SALT_MASTER, else salt-api's host) */
   saltMaster?: string | null
   expiresAt: string | null
+  /** how this account signs in: whether a second step is on, and whether it has a password at all (SSO accounts don't) */
+  signIn?: { twoFactor: boolean; password: boolean }
 }
 
 /** The minions a user may run things on; none means the whole fleet. */
@@ -137,9 +139,18 @@ export function fleetState(fresh = false): Promise<FleetState> {
 const pick = <K extends 'compliance' | 'updates'>(state: FleetState, key: K) =>
   Object.fromEntries(Object.entries(state.minions).flatMap(([id, m]) => (m[key] ? [[id, m[key]]] : []))) as Record<string, NonNullable<MinionState[K]>>
 
+/** Thrown by sign-in when the account asks for a second step; the login page then asks for the code. */
+export class TwoFactorRequired extends SaltError {
+  constructor() {
+    super('Enter the code from your authenticator app')
+  }
+}
+
 export class ServerTransport implements Transport {
   async login(username: string, password: string): Promise<Session> {
-    await post('/api/auth/sign-in/username', { username, password })
+    const res = await post<{ twoFactorRedirect?: boolean }>('/api/auth/sign-in/username', { username, password })
+    // the password was right, but there is no session until the second step is done
+    if (res.twoFactorRedirect) throw new TwoFactorRequired()
     const me = await currentUser()
     if (!me) throw new SaltError('Signed in, but the session was not accepted')
     return sessionFromMe(me)
@@ -221,6 +232,74 @@ export const inviteLink = (token: string) => `${window.location.origin}/invite/$
 export const invitation = {
   get: (token: string) => request<{ username: string; name: string | null; role: Role; expiresAt: string }>(`/api/invite/${encodeURIComponent(token)}`),
   accept: (token: string, password: string, name: string) => post<{ ok: true; username: string }>(`/api/invite/${encodeURIComponent(token)}`, { password, name }),
+}
+
+/** The second step of a password sign-in; either one ends with a session cookie. */
+export const secondStep = {
+  totp: (code: string, trustDevice: boolean) => post('/api/auth/two-factor/verify-totp', { code, trustDevice }),
+  backupCode: (code: string, trustDevice: boolean) => post('/api/auth/two-factor/verify-backup-code', { code, trustDevice }),
+}
+
+/** Your own two-step verification: an authenticator app (TOTP) with one-time backup codes. */
+export const twoFactor = {
+  /** starts the setup: nothing is asked at sign-in until `confirm` got a right code */
+  enable: (password: string) => post<{ totpURI: string; backupCodes: string[] }>('/api/auth/two-factor/enable', { password }),
+  confirm: (code: string) => post('/api/auth/two-factor/verify-totp', { code }),
+  disable: (password: string) => post('/api/auth/two-factor/disable', { password }),
+  newBackupCodes: (password: string) => post<{ backupCodes: string[] }>('/api/auth/two-factor/generate-backup-codes', { password }),
+}
+
+export interface Passkey {
+  id: string
+  name: string | null
+  deviceType: string
+  backedUp: boolean
+  createdAt: string | null
+}
+
+const webauthn = () => import('@simplewebauthn/browser')
+/** the browser's own "cancelled" and "not allowed" errors, said plainly */
+const passkeyError = (e: unknown) => {
+  if (e instanceof SaltError) return e
+  const name = (e as { name?: string } | null)?.name
+  if (name === 'NotAllowedError' || name === 'AbortError') return new SaltError('The passkey prompt was cancelled or timed out')
+  if (name === 'InvalidStateError') return new SaltError('This passkey is already registered for your account')
+  return new SaltError(e instanceof Error ? e.message : 'The passkey could not be used')
+}
+
+export const passkeys = {
+  supported: () => typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function',
+  list: () => request<Passkey[]>('/api/auth/passkey/list-user-passkeys'),
+  /** asks the browser to make a passkey for this account and registers it */
+  add: async (name: string) => {
+    try {
+      const { startRegistration } = await webauthn()
+      const optionsJSON = await request<Parameters<typeof startRegistration>[0]['optionsJSON']>(`/api/auth/passkey/generate-register-options?name=${encodeURIComponent(name)}`)
+      const response = await startRegistration({ optionsJSON })
+      return await post<Passkey>('/api/auth/passkey/verify-registration', { response, name })
+    } catch (e) {
+      throw passkeyError(e)
+    }
+  },
+  rename: (id: string, name: string) => post('/api/auth/passkey/update-passkey', { id, name }),
+  remove: (id: string) => post('/api/auth/passkey/delete-passkey', { id }),
+  /** signs in with a passkey the browser offers; ends with a session cookie */
+  signIn: async () => {
+    try {
+      const { startAuthentication } = await webauthn()
+      const optionsJSON = await request<Parameters<typeof startAuthentication>[0]['optionsJSON']>('/api/auth/passkey/generate-authenticate-options')
+      const response = await startAuthentication({ optionsJSON })
+      await post('/api/auth/passkey/verify-authentication', { response })
+    } catch (e) {
+      throw passkeyError(e)
+    }
+  },
+}
+
+/** For admins: who has a second step or passkeys, and taking them away from someone who lost their device. */
+export const userSecurity = {
+  list: () => request<{ users: Record<string, { twoFactor: boolean; passkeys: number }> }>('/api/users/security'),
+  reset: (userId: string) => post<{ ok: true; twoFactor: boolean; passkeys: number }>(`/api/users/${encodeURIComponent(userId)}/reset-sign-in`, {}),
 }
 
 export const changeOwnPassword = (currentPassword: string, newPassword: string) =>

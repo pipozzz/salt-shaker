@@ -1,7 +1,7 @@
-import { Ban, Check, Copy, KeyRound, Link2, MailPlus, Pencil, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
+import { Ban, Check, Copy, Fingerprint, KeyRound, Link2, MailPlus, Pencil, RefreshCw, Trash2, Undo2, Users as UsersIcon } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { demoInvites, demoScopes, demoUsers } from '../api/demo-admin'
-import { inviteLink, invites as serverInvites, ROLES, scopes as serverScopes, users as serverUsers, type Invite, type Role, type UserRow, type UserScope } from '../api/server'
+import { inviteLink, invites as serverInvites, ROLES, scopes as serverScopes, users as serverUsers, userSecurity, type Invite, type Role, type UserRow, type UserScope } from '../api/server'
 import type { TargetType } from '../api/types'
 import { TargetField } from '../components/TargetField'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, type Tone } from '../components/ui'
@@ -46,6 +46,9 @@ export function UsersPage() {
   const scopesApi = useScopesApi()
   const scopeList = useAsync(() => scopesApi.list().then((r) => new Map(r.scopes.map((s) => [s.userId, s]))), [])
   const [limiting, setLimiting] = useState<UserRow | null>(null)
+  // second steps and passkeys are the server's; the demo's made-up team has none
+  const security = useAsync(() => (session?.mode === 'server' ? userSecurity.list().then((r) => r.users) : Promise.resolve({} as Awaited<ReturnType<typeof userSecurity.list>>['users'])), [])
+  const [resetting, setResetting] = useState<UserRow | null>(null)
   const invitesApi = useInvitesApi()
   const inviteList = useAsync(() => invitesApi.list(), [])
   const [inviting, setInviting] = useState(false)
@@ -62,7 +65,7 @@ export function UsersPage() {
     setError(null)
     try {
       await fn()
-      await Promise.all([list.reload(), scopeList.reload(), inviteList.reload()])
+      await Promise.all([list.reload(), scopeList.reload(), inviteList.reload(), security.reload()])
     } catch (e) {
       setError(e as Error)
     } finally {
@@ -142,6 +145,16 @@ export function UsersPage() {
                         <p className="flex items-center gap-2 font-mono font-medium">
                           {u.username ?? u.name} {isMe && <span className="font-sans text-xs text-zinc-500 dark:text-zinc-400">(you)</span>}
                           {isSso(u) && <Badge tone="blue">{server?.sso?.name ?? 'SSO'}</Badge>}
+                          {security.data?.[u.id]?.twoFactor && (
+                            <Badge tone="green" title="Asked for a code from an authenticator app after the password">
+                              2-step
+                            </Badge>
+                          )}
+                          {!!security.data?.[u.id]?.passkeys && (
+                            <Badge tone="green" title="Can sign in with a passkey">
+                              <Fingerprint className="size-3" /> {security.data[u.id].passkeys}
+                            </Badge>
+                          )}
                         </p>
                         {u.name !== u.username && <p className="text-xs text-zinc-500 dark:text-zinc-400">{u.name}</p>}
                       </td>
@@ -191,6 +204,11 @@ export function UsersPage() {
                             {!isSso(u) && (
                               <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => setResetFor(u)}>
                                 Password
+                              </Button>
+                            )}
+                            {security.data?.[u.id] && (
+                              <Button size="sm" variant="ghost" icon={<Fingerprint className="size-3.5" />} title="Remove their second step and passkeys, e.g. after a lost phone" onClick={() => setResetting(u)}>
+                                Reset sign-in
                               </Button>
                             )}
                             {u.banned ? (
@@ -296,6 +314,25 @@ export function UsersPage() {
           onSave={(s) => act(`scope:${limiting.id}`, () => (s ? scopesApi.set(limiting.id, s) : scopesApi.clear(limiting.id))).then(() => setLimiting(null))}
         />
       )}
+      <Modal open={!!resetting} onClose={() => setResetting(null)} title="Reset how this user signs in?">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          For a lost phone or security key: <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{resetting?.username ?? resetting?.name}</span> loses their two-step verification and
+          passkeys and is signed out everywhere. Their password still works, and they can set both up again.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setResetting(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={busy === `reset:${resetting?.id}`}
+            onClick={async () => {
+              await act(`reset:${resetting!.id}`, () => userSecurity.reset(resetting!.id))
+              setResetting(null)
+            }}
+          >
+            Reset sign-in
+          </Button>
+        </div>
+      </Modal>
       <Modal open={!!removing} onClose={() => setRemoving(null)} title="Delete user?">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{removing?.username ?? removing?.name}</span> will be signed out and removed. Their entries in the audit log

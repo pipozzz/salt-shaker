@@ -211,6 +211,13 @@
       "when": 1795175519951,
       "tag": "0029_user_invite",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1795175921457,
+      "tag": "0030_mfa_passkey",
+      "breakpoints": true
     }
   ]
 }

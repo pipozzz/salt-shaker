@@ -46,6 +46,7 @@ import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
 import { inviteRoutes } from './invites'
+import { securityRoutes } from './routes/security'
 import { Scheduler } from './scheduler'
 import { authorize, jidOf } from './policy'
 import { isRole, ROLE_PERMS, type Role } from './roles'
@@ -295,7 +296,17 @@ app.get('/api/me', async (c) => {
   const role = isRole(user.role) ? user.role : 'viewer'
   // the minions they're limited to, if any, so the UI can say so
   const scope = await loadScope(db, schema, user.id)
-  return c.json({ user: { id: user.id, name: user.name, username: user.username, role }, perms: ROLE_PERMS[role], scope, saltMaster: config.saltMaster, expiresAt: c.get('expiresAt') })
+  // for their own Security page: whether a second step is on, and whether there is a password to ask for (SSO users have none)
+  const [row] = await db.select({ twoFactor: schema.user.twoFactorEnabled }).from(schema.user).where(eq(schema.user.id, user.id)).limit(1)
+  const credential = await db.select({ id: schema.account.id }).from(schema.account).where(and(eq(schema.account.userId, user.id), eq(schema.account.providerId, 'credential'))).limit(1)
+  return c.json({
+    user: { id: user.id, name: user.name, username: user.username, role },
+    perms: ROLE_PERMS[role],
+    scope,
+    saltMaster: config.saltMaster,
+    expiresAt: c.get('expiresAt'),
+    signIn: { twoFactor: !!row?.twoFactor, password: credential.length > 0 },
+  })
 })
 
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
@@ -535,6 +546,7 @@ app.route('/api', targetRoutes({ db, schema }))
 app.route('/api', noteRoutes({ db, schema, audit }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))
+app.route('/api', securityRoutes({ db, schema, audit }))
 app.route('/api', tokenRoutes({ db, schema, audit }))
 app.route('/api', keyRuleRoutes({ db, schema, audit }))
 app.route('/api', reportRoutes({ report: weeklyReport }))

@@ -1,11 +1,11 @@
 import clsx from 'clsx'
-import { FlaskConical, KeyRound, LogIn, PlugZap } from 'lucide-react'
+import { Fingerprint, FlaskConical, KeyRound, LogIn, PlugZap } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Logo } from '../components/Logo'
 import { Button, ErrorBox, Field, Input, Select } from '../components/ui'
 import { useStoredState } from '../lib/hooks'
 import { LICENSE_NAME, SOURCE_URL } from '../lib/about'
-import { isNoAccessError, setupAdmin, startSso } from '../api/server'
+import { isNoAccessError, passkeys, secondStep, setupAdmin, startSso, TwoFactorRequired } from '../api/server'
 import { SaltError } from '../api/types'
 import { DEFAULT_API_URL, useSession, type Mode } from '../lib/session'
 
@@ -23,7 +23,7 @@ function ssoErrorFromUrl(ssoName?: string) {
 }
 
 export function LoginPage() {
-  const { login, server } = useSession()
+  const { login, server, refreshServer } = useSession()
   const [storedMode, setMode] = useStoredState<Mode>('salt-shaker.login.mode', 'live')
   // with a server, "sign in" goes through it; direct salt-api login is only offered without one
   const mode: Mode = server ? (storedMode === 'demo' ? 'demo' : 'server') : storedMode === 'server' ? 'live' : storedMode
@@ -54,6 +54,26 @@ export function LoginPage() {
     }
   }
 
+  // after the password, for accounts with two-step verification
+  const [secondStepOpen, setSecondStep] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const noAccess = (err: unknown) =>
+    isNoAccessError(err) ? new SaltError(sso && server?.passwordLogin === 'admins' ? `Only admins sign in without ${sso.name} here.` : 'This account has no access to Salt Shaker.') : (err as Error)
+
+  const signInWithPasskey = async () => {
+    setPasskeyBusy(true)
+    setError(null)
+    try {
+      await passkeys.signIn()
+      // the session cookie is set: pick the session up from it
+      await refreshServer()
+    } catch (err) {
+      setError(noAccess(err))
+    } finally {
+      setPasskeyBusy(false)
+    }
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
@@ -61,6 +81,8 @@ export function LoginPage() {
     try {
       await login({ mode, apiUrl: mode === 'live' ? apiUrl : '', username: mode === 'demo' ? username || 'demo' : username, password, eauth })
     } catch (err) {
+      // the password was right: the second step is next
+      if (err instanceof TwoFactorRequired) return setSecondStep(true)
       setError(
         mode === 'server' && isNoAccessError(err)
           ? new SaltError(sso && server?.passwordLogin === 'admins' ? `Password sign-in is only for admins here. Use ${sso.name}.` : 'This account has no access to Salt Shaker.')
@@ -72,6 +94,19 @@ export function LoginPage() {
   }
 
   if (server?.setupRequired && mode !== 'demo') return <Shell><SetupForm onDemo={() => setMode('demo')} /></Shell>
+  if (secondStepOpen && mode === 'server')
+    return (
+      <Shell>
+        <SecondStepForm
+          onDone={refreshServer}
+          onBack={() => {
+            setSecondStep(false)
+            setPassword('')
+          }}
+          explain={noAccess}
+        />
+      </Shell>
+    )
 
   return (
     <Shell>
@@ -162,8 +197,77 @@ export function LoginPage() {
             {mode === 'demo' ? 'Open demo' : sso ? 'Sign in with password' : 'Sign in'}
           </Button>
         )}
+        {mode === 'server' && passkeys.supported() && (
+          <Button type="button" className="w-full" icon={<Fingerprint className="size-4" />} loading={passkeyBusy} onClick={signInWithPasskey}>
+            Sign in with a passkey
+          </Button>
+        )}
       </form>
     </Shell>
+  )
+}
+
+/** The second step of a password sign-in: a code from the authenticator app, or a backup code. */
+function SecondStepForm({ onDone, onBack, explain }: { onDone: () => Promise<void>; onBack: () => void; explain: (e: unknown) => Error }) {
+  const [backup, setBackup] = useState(false)
+  const [code, setCode] = useState('')
+  const [trust, setTrust] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await (backup ? secondStep.backupCode(code.trim(), trust) : secondStep.totp(code.replace(/\s/g, ''), trust))
+      await onDone()
+    } catch (err) {
+      setError(explain(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div>
+        <h2 className="font-semibold">Two-step verification</h2>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{backup ? 'Enter one of your backup codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.'}</p>
+      </div>
+      {backup ? (
+        <Field label="Backup code">
+          <Input key="backup" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" className="font-mono" required autoFocus />
+        </Field>
+      ) : (
+        <Field label="Code">
+          <Input key="totp" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" placeholder="123456" className="font-mono" required autoFocus />
+        </Field>
+      )}
+      <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <input type="checkbox" checked={trust} onChange={(e) => setTrust(e.target.checked)} className="size-4 rounded border-zinc-300 accent-accent-600" />
+        Don't ask on this browser for 30 days
+      </label>
+      {error && <ErrorBox error={error} />}
+      <Button type="submit" variant="primary" className="w-full" loading={busy}>
+        Verify and sign in
+      </Button>
+      <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
+        <button type="button" onClick={onBack} className="hover:underline">
+          Back to sign-in
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setBackup(!backup)
+            setCode('')
+            setError(null)
+          }}
+          className="hover:underline"
+        >
+          {backup ? 'Use the authenticator app' : 'Use a backup code'}
+        </button>
+      </div>
+    </form>
   )
 }
 

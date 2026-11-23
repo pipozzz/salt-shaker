@@ -36,6 +36,7 @@ const RunPage = lazy(() => import('./pages/Run').then((m) => ({ default: m.RunPa
 const QueryPage = lazy(() => import('./pages/Query').then((m) => ({ default: m.QueryPage })))
 const AuditPage = lazy(() => import('./pages/Audit').then((m) => ({ default: m.AuditPage })))
 const InvitePage = lazy(() => import('./pages/Invite').then((m) => ({ default: m.InvitePage })))
+const SecurityPage = lazy(() => import('./pages/Security').then((m) => ({ default: m.SecurityPage })))
 const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })))
 const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })))
 const SystemPage = lazy(() => import('./pages/System').then((m) => ({ default: m.SystemPage })))
@@ -112,6 +113,7 @@ function Gate() {
         {(session.mode === 'demo' || (session.mode === 'server' && session.eauth === 'admin')) && <Route path="reports" element={<ReportPage />} />}
         {(session.mode === 'demo' || (session.mode === 'server' && (session.eauth === 'admin' || session.eauth === 'operator'))) && <Route path="audit" element={<AuditPage />} />}
         {session.mode !== 'live' && <Route path="tokens" element={<TokensPage />} />}
+        {session.mode === 'server' && <Route path="security" element={<SecurityPage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

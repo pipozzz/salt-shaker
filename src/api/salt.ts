@@ -255,46 +255,84 @@ export class SaltApi {
   private onMaster<T>(fun: string, arg: unknown[] = [], kwarg: Record<string, unknown> = {}) {
     return this.runner<T>('salt.cmd', { arg: [fun, ...arg], kwarg })
   }
+  // Every git_pillar answer is a runner on the master (around a second each) and changes only when
+  // the remotes are fetched, so answers are kept a while; Update drops them. Failures aren't kept.
+  private gitPillarCache = new Map<string, { at: number; value: Promise<unknown> }>()
+  private remember<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+    const hit = this.gitPillarCache.get(key)
+    if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>
+    const value = load()
+    this.gitPillarCache.set(key, { at: Date.now(), value })
+    value.catch(() => {
+      if (this.gitPillarCache.get(key)?.value === value) this.gitPillarCache.delete(key)
+    })
+    return value
+  }
   /** git_pillar remotes in the master's ext_pillar; empty when pillar doesn't come from git. */
-  async gitPillarRemotes() {
-    return parseGitPillar(await this.onMaster<unknown>('config.get', ['ext_pillar']))
+  gitPillarRemotes() {
+    // look for the checkouts meanwhile: they don't depend on the remotes, only matching them does
+    void this.gitPillarCheckouts().catch(() => {})
+    return this.remember('remotes', 10 * 60_000, async () => parseGitPillar(await this.onMaster<unknown>('config.get', ['ext_pillar'])))
+  }
+  /** The .git directories under the git_pillar cache, and its remote_map.txt. */
+  private gitPillarCheckouts() {
+    return this.remember('checkouts', 10 * 60_000, async () => {
+      const cachedir = await this.onMaster<string>('config.get', ['cachedir'])
+      const base = `${String(cachedir || '/var/cache/salt/master').replace(/\/+$/, '')}/git_pillar`
+      const [gitDirs, mapText] = await Promise.all([
+        this.onMaster<string[] | string>('file.find', [base], { type: 'd', name: '.git', maxdepth: 3 }),
+        this.onMaster<string | false>('file.read', [`${base}/remote_map.txt`]).catch(() => ''),
+      ])
+      return { base, gitDirs: Array.isArray(gitDirs) ? gitDirs : [], remoteMap: parseRemoteMap(typeof mapText === 'string' ? mapText : '') }
+    })
   }
   /** The working trees git_pillar checked out on the master, matched to their remotes. */
   async gitPillarRepos(remotes: GitPillarRemote[]): Promise<GitPillarRepo[]> {
-    const cachedir = await this.onMaster<string>('config.get', ['cachedir'])
-    const base = `${String(cachedir || '/var/cache/salt/master').replace(/\/+$/, '')}/git_pillar`
-    const [gitDirs, mapText] = await Promise.all([
-      this.onMaster<string[] | string>('file.find', [base], { type: 'd', name: '.git', maxdepth: 3 }),
-      this.onMaster<string | false>('file.read', [`${base}/remote_map.txt`]).catch(() => ''),
-    ])
-    const remoteMap = parseRemoteMap(typeof mapText === 'string' ? mapText : '')
+    const { base, gitDirs, remoteMap } = await this.gitPillarCheckouts()
+    // nothing checked out yet: the master may do it any moment, so look again next time
+    if (!gitDirs.length) this.gitPillarCache.delete('checkouts')
     const repos = await Promise.all(
-      (Array.isArray(gitDirs) ? gitDirs : []).map(async (g) => {
+      gitDirs.map(async (g) => {
         const dir = g.replace(/\/\.git$/, '')
+        const rel = dir.slice(base.length + 1)
+        // remote_map.txt usually names the remote; the checkout's own git files are read only when it doesn't
+        // (or for an __env__ remote whose branch only HEAD tells)
+        const mapped = matchRemote(remotes, { rel }, remoteMap)
+        if (mapped && (mapped.remote.branch !== '__env__' || rel.includes('/'))) return { remote: mapped.remote, branch: mapped.branch, dir }
         const [config, head] = await Promise.all([
           this.onMaster<string>('file.read', [`${g}/config`]).catch(() => ''),
           this.onMaster<string>('file.read', [`${g}/HEAD`]).catch(() => ''),
         ])
-        const m = matchRemote(remotes, { rel: dir.slice(base.length + 1), url: gitConfigUrl(String(config)), head: headBranch(String(head)) }, remoteMap)
+        const m = matchRemote(remotes, { rel, url: gitConfigUrl(String(config)), head: headBranch(String(head)) }, remoteMap)
         return m && { remote: m.remote, branch: m.branch, dir }
       }),
     )
     return repos.filter((r): r is GitPillarRepo => !!r).sort((a, b) => remotes.indexOf(a.remote) - remotes.indexOf(b.remote) || a.branch.localeCompare(b.branch))
   }
   /** Files of a checked out git_pillar repo, relative to its root parameter. */
-  async gitPillarFiles(repo: GitPillarRepo) {
-    const res = await this.onMaster<string[] | string>('file.find', [repo.dir], { type: 'f' })
-    return treeFiles(Array.isArray(res) ? res : [], repo.dir, repo.remote.root)
+  gitPillarFiles(repo: GitPillarRepo) {
+    // the page opens top.sls first, so read it alongside the listing
+    void this.readGitPillar(repo, 'top.sls').catch(() => {})
+    return this.remember(`files ${repo.dir} ${repo.remote.root ?? ''}`, 60_000, async () => {
+      const res = await this.onMaster<string[] | string>('file.find', [repo.dir], { type: 'f' })
+      return treeFiles(Array.isArray(res) ? res : [], repo.dir, repo.remote.root)
+    })
   }
-  async readGitPillar(repo: GitPillarRepo, path: string) {
+  readGitPillar(repo: GitPillarRepo, path: string) {
     const full = `${repo.dir}/${repo.remote.root ? `${repo.remote.root}/` : ''}${path}`
-    const res = await this.onMaster<string | false>('file.read', [full])
-    if (typeof res !== 'string') throw new SaltError(`Can't read ${full} on the master`)
-    return res
+    return this.remember(`read ${full}`, 60_000, async () => {
+      const res = await this.onMaster<string | false>('file.read', [full])
+      if (typeof res !== 'string') throw new SaltError(`Can't read ${full} on the master`)
+      return res
+    })
   }
   /** Fetches the git_pillar remotes now. */
-  updateGitPillar() {
-    return this.runner<unknown>('git_pillar.update')
+  async updateGitPillar() {
+    try {
+      return await this.runner<unknown>('git_pillar.update')
+    } finally {
+      this.gitPillarCache.clear()
+    }
   }
 
   /** When a job started, in the browser's clock. */

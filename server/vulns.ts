@@ -590,6 +590,16 @@ export class VulnService {
     return { updating: got.updating, total: list.length, minions: new Set(list.flatMap((g) => g.minions)).size, packages: list.slice(0, limit) }
   }
 
+  /**
+   * Whether an enabled schedule keeps the inventories current. Without one nothing scans again,
+   * and the inventories drop out of the report once they're older than the window.
+   */
+  async scheduled(): Promise<boolean> {
+    const t = this.schema.schedule
+    const rows = await this.db.select({ id: t.id }).from(t).where(and(eq(t.kind, 'vulns'), eq(t.enabled, true))).limit(1)
+    return rows.length > 0
+  }
+
   /** The daily totals of the last `days` days, oldest first. */
   async trend(days: number): Promise<Array<VulnTotals & { day: string }>> {
     const t = this.schema.vulnDaily

@@ -4,7 +4,6 @@ import type { MaintenanceWindow } from '../lib/windows'
 import type { ResolvedStep, RunbookInput } from '../lib/runbook'
 import { streamEvents } from './sse'
 import { SaltError, type Grains, type Lowstate, type SaltEvent, type Session, type Transport } from './types'
-import { emailFor } from '../lib/username'
 
 /** Talks to the Salt Shaker server (server/), which holds users and proxies salt-api. */
 
@@ -187,13 +186,41 @@ export interface UserRow {
 
 export const users = {
   list: () => request<{ users: UserRow[]; total: number }>('/api/auth/admin/list-users?limit=500&sortBy=createdAt&sortDirection=asc'),
-  create: (u: { username: string; name: string; password: string; role: Role }) =>
-    post('/api/auth/admin/create-user', { email: emailFor(u.username), password: u.password, name: u.name || u.username, role: u.role, data: { username: u.username } }),
   setRole: (userId: string, role: Role) => post('/api/auth/admin/set-role', { userId, role }),
   setPassword: (userId: string, newPassword: string) => post('/api/auth/admin/set-user-password', { userId, newPassword }),
   ban: (userId: string) => post('/api/auth/admin/ban-user', { userId }),
   unban: (userId: string) => post('/api/auth/admin/unban-user', { userId }),
   remove: (userId: string) => post('/api/auth/admin/remove-user', { userId }),
+}
+
+/** An invitation that hasn't been accepted yet; its link is only known when it's made or renewed. */
+export interface Invite {
+  id: number
+  username: string
+  name: string | null
+  role: Role
+  scopeTarget: string | null
+  scopeTargetType: string | null
+  createdBy: string | null
+  createdAt: string
+  expiresAt: string
+  expired: boolean
+}
+
+export const invites = {
+  list: () => request<{ invites: Invite[] }>('/api/invites'),
+  create: (i: { username: string; name: string; role: Role; days: number; scope: UserScope | null }) => post<Invite & { token: string }>('/api/invites', i),
+  /** a new link, valid for `days` again; the old one stops working */
+  renew: (id: number, days: number) => post<Invite & { token: string }>(`/api/invites/${id}/renew`, { days }),
+  revoke: (id: number) => request<{ ok: true }>(`/api/invites/${id}`, { method: 'DELETE' }),
+}
+
+export const inviteLink = (token: string) => `${window.location.origin}/invite/${token}`
+
+/** What an invitation link is for, and accepting it: both work without being signed in. */
+export const invitation = {
+  get: (token: string) => request<{ username: string; name: string | null; role: Role; expiresAt: string }>(`/api/invite/${encodeURIComponent(token)}`),
+  accept: (token: string, password: string, name: string) => post<{ ok: true; username: string }>(`/api/invite/${encodeURIComponent(token)}`, { password, name }),
 }
 
 export const changeOwnPassword = (currentPassword: string, newPassword: string) =>

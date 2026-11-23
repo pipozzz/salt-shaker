@@ -6,7 +6,7 @@ sidebar: { order: 10 }
 
 ## Users
 
-Admins create and manage accounts on the **Users** page. Each account has one [role](/salt-shaker/reference/roles/): *admin*, *operator*, *viewer* or *none*. An operator can also be [limited to some minions](/salt-shaker/reference/roles/#limiting-what-someone-can-run-on) under **Can run on**. No Linux accounts are needed on the master.
+Admins invite people and manage accounts on the **Users** page. Each account has one [role](/salt-shaker/reference/roles/): *admin*, *operator*, *viewer* or *none*. An operator can also be [limited to some minions](/salt-shaker/reference/roles/#limiting-what-someone-can-run-on) under **Can run on**. No Linux accounts are needed on the master.
 
 ![Users](../../../../screenshots/users.png)
 
@@ -19,6 +19,16 @@ To stop someone from signing in, give them the *none* role, disable them, or del
 **Last sign-in** shows when each user last signed in, with a password or through SSO, which helps with access reviews. Sign-ins are recorded from version 1.5.0 on, so users who haven't signed in since the upgrade show *never*.
 
 The first admin is created on the first visit to a fresh install.
+
+### Inviting someone
+
+**Invite user** asks for a username, a role, for an operator optionally the minions they're limited to, and how long the link is valid (1, 7 or 30 days). You get a link to send them. Whoever opens it chooses their own password and is signed in, so no password is ever made up by an admin or sent around. The limit applies from their first sign-in.
+
+A link works once and is shown only when it's made: the server keeps a hash of it, not the link. Invitations that haven't been accepted are listed under the users. **New link** replaces a lost or expired one (the old link stops working) and **Revoke** withdraws the invitation. Opening a used, revoked or expired link says only that it isn't valid any more.
+
+Invitations are in the audit log: `user.invite`, `user.renew_invite`, `user.revoke_invite`, and `user.accept_invite` when the account is created.
+
+With single sign-on and `PASSWORD_LOGIN=admins`, only admins can be invited: everyone else has no password here and comes in through the provider.
 
 ## Audit log
 

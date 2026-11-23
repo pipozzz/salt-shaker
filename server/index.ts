@@ -45,9 +45,10 @@ import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
 import { vulnRoutes } from './routes/vulns'
+import { inviteRoutes } from './invites'
 import { Scheduler } from './scheduler'
 import { authorize, jidOf } from './policy'
-import { isRole, ROLE_PERMS } from './roles'
+import { isRole, ROLE_PERMS, type Role } from './roles'
 import pkg from '../package.json' with { type: 'json' }
 import { EventHub } from './events'
 import { SaltService, UpstreamError } from './salt'
@@ -298,6 +299,19 @@ app.get('/api/me', async (c) => {
 })
 
 const audit = (row: AuditRow) => db.insert(schema.auditLog).values({ ...row, at: new Date() })
+
+// here, before the routes whose guards cover everything mounted after them: an invitation link is
+// opened by someone who isn't signed in yet
+app.route(
+  '/api',
+  inviteRoutes({
+    db,
+    schema,
+    audit,
+    createUser: async (u) => (await auth.api.createUser({ body: { email: emailFor(u.username), password: u.password, name: u.name, role: u.role as Exclude<Role, 'none'>, data: { username: u.username } } })).user.id,
+    passwordAllowed: (role) => !(config.oidc && config.passwordLogin === 'admins' && role !== 'admin'),
+  }),
+)
 
 // enrollment windows accept matching new keys; the event bus is followed by one instance only
 const keyAutoAccept = new KeyAutoAccept({ db, schema, salt: saltBackground, notify: (m) => notifier.emit('pending_key', m), audit })

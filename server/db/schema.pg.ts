@@ -285,6 +285,23 @@ export const apiToken = pgTable('api_token', {
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 })
 
+/**
+ * An invitation to create an account: the admin picks the username, role and limit, the invited
+ * person opens the link and sets their own password. Only a hash of the link's token is kept.
+ */
+export const userInvite = pgTable('user_invite', {
+  id: serial('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  name: text('name'),
+  role: text('role').notNull(),
+  scopeTarget: text('scope_target'),
+  scopeTargetType: text('scope_target_type'),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+})
+
 /** A window in which new minions whose id matches are accepted without a click (at most maxAccepts). */
 export const keyRule = pgTable('key_rule', {
   id: serial('id').primaryKey(),

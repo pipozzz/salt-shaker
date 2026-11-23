@@ -204,6 +204,13 @@
       "when": 1795075405289,
       "tag": "0028_job_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1795175519951,
+      "tag": "0029_user_invite",
+      "breakpoints": true
     }
   ]
 }

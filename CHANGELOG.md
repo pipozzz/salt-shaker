@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.44.1
+
+**States & Pillar**
+
+- **Pillar files** with git_pillar open in about half the time. The page waited on six calls to the master, one after another, before showing `top.sls`; it now waits on three. The checkouts are looked up while `ext_pillar` is read, a checkout's `.git/config` and `HEAD` are read only when `remote_map.txt` doesn't name its remote, and `top.sls` is read alongside the file listing.
+- Answers are kept for the session: remotes and checkouts for 10 minutes, file listings and contents for a minute, so coming back to the tab is instant. **Update** drops them all.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.44.0
 
 **Users**

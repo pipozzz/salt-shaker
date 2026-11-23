@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.43.0
+
+**Vulnerabilities**
+
+- **A missing scan schedule is noticed**: packages are only listed when a scan runs, so without a schedule new installs and upgrades never show up, and an inventory drops out of the report after 30 days. When no enabled schedule of kind *Vulnerability scan* exists, **Vulnerabilities** now says so. Admins can add a nightly scan of every minion there with **Scan every night**; others are told to ask an admin. See [Vulnerabilities](https://pipozzz.github.io/salt-shaker/guide/vulnerabilities/).
+- `GET /api/vulns/scheduled` tells whether such a schedule exists, for everyone signed in.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.42.1
 
 **Fixes**

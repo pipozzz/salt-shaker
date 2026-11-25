@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { AlertOctagon, CheckCircle2, ChevronRight, CircleDashed, ExternalLink, GitCompare, Play, ShieldCheck, Unplug, Wrench } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { history, type ComplianceRun } from '../api/server'
 import type { TargetType } from '../api/types'
@@ -26,6 +26,7 @@ export function CompliancePage() {
   const past = useAsync(() => (fromServer ? history.compliance(20) : Promise.resolve(null)), [fromServer, run?.done])
 
   /** Opens a past check: from the server's history when available (it outlives the master's cache). */
+  const resultsRef = useRef<HTMLDivElement>(null)
   const openRun = async (jid: string) => {
     if (fromServer) {
       try {
@@ -168,11 +169,9 @@ export function CompliancePage() {
         </Card>
       )}
 
-      {fromServer && past.data && past.data.runs.length > 0 && <History runs={past.data.runs} current={run?.jid} onOpen={(jid) => void openRun(jid).catch((e) => setError(e as Error))} />}
-
       {run && !isEmptyJob && (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div ref={resultsRef} className="mb-6 grid scroll-mt-6 grid-cols-2 gap-3 lg:grid-cols-4">
             <FilterStat active={filter === 'ok'} onClick={() => setFilter(filter === 'ok' ? 'all' : 'ok')}>
               <Stat label="In compliance" value={count('ok')} icon={<CheckCircle2 />} tone="green" />
             </FilterStat>
@@ -215,6 +214,19 @@ export function CompliancePage() {
             )}
           </Card>
         </>
+      )}
+
+      {/* below the current check, which is what the page is for; opening an earlier one scrolls back up to it */}
+      {fromServer && past.data && past.data.runs.length > 0 && (
+        <History
+          runs={past.data.runs}
+          current={run?.jid}
+          onOpen={(jid) =>
+            void openRun(jid)
+              .then(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+              .catch((e) => setError(e as Error))
+          }
+        />
       )}
     </>
   )
@@ -279,7 +291,7 @@ const SEGMENTS: Array<{ key: keyof ComplianceRun['counts']; label: string; class
 /** Past checks as one stacked status bar each, newest first. */
 function History({ runs, current, onOpen }: { runs: ComplianceRun[]; current?: string; onOpen: (jid: string) => void }) {
   return (
-    <Card className="mb-6">
+    <Card className="mt-6">
       <CardHeader
         title="History"
         subtitle="Earlier checks, kept by the server. Open one to see its details."

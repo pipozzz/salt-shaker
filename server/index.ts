@@ -106,7 +106,7 @@ const acceptedMinions = async () => (await keyList())?.ids ?? null
 // ROLE: a web instance leaves the background work to a worker, a worker doesn't serve the UI or API
 const background = config.role !== 'web'
 const vulns = new VulnService(db, schema, new OsvClient(config.osvApiUrl), { minions: acceptedMinions, builds: background })
-const history = new HistoryRecorder(db, schema, events, config.historyDays, config.auditDays)
+const history = new HistoryRecorder(db, schema, events, config.historyDays, config.auditDays, saltBackground)
 const notifier = new Notifier(db, schema, config.publicUrl)
 if (config.smtpUrl) notifier.mail = smtpMailer(config.smtpUrl, config.smtpFrom)
 history.onEvent((tag, data) => notifier.onEvent(tag, data))

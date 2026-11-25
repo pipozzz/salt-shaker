@@ -29,7 +29,7 @@ export class EventHub {
   private idleMs: number
   private retryMs: number
   private keepaliveMs: number
-  private listeners = new Map<Listener, (() => void) | undefined>()
+  private listeners = new Map<Listener, { onLost?: () => void; onConnected?: () => void }>()
   private taps = new Set<Listener>()
   private ctrl: AbortController | null = null
   private idle: ReturnType<typeof setTimeout> | null = null
@@ -52,9 +52,12 @@ export class EventHub {
   /**
    * Follows the bus until the returned function is called. `onLost` is called when the connection
    * to salt-api breaks, for listeners that would rather end than wait for it to come back.
+   * `onConnected` is called each time the stream (re)connects, and right away if it already is:
+   * what happened on the bus before then was missed.
    */
-  subscribe(fn: Listener, onLost?: () => void) {
-    this.listeners.set(fn, onLost)
+  subscribe(fn: Listener, onLost?: () => void, onConnected?: () => void) {
+    this.listeners.set(fn, { onLost, onConnected })
+    if (onConnected && this.status.state === 'connected') queueMicrotask(onConnected)
     if (this.idle) clearTimeout(this.idle)
     this.idle = null
     if (!this.ctrl) {
@@ -178,6 +181,7 @@ export class EventHub {
         const body = await this.salt.events(signal)
         this.status = { ...this.status, state: 'connected', since: new Date(), lastError: null }
         this.settle(true)
+        for (const { onConnected } of [...this.listeners.values()]) onConnected?.()
         const reader = body.pipeThrough(new TextDecoderStream()).getReader()
         let buf = ''
         for (;;) {
@@ -197,7 +201,7 @@ export class EventHub {
         console.warn('events: stream lost, retrying', message)
       }
       this.settle(false)
-      for (const lost of [...this.listeners.values()]) lost?.()
+      for (const { onLost } of [...this.listeners.values()]) onLost?.()
       await new Promise((r) => setTimeout(r, this.retryMs))
     }
   }

@@ -223,3 +223,99 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
     expect(await jobs('20261101191151725177')).toHaveLength(1)
   })
 })
+
+describe.each(testDialects)('HistoryRecorder catching up (%s)', (dialect) => {
+  // shapes from salt-run jobs.list_jobs / jobs.list_job on Salt 3007
+  const listed = (fun: string, extra: Record<string, unknown> = {}) => ({ Function: fun, Arguments: ['echo hi'], Target: 'web-*', 'Target-type': 'glob', User: 'root', ...extra })
+  const detail = (jid: string, fun: string, result: Record<string, unknown>) => ({ jid, ...listed(fun), Minions: Object.keys(result), Result: result })
+
+  function setup(opened: Awaited<ReturnType<typeof openTestDatabase>>, cache: () => Record<string, Record<string, unknown>>) {
+    let bus = { fn: (_e: { tag: string; data: Record<string, unknown> }) => undefined as void, lost: () => undefined as void, connected: () => undefined as void }
+    const calls: string[] = []
+    const salt = {
+      call: async (low: Record<string, unknown>) => {
+        calls.push(low.fun === 'jobs.list_job' ? `list_job ${(low.arg as string[])[0]}` : String(low.fun))
+        const jobs = cache()
+        if (low.fun === 'jobs.list_jobs') return Object.fromEntries(Object.entries(jobs).map(([jid, d]) => [jid, { ...d, Minions: undefined, Result: undefined }]))
+        return jobs[(low.arg as string[])[0]] ?? {}
+      },
+    }
+    const rec = new HistoryRecorder(
+      opened.db,
+      opened.schema,
+      {
+        subscribe: (fn, lost, connected) => {
+          bus = { fn: fn as typeof bus.fn, lost: lost!, connected: connected! }
+          return () => undefined
+        },
+      },
+      30,
+      0,
+      salt,
+    )
+    const notified: string[] = []
+    rec.onReturn((r) => notified.push(r.jid))
+    rec.onEvent((tag) => notified.push(tag))
+    return { rec, bus: () => bus, calls, notified }
+  }
+
+  it('records the jobs that ran while the stream was down, without notifying anyone', async () => {
+    const opened = await openTestDatabase(dialect)
+    const { job, jobReturn } = opened.schema
+    const before = '20261125090000000000'
+    // a job recorded before the gap, complete
+    await opened.db.insert(job).values({ jid: before, fun: 'cmd.run', args: '[]', minions: '["web-01"]', returned: 1, startedAt: new Date('2026-11-25T09:00:00Z') })
+    const cache: Record<string, Record<string, unknown>> = {
+      '20261125080000000000': detail('20261125080000000000', 'cmd.run', { 'web-01': { return: 'old', retcode: 0, success: true } }),
+      [before]: detail(before, 'cmd.run', { 'web-01': { return: 'hi', retcode: 0, success: true } }),
+      '20261125091500000000': detail('20261125091500000000', 'cmd.run', { 'web-01': { return: 'hi', retcode: 0, success: true }, 'web-02': { return: 'boom', retcode: 1, success: false } }),
+      '20261125091600000000': detail('20261125091600000000', 'test.ping', { 'web-01': { return: true, retcode: 0, success: true } }),
+      '20261125091700000000': { ...detail('20261125091700000000', 'state.apply', { 'db-01': { return: { 'file_|-x_|-/x_|-managed': { result: true, changes: {} } }, retcode: 0, success: true } }), Metadata: { salt_shaker_user: 'ann' } },
+    }
+    const { rec, bus, calls, notified } = setup(opened, () => cache)
+    rec.start()
+    bus().connected()
+    await vi.waitFor(() => expect(calls).toContain('list_job 20261125091700000000'))
+    await rec.catchUp()
+
+    // only what came after the newest recorded job, and no noise
+    expect(calls).toEqual(['jobs.list_jobs', 'list_job 20261125091500000000', 'list_job 20261125091700000000'])
+    const [missed] = await opened.db.select().from(job).where(eq(job.jid, '20261125091500000000'))
+    expect(missed).toMatchObject({ fun: 'cmd.run', target: 'web-*', saltUser: 'root', returned: 2, failed: 1, startedAt: new Date('2026-11-25T09:15:00Z') })
+    expect(await opened.db.select({ minion: jobReturn.minion, ret: jobReturn.ret, retcode: jobReturn.retcode }).from(jobReturn).where(eq(jobReturn.jid, '20261125091500000000')).orderBy(jobReturn.minion)).toEqual([
+      { minion: 'web-01', ret: '"hi"', retcode: 0 },
+      { minion: 'web-02', ret: '"boom"', retcode: 1 },
+    ])
+    const [state] = await opened.db.select().from(job).where(eq(job.jid, '20261125091700000000'))
+    expect(state.shakerUser).toBe('ann')
+    expect(notified).toEqual([])
+
+    // the stream breaks after a live job; what ran meanwhile is read once it's back
+    const live = '20261125100000000000'
+    bus().fn({ tag: `salt/job/${live}/new`, data: { ...newEvent, jid: live, _stamp: '2026-11-25T09:00:00.000000' } })
+    await vi.waitFor(async () => expect(await opened.db.select().from(job).where(eq(job.jid, live))).toHaveLength(1))
+    bus().lost()
+    cache['20261125100500000000'] = detail('20261125100500000000', 'cmd.run', { 'web-01': { return: 'later', retcode: 0, success: true } })
+    calls.length = 0
+    bus().connected()
+    await vi.waitFor(() => expect(calls).toContain('list_job 20261125100500000000'))
+    await rec.catchUp()
+    expect(calls).toEqual(['jobs.list_jobs', 'list_job 20261125100500000000'])
+    // the master's jids are an hour ahead of UTC (learnt from the live job's stamp)
+    const [later] = await opened.db.select().from(job).where(eq(job.jid, '20261125100500000000'))
+    expect(later.startedAt).toEqual(new Date('2026-11-25T09:05:00Z'))
+    rec.stop()
+    await opened.close()
+  })
+
+  it('starts history now on an empty database instead of reading the whole job cache', async () => {
+    const opened = await openTestDatabase(dialect)
+    const { rec, bus, calls } = setup(opened, () => ({ '20261125091500000000': detail('20261125091500000000', 'cmd.run', {}) }))
+    rec.start()
+    bus().connected()
+    await rec.catchUp()
+    expect(calls).toEqual([])
+    rec.stop()
+    await opened.close()
+  })
+})

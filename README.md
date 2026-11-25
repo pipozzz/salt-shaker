@@ -213,6 +213,7 @@ npm run dev             # UI on :5173, proxies /api to the server
 | `npm run lint` / `npm run typecheck` | oxlint / TypeScript |
 | `npm run build` / `npm run build:server` | UI → `dist/`, server bundle → `dist-server/` |
 | `npm run db:generate` | after changing `server/db/schema.*.ts` (keep the SQLite and Postgres schemas in sync), generates migrations for both |
+| `npm run release -- X.Y.Z` | cuts a release from the notes at the top of `CHANGELOG.md` ([how](https://pipozzz.github.io/salt-shaker/reference/development/#releases)) |
 
 The stack is React 19, Vite, TypeScript and Tailwind CSS 4 on the front end, and Hono, Better Auth and Drizzle on the server.
 

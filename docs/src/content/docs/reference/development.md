@@ -16,6 +16,7 @@ npm run dev             # UI on :5173, proxies /api to the server
 | `npm run lint` / `npm run typecheck` | oxlint / TypeScript |
 | `npm run build` / `npm run build:server` | UI → `dist/`, server bundle → `dist-server/` |
 | `npm run db:generate` | after changing `server/db/schema.*.ts` (keep the SQLite and Postgres schemas in sync), generates migrations for both |
+| `npm run release -- X.Y.Z` | cuts a release from the notes at the top of `CHANGELOG.md`: see [Releases](#releases) |
 
 The stack is React 19, Vite, TypeScript and Tailwind CSS 4 on the front end, and Hono, Better Auth and Drizzle on the server.
 
@@ -23,6 +24,18 @@ The stack is React 19, Vite, TypeScript and Tailwind CSS 4 on the front end, and
 - `src/pages/`, `src/components/`: the UI.
 - `src/lib/`: session, permissions, job tracking and risk rules.
 - `server/`: config, auth, request policy (`policy.ts`), roles, the salt-api service client and the database.
+
+## Releases
+
+Write the notes at the top of `CHANGELOG.md`, under `## X.Y.Z` or `## Unreleased`, then run `npm run release -- X.Y.Z` on an up-to-date `main` (the notes may still be uncommitted). The script needs `gh` signed in. It:
+
+1. puts the notes and the version bump in `package.json` on a `release/X.Y.Z` branch and opens the "Release X.Y.Z" pull request, because `main` only takes changes through pull requests;
+2. waits for the required checks and squash-merges it;
+3. tags the merge commit `vX.Y.Z` and creates the GitHub release with the same notes.
+
+The tag's CI run then publishes the `X.Y.Z` and `X.Y` images. If a check fails or the script stops, fix what's needed and run the same command again: it continues from where it stopped.
+
+Bump the patch version for fixes only, and the minor version for new features, settings, migrations or API changes.
 
 ## These docs
 

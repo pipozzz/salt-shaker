@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { stateSummary } from '../src/lib/states'
 import { pruneAudit } from './audit'
+import { breather, PRUNE_ROWS } from './prune'
 import type { Db, Schema } from './db'
 import { jidOffset, jobEvents, jobsAfter, type JobDetail, type ListedJob } from './catchup'
 import type { EventHub } from './events'
@@ -141,6 +142,8 @@ export interface StreamStatus {
 const MAX_QUEUED = 50_000
 // events written together at most
 const MAX_BATCH = 2000
+// old jobs looked at per round of pruning; their returns go PRUNE_ROWS at a time
+const PRUNE_JOBS = 500
 
 // what a repeated return replaces
 const RETURN_COLUMNS = ['ret', 'retcode', 'success', 'summary', 'returnedAt'] as const
@@ -162,6 +165,9 @@ export class HistoryRecorder {
   private queue: Array<[string, Record<string, unknown>]> = []
   private draining = false
   private dropped = 0
+  private pruning = false
+  /** bumped by stop(), so a prune under way ends there */
+  private generation = 0
   private salt: Pick<SaltService, 'call'> | null
   /** the newest jid seen on the bus */
   private seen: string | null = null
@@ -214,13 +220,14 @@ export class HistoryRecorder {
       () => void this.catchUp(),
     )
     void this.prune()
-    this.timers.push(setInterval(() => void this.prune(), 6 * 3600_000))
+    this.timers.push(setInterval(() => void this.prune(), 3600_000))
   }
 
   stop() {
     this.leave?.()
     this.leave = null
     this.gapFrom = null
+    this.generation++
     this.queue = []
     this.timers.forEach(clearInterval)
     this.timers = []
@@ -395,25 +402,51 @@ export class HistoryRecorder {
     if (notifyReturns) for (const r of returns) for (const l of this.returnListeners) l(r)
   }
 
-  /** Old jobs, and old audit entries when AUDIT_RETENTION_DAYS is set. Runs on the leader only. */
+  /**
+   * Old jobs, and old audit entries when AUDIT_RETENTION_DAYS is set. Runs on the leader only,
+   * until everything past retention is gone, a few thousand rows per statement with a pause
+   * between them: a first prune can mean millions of returns.
+   */
   async prune() {
+    if (this.pruning) return
+    this.pruning = true
+    const generation = this.generation
+    const going = () => this.generation === generation
     try {
-      const audit = await pruneAudit(this.db, this.schema, this.auditDays)
-      if (audit) console.log(`audit: pruned ${audit} entries older than ${this.auditDays} day${this.auditDays === 1 ? '' : 's'}`)
-    } catch (err) {
-      console.warn('audit: prune failed', err)
-    }
-    try {
-      const cutoff = new Date(Date.now() - this.retentionDays * 86400_000)
-      const { job, jobReturn } = this.schema
-      const old = await this.db.select({ jid: job.jid }).from(job).where(lt(job.startedAt, cutoff)).limit(5000)
-      if (old.length === 0) return
-      const jids = old.map((o) => o.jid)
-      await this.db.delete(jobReturn).where(inArray(jobReturn.jid, jids))
-      await this.db.delete(job).where(inArray(job.jid, jids))
-      console.log(`history: pruned ${jids.length} jobs older than ${this.retentionDays} days`)
-    } catch (err) {
-      console.warn('history: prune failed', err)
+      try {
+        const audit = await pruneAudit(this.db, this.schema, this.auditDays, new Date(), going)
+        if (audit) console.log(`audit: pruned ${audit} entries older than ${this.auditDays} day${this.auditDays === 1 ? '' : 's'}`)
+      } catch (err) {
+        console.warn('audit: prune failed', err)
+      }
+      let pruned = 0
+      try {
+        const cutoff = new Date(Date.now() - this.retentionDays * 86400_000)
+        const { job, jobReturn } = this.schema
+        while (going()) {
+          const jids = (await this.db.select({ jid: job.jid }).from(job).where(lt(job.startedAt, cutoff)).orderBy(job.startedAt).limit(PRUNE_JOBS)).map((o) => o.jid)
+          if (!jids.length) break
+          // the returns first, a few thousand at a time: one job may have returned from thousands of minions
+          for (;;) {
+            if (!going()) return
+            const rows = await this.db.select({ jid: jobReturn.jid, minion: jobReturn.minion }).from(jobReturn).where(inArray(jobReturn.jid, jids)).limit(PRUNE_ROWS)
+            if (!rows.length) break
+            const byJid = new Map<string, string[]>()
+            for (const r of rows) byJid.set(r.jid, [...(byJid.get(r.jid) ?? []), r.minion])
+            for (const [jid, minions] of byJid) await this.db.delete(jobReturn).where(and(eq(jobReturn.jid, jid), inArray(jobReturn.minion, minions)))
+            await breather()
+          }
+          await this.db.delete(job).where(inArray(job.jid, jids))
+          pruned += jids.length
+          await breather()
+        }
+      } catch (err) {
+        console.warn('history: prune failed', err)
+      } finally {
+        if (pruned) console.log(`history: pruned ${pruned} jobs older than ${this.retentionDays} days`)
+      }
+    } finally {
+      this.pruning = false
     }
   }
 }

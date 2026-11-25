@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { HistoryRecorder, isDryRun, parseJobEvent, takeSseData } from './history'
 import { openTestDatabase, testDialects } from './testdb'
@@ -211,6 +211,44 @@ describe.each(testDialects)('HistoryRecorder storage (%s)', (dialect) => {
     // the first event alone, the 50 that came meanwhile in one batch, which failed and was redone one by one
     expect(batches.slice(0, 2)).toEqual([1, 50])
     expect(batches.length).toBe(2 + 50)
+  })
+
+  it('prunes everything past retention in batches, a job with thousands of returns included', async () => {
+    const { job, jobReturn } = opened.schema
+    const old = new Date(Date.now() - 200 * 86400_000)
+    const jids = Array.from({ length: 1200 }, (_, i) => String(20210101000000000000n + BigInt(i)))
+    for (let i = 0; i < jids.length; i += 200) await opened.db.insert(job).values(jids.slice(i, i + 200).map((jid) => ({ jid, fun: 'cmd.run', args: '[]', minions: '[]', startedAt: old })))
+    const big = Array.from({ length: 4500 }, (_, m) => ({ jid: jids[3], minion: `m-${m}`, ret: '1', returnedAt: old }))
+    for (let i = 0; i < big.length; i += 500) await opened.db.insert(jobReturn).values(big.slice(i, i + 500))
+    await opened.db.insert(jobReturn).values(jids.slice(600, 700).map((jid) => ({ jid, minion: 'web-01', ret: '1', returnedAt: old })))
+    const deletes: number[] = []
+    const del = opened.db.delete.bind(opened.db)
+    const spy = vi.spyOn(opened.db, 'delete').mockImplementation(((t: Parameters<typeof del>[0]) => (deletes.push(1), del(t))) as typeof opened.db.delete)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    await rec.prune()
+    spy.mockRestore()
+    expect(log).toHaveBeenCalledWith('history: pruned 1200 jobs older than 30 days')
+    log.mockRestore()
+    expect(await opened.db.select().from(job).where(inArray(job.jid, jids))).toHaveLength(0)
+    expect(await opened.db.select().from(jobReturn).where(inArray(jobReturn.jid, jids))).toHaveLength(0)
+    // many small statements rather than one big one
+    expect(deletes.length).toBeGreaterThan(5)
+    expect(await jobs('20261101191151725177')).toHaveLength(1)
+  })
+
+  it('stops pruning when the recorder stops', async () => {
+    const { job } = opened.schema
+    const old = new Date(Date.now() - 200 * 86400_000)
+    const jids = Array.from({ length: 1500 }, (_, i) => String(20220101000000000000n + BigInt(i)))
+    for (let i = 0; i < jids.length; i += 250) await opened.db.insert(job).values(jids.slice(i, i + 250).map((jid) => ({ jid, fun: 'cmd.run', args: '[]', minions: '[]', startedAt: old })))
+    const pruning = rec.prune()
+    rec.stop()
+    await pruning
+    const left = (await opened.db.select().from(job).where(inArray(job.jid, jids))).length
+    // it ended after its first round instead of going on
+    expect(left).toBeGreaterThan(0)
+    await rec.prune()
+    expect(await opened.db.select().from(job).where(inArray(job.jid, jids))).toHaveLength(0)
   })
 
   it('prunes jobs past the retention window with their returns', async () => {

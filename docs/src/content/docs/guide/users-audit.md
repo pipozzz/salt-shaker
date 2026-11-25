@@ -51,6 +51,6 @@ Besides Salt calls, it has the console's own changes: schedules and notification
 
 Search by user, function, target or jid, and narrow the list by outcome (ok, denied, error) or by date. Dates are whole days in UTC, both ends included. **Export CSV** downloads every entry that matches the current filter, up to 100,000 rows, with times in ISO 8601 UTC and arguments as JSON. Only admins and operators can see or export the log. The search goes into the page's address, e.g. `/audit?outcome=denied&from=2026-11-01`, so you can bookmark it or send it to someone.
 
-Entries are kept forever unless you set `AUDIT_RETENTION_DAYS`, e.g. `365` to keep one year. Older entries are deleted every 6 hours. Export what you need to keep longer first. The **System** page shows the setting.
+Entries are kept forever unless you set `AUDIT_RETENTION_DAYS`, e.g. `365` to keep one year. Older entries are deleted every hour, a few thousand at a time. Export what you need to keep longer first. The **System** page shows the setting.
 
 Salt's own job cache records the user too, in the job metadata as `salt_shaker_user`.

@@ -1,6 +1,7 @@
-import { and, eq, gte, like, lt, or, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, like, lt, or, sql } from 'drizzle-orm'
 import { toCsv } from '../src/lib/csv'
 import type { Db, Schema } from './db'
+import { breather, PRUNE_ROWS } from './prune'
 
 export interface AuditFilter {
   q?: string
@@ -44,12 +45,20 @@ export function auditWhere(schema: Schema, f: AuditFilter) {
 }
 
 /** Deletes audit entries older than `days`; 0 keeps everything. Returns how many went. */
-export async function pruneAudit(db: Db, schema: Schema, days: number, now = new Date()) {
+export async function pruneAudit(db: Db, schema: Schema, days: number, now = new Date(), going: () => boolean = () => true) {
   if (days <= 0) return 0
   const t = schema.auditLog
   const cutoff = new Date(now.getTime() - days * 86400_000)
-  const gone = await db.delete(t).where(lt(t.at, cutoff)).returning({ id: t.id })
-  return gone.length
+  let gone = 0
+  // a few thousand at a time: a first prune of a big log would hold SQLite (and every request) for seconds
+  while (going()) {
+    const ids = (await db.select({ id: t.id }).from(t).where(lt(t.at, cutoff)).orderBy(t.at).limit(PRUNE_ROWS)).map((r) => r.id)
+    if (!ids.length) break
+    await db.delete(t).where(inArray(t.id, ids))
+    gone += ids.length
+    await breather()
+  }
+  return gone
 }
 
 type Row = Schema['auditLog']['$inferSelect']

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.45.0
+
+**Jobs**
+
+- **No holes in the job history**: jobs that ran while the server wasn't following the event bus (salt-api restarted, the connection dropped, the server was restarted or upgraded, or another instance held the lease) are now read back from the master's job cache once the stream is back, up to the 200 newest, and recorded with their returns. They don't send notifications, and their returns carry the job's start time. See [Jobs and events](https://pipozzz.github.io/salt-shaker/guide/jobs-events/).
+
+**Deployment**
+
+- The arm64 image is built on a native arm64 runner instead of under QEMU, so images are published sooner after a release.
+
+**Development**
+
+- `npm run release -- X.Y.Z` cuts a release through a pull request from the notes at the top of `CHANGELOG.md`. See [Development](https://pipozzz.github.io/salt-shaker/reference/development/#releases).
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.44.1
 
 **States & Pillar**

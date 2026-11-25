@@ -2,7 +2,9 @@ import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { stateSummary } from '../src/lib/states'
 import { pruneAudit } from './audit'
 import type { Db, Schema } from './db'
+import { jidOffset, jobEvents, jobsAfter, type JobDetail, type ListedJob } from './catchup'
 import type { EventHub } from './events'
+import type { SaltService } from './salt'
 import { parseSaltStamp } from '../src/lib/stamp'
 
 /**
@@ -57,16 +59,23 @@ function serialize(ret: unknown) {
   return json.length > MAX_RETURN_BYTES ? JSON.stringify({ _truncated: true, bytes: json.length }) : json
 }
 
+/**
+ * Whether a job of this function is kept. A schedule may run a "noisy" function on purpose: its
+ * returns carry the schedule in their metadata ("new" events don't, so the scheduler records those
+ * jobs itself).
+ */
+export function worthRecording(fun: string, metadata: Record<string, unknown>) {
+  const scheduled = typeof metadata.salt_shaker_user === 'string' && metadata.salt_shaker_user.startsWith('schedule:')
+  return (!NOISE.has(fun) || scheduled) && !fun.startsWith('runner.') && !fun.startsWith('wheel.')
+}
+
 /** Turns one salt event into a row to store, or null if it isn't a job event worth keeping. */
 export function parseJobEvent(tag: string, data: Record<string, unknown>): { kind: 'new'; job: NewJob } | { kind: 'ret'; ret: JobRet } | null {
   const m = tag.match(/^salt\/job\/(\d{20})\/(new|ret\/(.+))$/)
   if (!m) return null
   const fun = typeof data.fun === 'string' ? data.fun : null
   const meta = data.metadata && typeof data.metadata === 'object' ? (data.metadata as Record<string, unknown>) : {}
-  // a schedule may run a "noisy" function on purpose; its returns carry the schedule in their
-  // metadata ("new" events don't, so the scheduler records those jobs itself)
-  const scheduled = m[2] !== 'new' && typeof meta.salt_shaker_user === 'string' && meta.salt_shaker_user.startsWith('schedule:')
-  if (!fun || (NOISE.has(fun) && !scheduled) || fun.startsWith('runner.') || fun.startsWith('wheel.')) return null
+  if (!fun || !worthRecording(fun, m[2] === 'new' ? {} : meta)) return null
   const jid = m[1]
   if (m[2] === 'new') {
     const tgt = data.tgt
@@ -153,13 +162,23 @@ export class HistoryRecorder {
   private queue: Array<[string, Record<string, unknown>]> = []
   private draining = false
   private dropped = 0
+  private salt: Pick<SaltService, 'call'> | null
+  /** the newest jid seen on the bus */
+  private seen: string | null = null
+  /** where the jobs missed since the stream was last followed begin, once it's back */
+  private gapFrom: Promise<string | null> | null = null
+  private catching: Promise<void> | null = null
+  /** how far the master's jids are ahead of UTC, from the last "new" event */
+  private offsetMs = 0
 
-  constructor(db: Db, schema: Schema, bus: Pick<EventHub, 'subscribe'>, retentionDays: number, auditDays = 0) {
+  /** `salt` reads the jobs missed while the stream was down back from the master's job cache. */
+  constructor(db: Db, schema: Schema, bus: Pick<EventHub, 'subscribe'>, retentionDays: number, auditDays = 0, salt: Pick<SaltService, 'call'> | null = null) {
     this.db = db
     this.schema = schema
     this.bus = bus
     this.retentionDays = retentionDays
     this.auditDays = auditDays
+    this.salt = salt
   }
 
   /** Called for every master event, before filtering. */
@@ -175,7 +194,25 @@ export class HistoryRecorder {
   /** Safe to call again after stop() (the leader may lose and regain its lease). */
   start() {
     if (this.leave) return
-    this.leave = this.bus.subscribe((e) => this.enqueue(e.tag, e.data))
+    // what ran while nobody here followed the bus starts after the newest job recorded; asked
+    // before subscribing, so jobs recorded once the stream is back don't move it
+    const { job } = this.schema
+    this.gapFrom = this.db
+      .select({ newest: sql<string | null>`max(${job.jid})` })
+      .from(job)
+      .then(([r]) => {
+        const newest = r?.newest ?? null
+        if (newest && (!this.seen || newest > this.seen)) this.seen = newest
+        return newest
+      })
+    this.leave = this.bus.subscribe(
+      (e) => this.enqueue(e.tag, e.data),
+      () => {
+        // the stream broke: what follows the newest job seen is missed until it's back
+        if (!this.gapFrom) this.gapFrom = Promise.resolve(this.seen)
+      },
+      () => void this.catchUp(),
+    )
     void this.prune()
     this.timers.push(setInterval(() => void this.prune(), 6 * 3600_000))
   }
@@ -183,6 +220,7 @@ export class HistoryRecorder {
   stop() {
     this.leave?.()
     this.leave = null
+    this.gapFrom = null
     this.queue = []
     this.timers.forEach(clearInterval)
     this.timers = []
@@ -195,6 +233,8 @@ export class HistoryRecorder {
    * handful of statements instead of several for every minion.
    */
   private enqueue(tag: string, data: Record<string, unknown>) {
+    const jid = tag.match(/^salt\/job\/(\d{20})\//)?.[1]
+    if (jid && (!this.seen || jid > this.seen)) this.seen = jid
     if (this.queue.length >= MAX_QUEUED) {
       if (this.dropped++ % 1000 === 0) console.warn(`history: the database is not keeping up, dropping events (${this.dropped} so far)`)
       return
@@ -210,11 +250,12 @@ export class HistoryRecorder {
         const batch = this.queue.splice(0, MAX_BATCH)
         try {
           await this.recordAll(batch)
+          for (const [tag, data] of batch) this.learnOffset(tag, data)
         } catch (err) {
           // one bad event must not lose the others: write them one by one to find it
           for (const [tag, data] of batch) {
             try {
-              await this.recordAll([[tag, data]], false)
+              await this.recordAll([[tag, data]], { events: false })
             } catch (e) {
               console.warn('history: could not record event', e)
             }
@@ -231,8 +272,63 @@ export class HistoryRecorder {
     await this.recordAll([[tag, data]])
   }
 
-  /** Writes events in one go. `notify` is false when retrying a batch whose listeners already ran. */
-  async recordAll(events: Array<[string, Record<string, unknown>]>, notify = true) {
+  private learnOffset(tag: string, data: Record<string, unknown>) {
+    const m = tag.match(/^salt\/job\/(\d{20})\/new$/)
+    const at = m ? parseSaltStamp(data._stamp) : null
+    const offset = m && at ? jidOffset(m[1], at) : null
+    if (offset !== null) this.offsetMs = offset
+  }
+
+  /**
+   * Records the jobs that ran while the stream was down, from the master's job cache: those
+   * started after the newest one recorded before, and any of them still missing returns. Nobody
+   * is notified about them: they're old news by now.
+   */
+  catchUp(): Promise<void> {
+    if (this.catching) return this.catching
+    const from = this.gapFrom
+    this.gapFrom = null
+    if (!from || !this.salt) return Promise.resolve()
+    this.catching = (async () => {
+      const after = await from
+      // nothing recorded yet: history starts now rather than with the master's whole job cache
+      if (!after) return
+      const listed = (await this.salt!.call({ client: 'runner', fun: 'jobs.list_jobs' }, { lane: 'background', fresh: true })) as Record<string, ListedJob> | null
+      if (!listed || typeof listed !== 'object') return
+      const { jids, skipped } = jobsAfter(listed, after, worthRecording)
+      if (!jids.length) return
+      const { job } = this.schema
+      const have = new Map<string, { minions: string | null; returned: number }>()
+      for (const part of chunks(jids, 500)) for (const r of await this.db.select({ jid: job.jid, minions: job.minions, returned: job.returned }).from(job).where(inArray(job.jid, part))) have.set(r.jid, r)
+      let recorded = 0
+      for (const jid of jids) {
+        if (!this.leave) return
+        const known = have.get(jid)
+        const expected = known?.minions ? (JSON.parse(known.minions) as unknown[]).length : 0
+        if (known && expected > 0 && known.returned >= expected) continue
+        const detail = (await this.salt!.call({ client: 'runner', fun: 'jobs.list_job', arg: [jid] }, { lane: 'background' })) as JobDetail | null
+        if (!detail || typeof detail !== 'object') continue
+        await this.recordAll(jobEvents(jid, detail, this.offsetMs), { events: false, returns: false })
+        recorded++
+      }
+      if (recorded || skipped) console.log(`history: recorded ${recorded} job${recorded === 1 ? '' : 's'} that ran while the event stream was down${skipped ? `; ${skipped} older ones were left out` : ''}`)
+    })()
+      .catch((e) => {
+        // try again on the next reconnect
+        this.gapFrom ??= from
+        console.warn('history: reading the jobs missed while the event stream was down failed', e instanceof Error ? e.message : e)
+      })
+      .finally(() => {
+        this.catching = null
+      })
+    return this.catching
+  }
+
+  /**
+   * Writes events in one go. `events: false` skips the event listeners (a retried batch whose
+   * listeners already ran), `returns: false` the return listeners as well (jobs caught up on).
+   */
+  async recordAll(events: Array<[string, Record<string, unknown>]>, { events: notify = true, returns: notifyReturns = true } = {}) {
     const jobs = new Map<string, NewJob>()
     // the last return of a minion wins, as it would one after another
     const rets = new Map<string, JobRet>()
@@ -296,7 +392,7 @@ export class HistoryRecorder {
     for (const [jid, c] of counts) {
       if (c.returned || c.failed) await this.db.update(job).set({ returned: sql`${job.returned} + ${c.returned}`, failed: sql`${job.failed} + ${c.failed}` }).where(eq(job.jid, jid))
     }
-    for (const r of returns) for (const l of this.returnListeners) l(r)
+    if (notifyReturns) for (const r of returns) for (const l of this.returnListeners) l(r)
   }
 
   /** Old jobs, and old audit entries when AUDIT_RETENTION_DAYS is set. Runs on the leader only. */

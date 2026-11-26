@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.45.2
+
+**Jobs**
+
+- **Pruning no longer stalls the server**: jobs and their returns older than `JOB_RETENTION_DAYS`, and audit log entries past their retention, are deleted a few thousand rows at a time with short pauses in between, every hour instead of every six. On SQLite with a large backlog the server stayed unresponsive for seconds while pruning; it now pauses for at most a few milliseconds at a time.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.45.1
 
 **Compliance**

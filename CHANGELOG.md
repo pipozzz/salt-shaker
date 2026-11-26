@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.45.1
+
+**Compliance**
+
+- **History** comes after the current check's results instead of between the form and them, so the stats and the minion list are the first thing under the form. Opening an earlier check from History scrolls back up to its results.
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.45.0
 
 **Jobs**

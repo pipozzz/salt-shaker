@@ -23,7 +23,7 @@ The server is configured with environment variables.
 | `BETTER_AUTH_SECRET` | generated into `DATA_DIR` | set it explicitly when running on Postgres without a data volume |
 | `TRUSTED_ORIGINS` | | extra origins allowed to call the API (comma-separated) |
 | `TRUST_PROXY` | off | set to `1` behind a reverse proxy, so client IPs (for rate limits and the audit log) are taken from `X-Forwarded-For` |
-| `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept |
+| `JOB_RETENTION_DAYS` | `90` | how long recorded jobs and their returns are kept; older ones are deleted every hour, a few thousand rows at a time so the server keeps answering |
 | `AUDIT_RETENTION_DAYS` | forever | how long [audit log](/salt-shaker/guide/users-audit/#audit-log) entries are kept, e.g. `365`; unset or `0` keeps them all |
 | `APPROVAL_REQUIRED` | `off` | `risky`: an operator's command that changes minions becomes a [change](/salt-shaker/guide/changes/) an admin approves before it runs |
 | `SMTP_URL` | off | SMTP server for [email notifications](/salt-shaker/guide/schedules/#email), e.g. `smtp://user:pass@smtp.example.com:587` |

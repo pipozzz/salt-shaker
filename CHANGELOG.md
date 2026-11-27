@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.46.0
+
+**Access**
+
+- **Limited operators see only their minions**: an operator limited by **Can run on** used to act only on their minions but still saw the whole fleet. Now they see only their minions' data:
+  - the live event stream, with no runner or wheel jobs;
+  - jobs, their returns and CSV export;
+  - Minions, Map and Overview;
+  - compliance, failures, patches and vulnerabilities. The fleet-wide 90-day vulnerability trend is hidden.
+
+  Salt reads about minions (`manage.status`, `cache.grains`, key lists, `jobs.lookup_jid` and others) are narrowed to their minions. `pillar.show_pillar` works only for their minions, and other fleet-wide runner and wheel reads are refused. The visible set is recalculated about every minute. The audit log, changes and runbook runs stay as they were. See [Roles](https://pipozzz.github.io/salt-shaker/reference/roles/).
+
+**Upgrading**
+
+- No database migrations.
+
 ## 1.45.2
 
 **Jobs**

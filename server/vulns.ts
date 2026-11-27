@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, like, sql } from 'drizz
 import { INVENTORY_MARKER } from '../src/lib/inventory'
 import { compareVersions } from '../src/lib/pkgversion'
 import type { Db, Schema } from './db'
+import { sees, type Visible } from './visible'
 
 /*
  * Known vulnerabilities in the packages installed on minions. An inventory job (cmd.run with
@@ -563,7 +564,7 @@ export class VulnService {
     return { updating: got.updating, minion: m.minion, os: m.os, scannedAt: m.scannedAt, packages }
   }
 
-  async packages(q: string, limit = 200) {
+  async packages(q: string, limit = 200, visible: Visible = null) {
     const got = await this.get(0)
     // a report read from the database comes without the inventories: read the ones not here yet
     const unread = (got.all?.minions ?? []).filter((m) => !this.parsed.has(`${m.jid}|${m.minion}`))
@@ -571,6 +572,7 @@ export class VulnService {
     const needle = q.toLowerCase()
     const groups = new Map<string, InstalledPackage>()
     for (const m of got.all?.minions ?? []) {
+      if (!sees(visible, m.minion)) continue
       const inv = this.parsed.get(`${m.jid}|${m.minion}`)?.inventory
       if (!inv) continue
       for (const p of inv.packages) {

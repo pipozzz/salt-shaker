@@ -13,7 +13,7 @@ import { CLIENT_IP_HEADER, createAuth, emailFor } from './auth'
 import { isUsername, USERNAME_RULE } from '../src/lib/username'
 import { loadConfig } from './config'
 import { openDatabase } from './db'
-import { HistoryRecorder } from './history'
+import { HistoryRecorder, returnFailed } from './history'
 import { INSTANCE_ID, Leader } from './leader'
 import { LoopDelay } from './loop'
 import { JOB_RESULTS, jobHistory, jobsCsv } from './job-history'
@@ -44,6 +44,7 @@ import { smtpMailer } from './mail'
 import { peerRoutes, summarize } from './peers'
 import { ChangeRunner, needsApproval } from './changes'
 import { cachedExpand, checkScope, loadScope } from './scope'
+import { narrowRead, pick, refuseRead, sees, visibleEvent, visibleList, type Visible } from './visible'
 import { vulnRoutes } from './routes/vulns'
 import { inviteRoutes } from './invites'
 import { securityRoutes } from './routes/security'
@@ -331,6 +332,23 @@ history.onEvent((tag, data) => void keyAutoAccept.onEvent(tag, data).catch((e) =
 /** Which minions a target matches, from the master's grains cache, for scoped users' calls. */
 const expandTarget = cachedExpand(async (tgt, tgtType) => Object.keys(((await salt.call({ client: 'runner', fun: 'cache.grains', tgt, tgt_type: tgtType })) ?? {}) as Record<string, unknown>))
 
+/** The minions a user sees: null for the whole fleet, else the ones their scope matches now. */
+async function visibleTo(user: SessionUser): Promise<Visible> {
+  const scope = await loadScope(db, schema, user.id)
+  return scope ? new Set(await expandTarget(scope.target, scope.targetType)) : null
+}
+
+/** Where recorded jobs ran, for narrowing jobs.list_jobs. */
+async function jobMinions(jids: string[]) {
+  const t = schema.job
+  const out = new Map<string, string[]>()
+  for (let i = 0; i < jids.length; i += 400) {
+    const rows = await db.select({ jid: t.jid, minions: t.minions }).from(t).where(inArray(t.jid, jids.slice(i, i + 400)))
+    for (const r of rows) out.set(r.jid, visibleList(null, r.minions) ?? [])
+  }
+  return out
+}
+
 /**
  * One salt-api call on a user's behalf, with every check the console's calls get: the role's
  * permissions, the user's scope, approvals, and the audit log. Used by /api/salt and Slack.
@@ -348,6 +366,8 @@ async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts
   let { low } = decision
   // a scoped user runs only on their minions: the target is checked and narrowed to them
   const scope = await loadScope(db, schema, user.id)
+  // and reads what the master knows about the fleet (status, grains, jobs, keys) for them alone
+  let visible: Visible = null
   if (scope) {
     const narrowed = await checkScope(scope, low, expandTarget).catch((e: Error) => ({ ok: false as const, reason: `Couldn't check your access: ${e.message}` }))
     if (!narrowed.ok) {
@@ -355,6 +375,11 @@ async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts
       return { status: 403, body: { error: narrowed.reason } }
     }
     low = narrowed.low
+    if (!String(low.client).startsWith('local')) {
+      visible = new Set(await expandTarget(scope.target, scope.targetType).catch(() => []))
+      const refused = refuseRead(visible, low)
+      if (refused) return { status: 403, body: { error: refused } }
+    }
   }
   // with APPROVAL_REQUIRED=risky, an operator's command that changes minions goes through a change
   // a runbook run an admin approved has had its approval
@@ -377,7 +402,7 @@ async function saltAs(user: SessionUser, input: unknown, ip: string | null, opts
   try {
     const ret = await salt.call(low, { lane: opts.background ? 'background' : 'interactive' })
     if (audited) await audit({ ...base, jid: jidOf(ret), outcome: 'ok' })
-    return { status: 200, body: { return: ret } }
+    return { status: 200, body: { return: visible ? await narrowRead(visible, low, ret, jobMinions) : ret } }
   } catch (e) {
     const err = e instanceof UpstreamError ? e : new UpstreamError(String(e), 502)
     if (audited) await audit({ ...base, outcome: 'error', error: err.message })
@@ -392,10 +417,32 @@ app.post('/api/salt', async (c) => {
   return c.json(res.body, res.status as 200)
 })
 
+// how often a scoped user's open event stream looks again at which minions they see
+const VISIBLE_REFRESH_MS = 60_000
+
 app.get('/api/salt/events', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   try {
-    return new Response(await events.open(c.req.raw.signal), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+    // a scoped user gets only the events about their minions
+    let only: Parameters<typeof events.open>[2]
+    const scope = await loadScope(db, schema, user.id)
+    if (scope) {
+      let visible = new Set(await expandTarget(scope.target, scope.targetType))
+      const again = setInterval(() => {
+        expandTarget(scope.target, scope.targetType).then(
+          (ids) => (visible = new Set(ids)),
+          () => undefined,
+        )
+      }, VISIBLE_REFRESH_MS)
+      again.unref?.()
+      c.req.raw.signal.addEventListener('abort', () => clearInterval(again), { once: true })
+      only = (e) => {
+        const seen = visibleEvent(visible, e.tag, e.data)
+        return seen === 'same' ? e.frame : seen ? EventHub.frame(e.tag, seen) : null
+      }
+    }
+    return new Response(await events.open(c.req.raw.signal, undefined, only), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'events failed' }, 502)
   }
@@ -429,36 +476,45 @@ app.get('/api/audit/export', async (c) => {
 // ---- job history (recorded from the event bus by HistoryRecorder) ----
 
 app.get('/api/history/jobs', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   const limit = Math.min(Number(c.req.query('limit') ?? 100) || 100, 500)
   const before = Number(c.req.query('before')) || null
   const result = JOB_RESULTS.find((x) => x === c.req.query('result')) ?? null
-  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, before, limit })
+  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, before, limit, visible: await visibleTo(user) })
   return c.json({ rows, retentionDays: config.historyDays })
 })
 
 // before /:jid, which would take "export" for a jid
 const JOBS_EXPORT_MAX = 100_000
 app.get('/api/history/jobs/export', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   const result = JOB_RESULTS.find((x) => x === c.req.query('result')) ?? null
-  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, limit: JOBS_EXPORT_MAX })
+  const rows = await jobHistory(db, schema, { q: c.req.query('q'), result, limit: JOBS_EXPORT_MAX, visible: await visibleTo(user) })
   const name = `jobs-${new Date().toISOString().slice(0, 10)}.csv`
   return c.body(jobsCsv(rows), 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' })
 })
 
 app.get('/api/history/jobs/:jid', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   const jid = c.req.param('jid')
   const [jobRow] = await db.select().from(schema.job).where(eq(schema.job.jid, jid)).limit(1)
   if (!jobRow) return c.json({ error: 'Not in history' }, 404)
-  const returns = await db.select().from(schema.jobReturn).where(eq(schema.jobReturn.jid, jid))
-  return c.json({ job: jobRow, returns: returns.map((x) => ({ ...x, ret: x.ret ? JSON.parse(x.ret) : null })) })
+  const visible = await visibleTo(user)
+  const returns = (await db.select().from(schema.jobReturn).where(eq(schema.jobReturn.jid, jid))).filter((x) => sees(visible, x.minion))
+  const job = visible ? { ...jobRow, minions: JSON.stringify(visibleList(visible, jobRow.minions) ?? []), returned: returns.length, failed: returns.filter(returnFailed).length } : jobRow
+  // a job that ran on none of a scoped user's minions isn't theirs to see
+  if (visible && job.minions === '[]' && !returns.length) return c.json({ error: 'Not in history' }, 404)
+  return c.json({ job, returns: returns.map((x) => ({ ...x, ret: x.ret ? JSON.parse(x.ret) : null })) })
 })
 
 /** Jobs that ran on one minion, with its own result in each. */
 app.get('/api/history/minions/:id/jobs', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  if (!sees(await visibleTo(user), c.req.param('id'))) return c.json({ error: 'Outside your access' }, 403)
   const limit = Math.min(Number(c.req.query('limit') ?? 50) || 50, 200)
   const rows = await minionJobs(db, schema, c.req.param('id'), { before: Number(c.req.query('before')) || null, limit })
   return c.json({ rows, retentionDays: config.historyDays })
@@ -466,17 +522,19 @@ app.get('/api/history/minions/:id/jobs', async (c) => {
 
 /** Each minion's result in the latest compliance check that it returned from. */
 app.get('/api/history/compliance/minions', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
-  const { minions: all } = await minionState(db, schema)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  const all = pick(await visibleTo(user), (await minionState(db, schema)).minions)
   return c.json({ minions: Object.fromEntries(Object.entries(all).flatMap(([id, m]) => (m.compliance ? [[id, m.compliance]] : []))) })
 })
 
 /** What still fails in the recent state runs, grouped by state and error. */
 const FAILURE_HOURS = [24, 72, 168]
 app.get('/api/history/failures', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   const hours = FAILURE_HOURS.find((h) => h === Number(c.req.query('hours'))) ?? 24
-  return c.json({ ...(await fleetFailures(db, schema, { hours })), hours, retentionDays: config.historyDays })
+  return c.json({ ...(await fleetFailures(db, schema, { hours, visible: await visibleTo(user) })), hours, retentionDays: config.historyDays })
 })
 
 /** For admins: whether salt-api, the event bus, the database and notifications work. */
@@ -489,27 +547,36 @@ app.get('/api/system', async (c) => {
 
 /** Each minion's pending upgrades from the latest patch scan that it answered. */
 app.get('/api/history/updates/minions', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
-  const { minions: all } = await minionState(db, schema)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
+  const all = pick(await visibleTo(user), (await minionState(db, schema)).minions)
   return c.json({ minions: Object.fromEntries(Object.entries(all).flatMap(([id, m]) => (m.updates ? [[id, m.updates]] : []))) })
 })
 
 /** Past compliance checks (dry-run highstates) with per-status minion counts. */
 app.get('/api/history/compliance', async (c) => {
-  if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not signed in' }, 401)
   const limit = Math.min(Number(c.req.query('limit') ?? 30) || 30, 200)
+  const visible = await visibleTo(user)
   const t = schema.job
-  const jobs = await db
-    .select()
-    .from(t)
-    .where(and(eq(t.dryRun, true), or(eq(t.fun, 'state.apply'), eq(t.fun, 'state.highstate'))))
-    .orderBy(desc(t.startedAt))
-    .limit(limit)
+  // a scoped user's checks are the ones that ran on any of their minions, counted on those alone
+  const jobs = (
+    await db
+      .select()
+      .from(t)
+      .where(and(eq(t.dryRun, true), or(eq(t.fun, 'state.apply'), eq(t.fun, 'state.highstate'))))
+      .orderBy(desc(t.startedAt))
+      .limit(visible ? limit * 5 : limit)
+  )
+    .map((j) => ({ ...j, list: visibleList(visible, j.minions) ?? [] }))
+    .filter((j) => !visible || j.list.length)
+    .slice(0, limit)
   const jids = jobs.map((j) => j.jid)
-  const rets = jids.length ? await db.select({ jid: schema.jobReturn.jid, summary: schema.jobReturn.summary }).from(schema.jobReturn).where(inArray(schema.jobReturn.jid, jids)) : []
+  const rets = jids.length ? await db.select({ jid: schema.jobReturn.jid, minion: schema.jobReturn.minion, summary: schema.jobReturn.summary }).from(schema.jobReturn).where(inArray(schema.jobReturn.jid, jids)) : []
   const runs = jobs.map((j) => {
-    const mine = rets.filter((x) => x.jid === j.jid)
-    const counts = complianceCounts(mine, (JSON.parse(j.minions ?? '[]') as string[]).length)
+    const mine = rets.filter((x) => x.jid === j.jid && sees(visible, x.minion))
+    const counts = complianceCounts(mine, j.list.length)
     return { jid: j.jid, target: j.target, targetType: j.targetType, startedAt: j.startedAt, by: j.shakerUser ?? j.saltUser, args: j.args, counts }
   })
   return c.json({ runs })
@@ -543,7 +610,7 @@ app.route('/api', windowRoutes({ db, schema, audit }))
 app.route('/api', runbookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', hookRoutes({ db, schema, runner: runbookRunner, notifier, audit, approval: config.approval }))
 app.route('/api', targetRoutes({ db, schema }))
-app.route('/api', noteRoutes({ db, schema, audit }))
+app.route('/api', noteRoutes({ db, schema, audit, visibleTo }))
 app.route('/api', queryRoutes({ db, schema }))
 app.route('/api', scopeRoutes({ db, schema, audit }))
 app.route('/api', securityRoutes({ db, schema, audit }))
@@ -563,10 +630,10 @@ const summary = () =>
     },
   })
 app.route('/api', peerRoutes({ db, schema, audit, self: summary }))
-app.route('/api', minionRoutes({ db, schema, collector: minions, salt }))
-app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0 }))
+app.route('/api', minionRoutes({ db, schema, collector: minions, salt, visibleTo }))
+app.route('/api', seenRoutes({ db, schema, checking: config.presenceMinutes > 0, visibleTo }))
 app.route('/api', changeRoutes({ db, schema, runner: changeRunner, notifier, audit, expand: expandTarget, approval: config.approval }))
-app.route('/api', vulnRoutes({ vulns, audit }))
+app.route('/api', vulnRoutes({ vulns, audit, visibleTo }))
 app.route('/api', automationRoutes({ db, schema, scheduler, notifier, audit }))
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))

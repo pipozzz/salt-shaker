@@ -120,6 +120,26 @@ describe('EventHub', () => {
     hub.stop()
   })
 
+  it('sends a browser only what its filter lets through, changed or as it came', async () => {
+    const salt = fakeSalt()
+    const hub = new EventHub(salt)
+    const browser = new AbortController()
+    const body = await hub.open(browser.signal, undefined, (e) =>
+      e.tag.endsWith('/new') ? EventHub.frame(e.tag, { ...e.data, minions: ['web-01'] }) : e.tag.endsWith('/web-01') ? e.frame : null,
+    )
+    salt.conns[0].send(frame('salt/job/3/new', { minions: ['web-01', 'db-01'] }))
+    salt.conns[0].send(frame('salt/job/3/ret/db-01', { retcode: 0 }))
+    salt.conns[0].send(frame('salt/job/3/ret/web-01', { retcode: 1 }))
+    await tick()
+    browser.abort()
+    const sent = (await readText(body)).split('\n\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6)) as BusEvent)
+    expect(sent).toEqual([
+      { tag: 'salt/job/3/new', data: { minions: ['web-01'] } },
+      { tag: 'salt/job/3/ret/web-01', data: { retcode: 1 } },
+    ])
+    hub.stop()
+  })
+
   it('sends a keepalive comment to a browser while the bus is quiet, and stops when it leaves', async () => {
     const salt = fakeSalt()
     const hub = new EventHub(salt, { keepaliveMs: 40 })

@@ -18,9 +18,24 @@ An admin can limit an operator to some minions: on **Users**, click *whole fleet
 
 - The target they ask for is matched against the master's grains cache. If it matches any minion outside their limit, the call is refused, naming those minions, and the refusal is in the audit log.
 - Otherwise it runs on exactly the minions it matched, as a list target, so a minion that joins later can't slip in between.
-- Runners and wheel calls that change something (orchestrations, key changes) don't run on a target, so limited users can't start them. Reading ones, like `manage.status` or the job history, still work.
+- Runners and wheel calls that change something (orchestrations, key changes) don't run on a target, so limited users can't start them.
 
-This covers Run, Compliance, Patches, Query, vulnerability scans and upgrades alike, since all of them go through the same check. The target field shows limited users what they can run on. What they can *see* (minions, jobs, reports) isn't limited. **Whole fleet** in the same dialog lifts the limit; setting and lifting it are audited (`user.set_scope`, `user.clear_scope`).
+This covers Run, Compliance, Patches, Query, vulnerability scans and upgrades alike, since all of them go through the same check. The target field shows limited users what they can run on. **Whole fleet** in the same dialog lifts the limit; setting and lifting it are audited (`user.set_scope`, `user.clear_scope`).
+
+### What a limited user sees
+
+A limited user also sees only their minions, wherever the console shows what a minion has or did:
+
+- **Minions, Map and Overview**: their minions, with their grains, status, compliance and updates, and their notes.
+- **Jobs**: jobs that ran on any of their minions, listing only those, with returns and failures counted on them. A job's returns are theirs only, in the job history and in what the master's job cache answers (`jobs.lookup_jid`, `jobs.list_job`, `jobs.list_jobs`, `jobs.active`).
+- **Compliance, Failures and Patches**: the checks, failures and scans of their minions.
+- **Vulnerabilities**: findings and installed packages on their minions. The 90-day trend is the whole fleet's, so it isn't shown to them.
+- **Live events**: only the returns, starts and key events of their minions. Runner and wheel jobs, whose returns are about the whole fleet, aren't sent.
+- **Salt reads**: `manage.status`, `manage.versions`, `cache.grains` and the key lists answer for their minions only, and `pillar.show_pillar` works for their minions only. Other runner and wheel reads that would show the whole fleet are refused.
+
+Which minions those are is worked out from the master's grains cache, as for running, and again every minute or so, so a minion that joins the fleet and matches their target shows up for them by itself.
+
+Who did what stays visible to everyone who may see it: the [audit log](/salt-shaker/guide/users-audit/#audit-log), [changes](/salt-shaker/guide/changes/) and runbook runs name the minions they ran on, whoever they are. The counts other instances read for the instance switcher are the whole fleet's.
 
 ## The console's own features
 

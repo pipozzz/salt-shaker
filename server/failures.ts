@@ -1,6 +1,7 @@
 import { and, desc, gte, inArray } from 'drizzle-orm'
 import { failureGroups, STATE_FUNS, type RunReturn } from '../src/lib/failures'
 import type { Db, Schema } from './db'
+import { sees, type Visible } from './visible'
 
 /** The most state runs a look back reads, so a busy week can't make it slow. */
 export const MAX_RUNS = 500
@@ -20,8 +21,9 @@ function failedReturn(r: { retcode: number | null; success: boolean | null; summ
 /**
  * What's failing in the state runs recorded over the last `hours`, grouped by state and error.
  * Only minions with a failed return are read in full, so a healthy fleet costs one small query.
+ * `visible` leaves out the minions a scoped user doesn't see.
  */
-export async function fleetFailures(db: Db, schema: Schema, opts: { hours: number; now?: number }) {
+export async function fleetFailures(db: Db, schema: Schema, opts: { hours: number; now?: number; visible?: Visible }) {
   const t = schema.job
   const r = schema.jobReturn
   const since = new Date((opts.now ?? Date.now()) - opts.hours * 3600_000)
@@ -37,7 +39,7 @@ export async function fleetFailures(db: Db, schema: Schema, opts: { hours: numbe
   const failing = new Set<string>()
   for (const part of chunks(jids)) {
     const rows = await db.select({ minion: r.minion, retcode: r.retcode, success: r.success, summary: r.summary }).from(r).where(inArray(r.jid, part))
-    for (const row of rows) if (failedReturn(row)) failing.add(row.minion)
+    for (const row of rows) if (sees(opts.visible ?? null, row.minion) && failedReturn(row)) failing.add(row.minion)
   }
 
   const returns: RunReturn[] = []

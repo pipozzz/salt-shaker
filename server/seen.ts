@@ -1,7 +1,8 @@
 import { min } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from './db'
-import type { Env } from './types'
+import type { Env, SessionUser } from './types'
+import { pick, type Visible } from './visible'
 
 /*
  * When each minion last answered the presence check. Salt itself doesn't keep this, and it's what
@@ -29,11 +30,13 @@ export async function lastSeen(db: Db, schema: Schema) {
   }
 }
 
-export function seenRoutes({ db, schema, checking }: { db: Db; schema: Schema; checking: boolean }) {
+export function seenRoutes({ db, schema, checking, visibleTo = async () => null }: { db: Db; schema: Schema; checking: boolean; visibleTo?: (user: SessionUser) => Promise<Visible> }) {
   const r = new Hono<Env>()
   r.get('/minions/seen', async (c) => {
-    if (!c.get('user')) return c.json({ error: 'Not signed in' }, 401)
-    return c.json({ ...(await lastSeen(db, schema)), checking })
+    const user = c.get('user')
+    if (!user) return c.json({ error: 'Not signed in' }, 401)
+    const { seen, since } = await lastSeen(db, schema)
+    return c.json({ seen: pick(await visibleTo(user), seen), since, checking })
   })
   return r
 }

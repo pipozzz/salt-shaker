@@ -46,5 +46,8 @@ describe.each(testDialects)('fleetFailures (%s)', (dialect) => {
       ['state', 'service.running nginx', 'Job for nginx.service failed.', ['web-01@1']],
     ])
     expect((await fleetFailures(db, schema, { hours: 48, now })).groups.map((g) => g.message)).toContain('old')
+    // a scoped user sees what fails on their minions only
+    expect((await fleetFailures(db, schema, { hours: 24, now, visible: new Set(['web-02', 'web-03']) })).groups).toEqual([])
+    expect((await fleetFailures(db, schema, { hours: 48, now, visible: new Set(['web-04']) })).groups.map((g) => g.message)).toEqual(['old'])
   })
 })

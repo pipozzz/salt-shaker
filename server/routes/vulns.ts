@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { findingsCsv, type FindingRow } from '../../src/lib/export'
-import type { AuditRow, Env } from '../types'
-import { SEVERITIES, severityCounts, type Acceptance, type Finding, type MinionVulns, type VulnInfo, type VulnService } from '../vulns'
+import type { AuditRow, Env, SessionUser } from '../types'
+import { sees, type Visible } from '../visible'
+import { SEVERITIES, severityCounts, type Acceptance, type Finding, type MinionVulns, type VulnInfo, type VulnReport, type VulnService } from '../vulns'
 
 const RANK = Object.fromEntries(SEVERITIES.map((s, i) => [s, i])) as Record<string, number>
 
@@ -11,8 +12,17 @@ const acceptanceFields = (a: Acceptance) => ({ note: a.note, acceptedBy: a.accep
 const findingFields = (f: Finding) => ({ ...vulnFields(f.vuln), package: f.package, version: f.version, binaries: f.binaries, fixed: f.fixed })
 
 /** The vulnerability report, for everyone signed in. Scans themselves are ordinary jobs. */
-export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnService; audit?: (row: AuditRow) => Promise<unknown> }) {
+export function vulnRoutes({ vulns, audit = async () => {}, visibleTo = async () => null }: { vulns: VulnService; audit?: (row: AuditRow) => Promise<unknown>; visibleTo?: (user: SessionUser) => Promise<Visible> }) {
   const r = new Hono<Env>()
+
+  /** The report as the user may see it: a scoped user's minions only. */
+  const report = async (c: { get: (k: 'user') => Env['Variables']['user'] }, waitMs: number) => {
+    const got = await vulns.get(waitMs, { stale: true })
+    const v = await visibleTo(c.get('user')!)
+    if (!v) return got
+    const mine = (x: VulnReport | null) => (x ? { ...x, minions: x.minions.filter((m) => v.has(m.minion)) } : x)
+    return { ...got, report: mine(got.report), all: mine(got.all) }
+  }
 
   // only these paths: a '*' here would apply to every /api route mounted after this one
   for (const path of ['/vulns', '/vulns/*']) {
@@ -37,7 +47,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
     // a report that's there is sent right away, also while the next one is built; ?wait= is how long
     // to wait for the first one. ?only=minions leaves out the vulnerability list
     const wait = c.req.query('wait')
-    const got = await vulns.get(wait === undefined ? 20_000 : Math.min(Number(wait) || 0, 60_000), { stale: true })
+    const got = await report(c, wait === undefined ? 20_000 : Math.min(Number(wait) || 0, 60_000))
     const minions = got.report?.minions ?? []
     if (c.req.query('only') === 'minions') return c.json({ ...status(got), minions: minions.map(minionFields).sort((a, b) => a.minion.localeCompare(b.minion)), vulns: [] })
     const byId = new Map<string, { vuln: VulnInfo; packages: Set<string>; minions: Set<string>; fixable: Set<string> }>()
@@ -119,7 +129,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** Every finding as CSV, with the page's filters: ?severity=critical,high&fix=1&q=openssl */
   r.get('/vulns/export', async (c) => {
-    const got = await vulns.get(3000, { stale: true })
+    const got = await report(c, 3000)
     const severities = (c.req.query('severity') ?? '').split(',').filter(Boolean)
     const fixOnly = c.req.query('fix') === '1'
     const q = (c.req.query('q') ?? '').toLowerCase()
@@ -144,7 +154,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
    * Waits for a report that's being built only as long as ?wait= says (ms, at most 60s).
    */
   r.get('/vulns/fixes', async (c) => {
-    const got = await vulns.get(Math.min(Number(c.req.query('wait')) || 0, 60_000), { stale: true })
+    const got = await report(c, Math.min(Number(c.req.query('wait')) || 0, 60_000))
     const out: Record<string, { ecosystem: string | null; packages: Record<string, Array<{ id: string; severity: string; fixed: string }>> }> = {}
     for (const m of got.report?.minions ?? []) {
       for (const f of m.findings) {
@@ -160,12 +170,14 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
   r.get('/vulns/packages', async (c) => {
     const q = (c.req.query('q') ?? '').trim()
     if (q.length < 2) return c.json({ error: 'Search for at least 2 characters' }, 400)
-    return c.json(await vulns.packages(q.slice(0, 100)))
+    return c.json(await vulns.packages(q.slice(0, 100), 200, await visibleTo(c.get('user')!)))
   })
 
   /** The report's daily totals (accepted vulnerabilities left out), oldest first: ?days=90 (at most 730). */
   r.get('/vulns/trend', async (c) => {
     const days = Math.min(Math.max(Number(c.req.query('days')) || 90, 1), 730)
+    // the daily totals are the whole fleet's
+    if (await visibleTo(c.get('user')!)) return c.json({ days: [] })
     return c.json({ days: await vulns.trend(days) })
   })
 
@@ -174,7 +186,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** What was found on one minion. */
   r.get('/vulns/minions/:id', async (c) => {
-    const got = await vulns.get(3000, { stale: true })
+    const got = await report(c, 3000)
     const m = got.report?.minions.find((x) => x.minion === c.req.param('id'))
     if (!m) return c.json({ error: 'This minion has no inventory yet' }, 404)
     const findings = m.findings.map(findingFields).sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.package.localeCompare(b.package) || a.id.localeCompare(b.id))
@@ -183,6 +195,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** Everything installed on one minion, from its latest inventory. */
   r.get('/vulns/minions/:id/packages', async (c) => {
+    if (!sees(await visibleTo(c.get('user')!), c.req.param('id'))) return c.json({ error: 'This minion has no inventory yet' }, 404)
     const found = await vulns.minionPackages(c.req.param('id'))
     if (!found) return c.json({ error: 'This minion has no inventory yet' }, 404)
     return c.json(found)
@@ -190,7 +203,7 @@ export function vulnRoutes({ vulns, audit = async () => {} }: { vulns: VulnServi
 
   /** The minions one vulnerability was found on. */
   r.get('/vulns/by-id/:id', async (c) => {
-    const got = await vulns.get(3000, { stale: true })
+    const got = await report(c, 3000)
     const id = c.req.param('id')
     let vuln: VulnInfo | null = null
     const affected: Array<{ minion: string; package: string; version: string; binaries: string[]; fixed: string | null }> = []

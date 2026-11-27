@@ -74,4 +74,27 @@ describe.each(testDialects)('jobHistory (%s)', (dialect) => {
     expect(lines[2]).toBe('1,2026-11-05T12:01:00.000Z,state.apply,,web*,,alice,,true,2,2,1')
     expect(lines.at(-1)).toBe('')
   })
+
+  it("lists a scoped user's jobs only, with their minions and counts on them alone", async () => {
+    const { db, schema } = await setup()
+    const rows = await jobHistory(db, schema, { visible: new Set(['b']) })
+    expect(rows.map((r) => [r.jid, r.minions, r.returned, r.failed])).toEqual([
+      ['2', '["b"]', 1, 0],
+      ['1', '["b"]', 1, 1],
+    ])
+    expect((await jobHistory(db, schema, { visible: new Set(['b']), result: 'failed' })).map((r) => r.jid)).toEqual(['1'])
+    // job 3 failed on a, which b's user doesn't see
+    expect((await jobHistory(db, schema, { visible: new Set(['a']), result: 'failed' })).map((r) => r.jid)).toEqual(['3'])
+    expect(await jobHistory(db, schema, { visible: new Set(['c']) })).toEqual([])
+  })
+
+  it("pages through the history for a scoped user's few jobs", async () => {
+    const { db, schema } = await setup()
+    const many = Array.from({ length: 2500 }, (_, i) => ({ jid: `x${i}`, fun: 'cmd.run', minions: i % 1000 === 7 ? '["rare","a"]' : '["a"]', startedAt: new Date(+at(10) + i * 1000) }))
+    for (let i = 0; i < many.length; i += 500) await db.insert(schema.job).values(many.slice(i, i + 500))
+    const rows = await jobHistory(db, schema, { visible: new Set(['rare']), limit: 2 })
+    expect(rows.map((r) => r.jid)).toEqual(['x2007', 'x1007'])
+    const next = await jobHistory(db, schema, { visible: new Set(['rare']), limit: 2, before: rows[1].startedAt.getTime() })
+    expect(next.map((r) => r.jid)).toEqual(['x7'])
+  })
 })

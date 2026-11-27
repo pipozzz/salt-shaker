@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Db, Schema } from '../db'
-import type { AuditRow, Env } from '../types'
+import type { AuditRow, Env, SessionUser } from '../types'
+import { pick, sees, type Visible } from '../visible'
 
 /** The longest note kept on a minion. */
 export const MAX_NOTE = 2000
@@ -11,7 +12,7 @@ export const MAX_NOTE = 2000
  * signed in reads them; operators and admins write them, and every change is in the audit log.
  * An empty note removes it.
  */
-export function noteRoutes({ db, schema, audit }: { db: Db; schema: Schema; audit: (row: AuditRow) => Promise<unknown> }) {
+export function noteRoutes({ db, schema, audit, visibleTo = async () => null }: { db: Db; schema: Schema; audit: (row: AuditRow) => Promise<unknown>; visibleTo?: (user: SessionUser) => Promise<Visible> }) {
   const r = new Hono<Env>()
   const t = schema.minionNote
 
@@ -26,7 +27,8 @@ export function noteRoutes({ db, schema, audit }: { db: Db; schema: Schema; audi
 
   r.get('/minion-notes', async (c) => {
     const rows = await db.select().from(t)
-    return c.json({ notes: Object.fromEntries(rows.map((n) => [n.minion, { note: n.note, updatedBy: n.updatedBy, updatedAt: n.updatedAt.toISOString() }])) })
+    const notes = Object.fromEntries(rows.map((n) => [n.minion, { note: n.note, updatedBy: n.updatedBy, updatedAt: n.updatedAt.toISOString() }]))
+    return c.json({ notes: pick(await visibleTo(c.get('user')!), notes) })
   })
 
   r.put('/minion-notes/:minion', async (c) => {
@@ -35,6 +37,7 @@ export function noteRoutes({ db, schema, audit }: { db: Db; schema: Schema; audi
     const minion = c.req.param('minion')
     // eslint-disable-next-line no-control-regex
     if (!minion || minion.length > 255 || /[\u0000-\u001f\s]/.test(minion)) return c.json({ error: 'Not a minion id' }, 400)
+    if (!sees(await visibleTo(u), minion)) return c.json({ error: 'Outside your access' }, 403)
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
     if (typeof body.note !== 'string') return c.json({ error: 'The note is text' }, 400)
     const note = body.note.trim()

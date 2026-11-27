@@ -110,8 +110,9 @@ export class EventHub {
    * The stream for one browser, as SSE. Fails when salt-api can't be reached, and ends when the
    * connection to it breaks or the browser stops reading, so the browser shows it and reconnects.
    * A comment goes out when the bus is quiet, so proxies don't take the stream for a dead one.
+   * `only` decides what this browser gets of each event: the frame as it is, another one, or none.
    */
-  async open(signal: AbortSignal, waitMs = 5000): Promise<ReadableStream<Uint8Array>> {
+  async open(signal: AbortSignal, waitMs = 5000, only?: (e: BusEvent) => Uint8Array | null): Promise<ReadableStream<Uint8Array>> {
     let out!: ReadableStreamDefaultController<Uint8Array>
     let leave = () => {}
     let beat: ReturnType<typeof setInterval> | undefined
@@ -129,9 +130,11 @@ export class EventHub {
     const body = new ReadableStream<Uint8Array>({ start: (c) => void (out = c), cancel: () => (clearInterval(beat), leave()) }, { highWaterMark: MAX_BUFFERED })
     leave = this.subscribe((e) => {
       // a tab that stopped reading must not make the server keep everything for it
+      const frame = only ? only(e) : e.frame
+      if (!frame) return
       if ((out.desiredSize ?? 0) <= 0) close()
       else {
-        out.enqueue(e.frame)
+        out.enqueue(frame)
         wrote = performance.now()
       }
     }, close)
@@ -153,6 +156,11 @@ export class EventHub {
     }, this.keepaliveMs / 4)
     beat.unref?.()
     return body
+  }
+
+  /** An event as an SSE frame, for one that is sent changed. */
+  static frame(tag: string, data: Record<string, unknown>) {
+    return enc.encode(`data: ${JSON.stringify({ tag, data })}\n\n`)
   }
 
   private emit(payload: string) {

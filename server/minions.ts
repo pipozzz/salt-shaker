@@ -7,7 +7,8 @@ import { latestCompliance, latestUpdates } from './minion-jobs'
 import { canFor } from './roles'
 import type { SaltService } from './salt'
 import { complianceStatus } from './summaries'
-import type { Env } from './types'
+import type { Env, SessionUser } from './types'
+import { pick, type Visible } from './visible'
 
 /*
  * The fleet's state in the database. Opening Minions, Map or Overview used to ask the master for
@@ -242,8 +243,10 @@ export class MinionCollector {
   }
 }
 
-export function minionRoutes({ db, schema, collector, salt }: { db: Db; schema: Schema; collector: MinionCollector; salt: Salt }) {
+export function minionRoutes({ db, schema, collector, salt, visibleTo = async () => null }: { db: Db; schema: Schema; collector: MinionCollector; salt: Salt; visibleTo?: (user: SessionUser) => Promise<Visible> }) {
   const r = new Hono<Env>()
+  // a scoped user sees their minions only
+  const mine = async (user: SessionUser, state: Awaited<ReturnType<typeof minionState>>) => ({ ...state, minions: pick(await visibleTo(user), state.minions) })
 
   const guard = (user: Env['Variables']['user']) => {
     if (!user) return { error: 'Not signed in', status: 401 as const }
@@ -265,7 +268,7 @@ export function minionRoutes({ db, schema, collector, salt }: { db: Db; schema: 
         if (!Object.keys(state.minions).length) return c.json({ error: e instanceof Error ? e.message : 'Reading the fleet failed' }, 502)
       }
     }
-    return c.json(state)
+    return c.json(await mine(c.get('user')!, state))
   })
 
   /** The Refresh button: ask the master now, then answer like GET. */
@@ -277,7 +280,7 @@ export function minionRoutes({ db, schema, collector, salt }: { db: Db; schema: 
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'Reading the fleet failed' }, 502)
     }
-    return c.json(await minionState(db, schema))
+    return c.json(await mine(c.get('user')!, await minionState(db, schema)))
   })
 
   return r
